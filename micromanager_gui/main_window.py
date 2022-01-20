@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import napari
 import numpy as np
-from pymmcore_plus import CMMCorePlus, RemoteMMCore
+from pymmcore_plus import CMMCorePlus, RemoteMMCore, DeviceType
 from qtpy import QtWidgets as QtW
 from qtpy import uic
 from qtpy.QtCore import QSize, QTimer
@@ -16,6 +16,7 @@ from ._illumination import IlluminationDialog
 from ._saving import save_sequence
 from ._util import blockSignals, event_indices, extend_array_for_index
 from .explore_sample import ExploreSample
+from .sim_odt_widget import SimOdtWidget
 from .multid_widget import MultiDWidget, SequenceMeta
 from .prop_browser import PropBrowser
 
@@ -23,6 +24,12 @@ if TYPE_CHECKING:
     import napari.layers
     import napari.viewer
     import useq
+
+# dmd and daq control
+import mcsim.expt_ctrl.dlp6500 as dmd_ctrl
+import mcsim.expt_ctrl.set_dmd_sim as dmd_map
+import mcsim.expt_ctrl.daq
+import mcsim.expt_ctrl.expt_map as daq_map
 
 
 ICONS = Path(__file__).parent / "icons"
@@ -71,6 +78,10 @@ class _MainUI:
     illumination_Button: QtW.QPushButton
     snap_on_click_xy_checkBox: QtW.QCheckBox
     snap_on_click_z_checkBox: QtW.QCheckBox
+    set_channel_Button: QtW.QPushButton
+    channel_comboBox: QtW.QComboBox
+    mode_comboBox: QtW.QComboBox
+    snap_camera_comboBox: QtW.QComboBox
 
     def setup_ui(self):
         uic.loadUi(self.UI_FILE, self)  # load QtDesigner .ui file
@@ -105,9 +116,16 @@ class MainWindow(QtW.QWidget, _MainUI):
         # create connection to mmcore server or process-local variant
         self._mmc = RemoteMMCore() if remote else CMMCorePlus()
 
+        # connect to DMD
+        self.dmd = dmd_ctrl.dlp6500win(debug=True)
+        # connect to daq
+        self.daq = mcsim.expt_ctrl.daq.nidaq()
+
         # tab widgets
+        self.sim_odt_acq = SimOdtWidget(self._mmc, self.daq, self.dmd)
         self.mda = MultiDWidget(self._mmc)
         self.explorer = ExploreSample(self.viewer, self._mmc)
+        self.tabWidget.addTab(self.sim_odt_acq, "SIM/ODT Acquisition")
         self.tabWidget.addTab(self.mda, "Multi-D Acquisition")
         self.tabWidget.addTab(self.explorer, "Sample Explorer")
 
@@ -142,11 +160,23 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.illumination_Button.clicked.connect(self.illumination)
         self.properties_Button.clicked.connect(self._show_prop_browser)
 
+        # populate channel combo box
+        pks = list(mcsim.expt_ctrl.expt_map.presets.keys())
+        self.channel_comboBox.addItems(pks)
+        # update mode combo box when channel combo box is changed
+        self.channel_comboBox.currentTextChanged.connect(self._refresh_mode_options)
+
+        # set channel/mode combination
+        self.set_channel_Button.clicked.connect(self.set_channel_and_mode)
+        # need to call this at least once
+
+
         # connect comboBox
         self.objective_comboBox.currentIndexChanged.connect(self.change_objective)
         self.bit_comboBox.currentIndexChanged.connect(self.bit_changed)
         self.bin_comboBox.currentIndexChanged.connect(self.bin_changed)
         self.snap_channel_comboBox.currentTextChanged.connect(self._channel_changed)
+        self.snap_camera_comboBox.currentTextChanged.connect(self._camera_changed)
 
         # connect spinboxes
         self.exp_spinBox.valueChanged.connect(self._update_exp)
@@ -324,6 +354,17 @@ class MainWindow(QtW.QWidget, _MainUI):
                     self._mmc.getCurrentConfig(channel_group)
                 )
 
+    def _refresh_camera_list(self):
+        devs = self._mmc.getLoadedDevices()
+        if devs:
+            dtypes = [self._mmc.getDeviceType(d) for d in devs]
+
+            camera_list = [d for d, dt in zip(devs, dtypes) if dt == DeviceType.CameraDevice]
+
+            self.snap_camera_comboBox.clear()
+            self.snap_camera_comboBox.addItems(camera_list)
+            self.snap_camera_comboBox.setCurrentText(self._mmc.getCameraDevice())
+
     def _refresh_positions(self):
         if self._mmc.getXYStageDevice():
             x, y = self._mmc.getXPosition(), self._mmc.getYPosition()
@@ -331,11 +372,21 @@ class MainWindow(QtW.QWidget, _MainUI):
         if self._mmc.getFocusDevice():
             self.z_lineEdit.setText(f"{self._mmc.getZPosition():.1f}")
 
+    def _refresh_mode_options(self):
+        chan = self.channel_comboBox.currentText()
+        modes = list(dmd_map.channel_map[chan].keys())
+
+        self.mode_comboBox.clear()
+        self.mode_comboBox.addItems(modes)
+        self.mode_comboBox.setCurrentText(modes[0])
+
     def _refresh_options(self):
         self._refresh_camera_options()
         self._refresh_objective_options()
         self._refresh_channel_list()
         self._refresh_positions()
+        self._refresh_camera_list()
+        self._refresh_mode_options()
 
     def bit_changed(self):
         if self.bit_comboBox.count() > 0:
@@ -352,6 +403,9 @@ class MainWindow(QtW.QWidget, _MainUI):
         channel_group = self._mmc.getOrGuessChannelGroup()
         if channel_group:
             self._mmc.setConfig(channel_group, newChannel)
+
+    def _camera_changed(self, newCamera: str):
+        self._mmc.setCameraDevice(newCamera)
 
     def _on_xy_stage_position_changed(self, name, x, y):
         self.x_lineEdit.setText(f"{x:.1f}")
@@ -507,3 +561,22 @@ class MainWindow(QtW.QWidget, _MainUI):
         else:
             self.stop_live()
             self.live_Button.setIcon(CAM_ICON)
+
+    def set_channel_and_mode(self):
+        # get info from boxes
+        channel = self.channel_comboBox.currentText()
+        mode = self.mode_comboBox.currentText()
+
+        # get daq values for channel
+        preset = daq_map.presets[channel]
+        do_line_names = daq_map.do_line_names
+        digital_array = daq_map.preset_to_array(preset, do_line_names, nchannels=self.daq.n_digital_lines)
+        # set daq
+        self.daq.set_digital_once(digital_array)
+        # self.daq.set_analog_once()
+
+        # set dmd
+        dmd_map.program_dmd_seq(self.dmd, mode, channel, 1, 0, False, None, False, True)
+
+
+
