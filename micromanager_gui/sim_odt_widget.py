@@ -23,6 +23,7 @@ import mcsim.expt_ctrl.dlp6500
 import mcsim.expt_ctrl.set_dmd_sim
 import numpy as np
 import time
+import zarr
 
 ICONS = Path(__file__).parent / "icons"
 OBJECTIVE_DEVICE = "Objective"
@@ -98,8 +99,12 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
     # metadata associated with a given experiment
     SEQUENCE_META: dict[MDASequence, SequenceMeta] = {}
 
-    def __init__(self, mmcore: RemoteMMCore, daq: mcsim.expt_ctrl.daq.daq, dmd: mcsim.expt_ctrl.dlp6500.dlp6500, parent=None):
-        self._mmc = mmcore
+    def __init__(self, mmcores: list[RemoteMMCore], daq: mcsim.expt_ctrl.daq.daq, dmd: mcsim.expt_ctrl.dlp6500.dlp6500, parent=None):
+
+        mmcore = mmcores[0]
+        self._mmcores = mmcores
+        self._mmc = self._mmcores[0]
+
         self.daq = daq
         self.dmd = dmd
         super().__init__(parent)
@@ -232,150 +237,250 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
     def _on_run_clicked(self):
 
+        if self.save_groupBox.isChecked() and not (
+                self.fname_lineEdit.text() and Path(self.dir_lineEdit.text()).is_dir()):
+            raise ValueError("Select a filename and a valid directory.")
+
+        save_dir = Path(self.dir_lineEdit.text()) / self.fname_lineEdit.text()
+        img_fname = save_dir / "sim_odt.zarr"
+
+        mmc = self._mmcores[0]
+        mmc1 = self._mmcores[0]
+        mmc2 = self._mmcores[1]
+
         if len(self._mmc.getLoadedDevices()) < 2:
             raise ValueError("Load a cfg file first.")
 
         # grab information
-        # channels = self.channel_tableWidget
-
-        exposure_t_sim = self.sim_exposure_SpinBox.value()
-        exposure_t_odt = self.odt_exposure_SpinBox.value()
+        channels = [self.channel_tableWidget.cellWidget(c, 0).currentText() for c in range(self.channel_tableWidget.rowCount())]
+        exposure_tms_sim = self.sim_exposure_SpinBox.value()
+        exposure_tms_odt = self.odt_exposure_SpinBox.value()
 
         # time lapse
         do_time_lapse = self.time_groupBox.isChecked()
-        ntimes = self.timepoints_spinBox.value()
-        interval_ms = self.interval_spinBox.value()
+        if do_time_lapse:
+            ntimes = self.timepoints_spinBox.value()
+            interval_ms = self.interval_spinBox.value()
+        else:
+            ntimes = 1
+            interval_ms = 0.
 
         # zstack
         do_zstack = self.stack_groupBox.isChecked()
+        if do_zstack:
+            raise NotImplementedError()
+        else:
+            nz = 1
 
         # line info
         daq_do_map = mcsim.expt_ctrl.expt_map.daq_do_map
         daq_ao_map = mcsim.expt_ctrl.expt_map.daq_ao_map
+        daq_presets = mcsim.expt_ctrl.expt_map.presets
 
         # ##################################
         # program DMD
         # ##################################
+
+        # make sure DMD advance/enable trigger lines are low before we program the DMD
         digital_start = np.zeros(self.daq.n_digital_lines, dtype=np.uint8)
         digital_start[daq_do_map["dmd_enable"]] = 0
         digital_start[daq_do_map["dmd_advance"]] = 0
         self.daq.set_digital_once(digital_start)
 
-        modes = []
-        channels = []
-        # mcsim.expt_ctrl.set_dmd_sim.program_dmd_seq(self.dmd, modes, channels, nrepeats=1, ndarkframes=0,
-        #                                             blank=False, mode_pattern_indices=None, triggered=True,
-        #                                             verbose=True)
+        # program the DMD
+        # todo: read from channel table
+        modes = ["default"] * len(channels)
+        pic_inds, bit_inds = mcsim.expt_ctrl.set_dmd_sim.program_dmd_seq(self.dmd, modes, channels, nrepeats=1,
+                                                                         ndarkframes=0, blank=False,
+                                                                         mode_pattern_indices=None,
+                                                                         triggered=True, verbose=True)
+        dmd_data = np.vstack((pic_inds, bit_inds))
 
         # ##################################
-        # program DMD
+        # warmup todo: how to deal with this when multiple channels?
         # ##################################
-        # todo ... add more arguments to this.
-        # digital_program, analog_program = build_odt_sim_sequence(daq_do_map, daq_ao_map, None)
+        do_warmup = np.zeros(16, dtype=np.uint8)
+        do_warmup[daq_do_map["odt_laser"]] = 1
+        self.daq.set_digital_once(do_warmup)
+
+        time.sleep(5)
 
         # ##################################
-        # get cameras
+        # program daq
         # ##################################
-        # todo: maybe make selectable on channel table?
-        odt_cam = "HamamatsuHam_DCAM"
-        sim_cam = "HamamatsuHam_DCAM-1"
+        # number of patterns for single channel
+        n_odt_patterns = len(mcsim.expt_ctrl.set_dmd_sim.channel_map["odt"]["default"]["picture_indices"])
+        n_sim_patterns_channel = len(mcsim.expt_ctrl.set_dmd_sim.channel_map["blue"]["sim"]["picture_indices"])
+        n_odt_per_sim = 1
+        dt = 105e-6
+        n_trig_width = int(np.ceil(3e-3 / dt))
 
-        nsim_pics = 5
-        nodt_pics = 5
+        # total number of pictures
+        nsim_pics = n_sim_patterns_channel * len([ch for ch in channels if ch != "odt"]) * ntimes * nz
+        nodt_pics = n_odt_patterns * n_odt_per_sim * ntimes * nz * len([ch for ch in channels if ch == "odt"])
+
+        digital_program, analog_program, dt = build_odt_sim_sequence(daq_do_map, daq_ao_map, channels,
+                                                                     exposure_tms_odt*1e-3, exposure_tms_sim*1e-3,
+                                                                     n_odt_patterns, n_sim_patterns_channel,
+                                                                     dt=dt, interval=interval_ms*1e-3,
+                                                                     n_odt_per_sim=n_odt_per_sim,
+                                                                     n_trig_width=n_trig_width)
+
+        # check program and number of pictures match
+        if np.sum(digital_program[:, daq_do_map["odt_cam"]]) // n_trig_width != nodt_pics // ntimes:
+            raise ValueError("number of odt pics (%d) did not match DAQ program (%d)" %
+                             (nodt_pics, np.sum(digital_program[:, daq_do_map["odt_cam"]]) // n_trig_width))
+
+        if np.sum(digital_program[:, daq_do_map["sim_cam"]]) // n_trig_width != nsim_pics // ntimes:
+            raise ValueError("number of sim pics (%d) did not match DAQ program (%d)" %
+                             (nsim_pics, np.sum(digital_program[:, daq_do_map["sim_cam"]]) // n_trig_width))
+
+        self.daq.set_sequence(digital_program, analog_program, 1/dt)
+
 
         # ##################################
-        # set odt camera properties
+        # get odt camera and set up
         # ##################################
+        odt_cam = mmc2.getCameraDevice()
+
         # set camera properties
-        self._mmc.setProperty(odt_cam, "ScanMode", "2")
-        self._mmc.setProperty(odt_cam, "Exposure", exposure_t_odt)
+        mmc2.setProperty(odt_cam, "Exposure", exposure_tms_odt)
         # set external triggering
-        self._mmc.setProperty(odt_cam, "TRIGGER ACTIVE", "EDGE")
-        self._mmc.setProperty(odt_cam, "TRIGGER DELAY", "0.000")
-        # mmc.setProperty(odt_cam, "TRIGGER GLOBAL EXPOSURE", "DELAYED")
-        self._mmc.setProperty(odt_cam, "TRIGGER GLOBAL EXPOSURE", "GLOBAL RESET")
-        # self._mmc.setProperty(odt_cam, "TRIGGER SOURCE", "EXTERNAL")
-        self._mmc.setProperty(odt_cam, "TriggerPolarity", "POSITIVE")
+        mmc2.setProperty(odt_cam, "TriggerMode", "Edge Trigger")
 
-        # set output signal
-        # line 1 trigger ready
-        # mmc.setProperty(odt_cam, "OUTPUT TRIGGER KIND[0]", "TRIGGER READY")
-        self._mmc.setProperty(odt_cam, "OUTPUT TRIGGER KIND[0]", "EXPOSURE")
-        self._mmc.setProperty(odt_cam, "OUTPUT TRIGGER POLARITY[0]", "POSITIVE")
-        # line 2 at end of readout
-        self._mmc.setProperty(odt_cam, "OUTPUT TRIGGER DELAY[1]", "0.0000")
-        self._mmc.setProperty(odt_cam, "OUTPUT TRIGGER KIND[1]", "PROGRAMABLE")
-        self._mmc.setProperty(odt_cam, "OUTPUT TRIGGER PERIOD[1]", "0.001")
-        self._mmc.setProperty(odt_cam, "OUTPUT TRIGGER POLARITY[1]", "POSITIVE")
-        self._mmc.setProperty(odt_cam, "OUTPUT TRIGGER SOURCE[1]", "READOUT END")
-        # line 3 at start of readout
-        self._mmc.setProperty(odt_cam, "OUTPUT TRIGGER DELAY[2]", "0.0000")
-        self._mmc.setProperty(odt_cam, "OUTPUT TRIGGER KIND[2]", "PROGRAMABLE")
-        self._mmc.setProperty(odt_cam, "OUTPUT TRIGGER PERIOD[2]", "0.001")
-        self._mmc.setProperty(odt_cam, "OUTPUT TRIGGER POLARITY[2]", "POSITIVE")
-        self._mmc.setProperty(odt_cam, "OUTPUT TRIGGER SOURCE[2]", "VSYNC")
+        # set ROI
+        sx = 801
+        cx = 1024
+        sy = 511
+        # cy = 1120
+        cy = 715
+        mmc2.setROI(cx - sx // 2, cy - sy // 2, sx, sy)
 
         # ##################################
-        # set SIM camera properties
+        # get SIM camera and set properties
         # ##################################
+        sim_cam = mmc1.getCameraDevice()
+
         # set camera properties
-        self._mmc.setProperty(sim_cam, "ScanMode", "2")
-        self._mmc.setProperty(sim_cam, "Exposure", exposure_t_odt)
+        mmc1.setProperty(sim_cam, "ScanMode", "2")
+        mmc1.setProperty(sim_cam, "Exposure", exposure_tms_odt)
         # set external triggering
         # self._mmc.setProperty(sim_cam, "TRIGGER ACTIVE", "EDGE")
         # self._mmc.setProperty(sim_cam, "TRIGGER DELAY", "0.000")
         ## mmc.setProperty(odt_cam, "TRIGGER GLOBAL EXPOSURE", "DELAYED")
         ## self._mmc.setProperty(odt_cam, "TRIGGER GLOBAL EXPOSURE", "GLOBAL RESET")
-        # self._mmc.setProperty(sim_cam, "TRIGGER SOURCE", "EXTERNAL")
-        # self._mmc.setProperty(sim_cam, "TriggerPolarity", "POSITIVE")
-        self._mmc.setProperty(sim_cam, "TRIGGER SOURCE", "INTERNAL")
+        mmc1.setProperty(sim_cam, "TRIGGER SOURCE", "EXTERNAL")
+        mmc1.setProperty(sim_cam, "TriggerPolarity", "POSITIVE")
+        # mmc1.setProperty(sim_cam, "TRIGGER SOURCE", "INTERNAL")
 
         # set output signal
         # line 1 trigger ready
         ## mmc.setProperty(odt_cam, "OUTPUT TRIGGER KIND[0]", "TRIGGER READY")
-        self._mmc.setProperty(sim_cam, "OUTPUT TRIGGER KIND[0]", "EXPOSURE")
-        self._mmc.setProperty(odt_cam, "OUTPUT TRIGGER POLARITY[0]", "POSITIVE")
+        mmc1.setProperty(sim_cam, "OUTPUT TRIGGER KIND[0]", "EXPOSURE")
+        mmc1.setProperty(sim_cam, "OUTPUT TRIGGER POLARITY[0]", "POSITIVE")
         # line 2 at end of readout
-        self._mmc.setProperty(sim_cam, "OUTPUT TRIGGER DELAY[1]", "0.0000")
-        self._mmc.setProperty(sim_cam, "OUTPUT TRIGGER KIND[1]", "PROGRAMABLE")
-        self._mmc.setProperty(sim_cam, "OUTPUT TRIGGER PERIOD[1]", "0.001")
-        self._mmc.setProperty(sim_cam, "OUTPUT TRIGGER POLARITY[1]", "POSITIVE")
-        self._mmc.setProperty(sim_cam, "OUTPUT TRIGGER SOURCE[1]", "READOUT END")
+        mmc1.setProperty(sim_cam, "OUTPUT TRIGGER DELAY[1]", "0.0000")
+        mmc1.setProperty(sim_cam, "OUTPUT TRIGGER KIND[1]", "EXPOSURE")
+        # mmc1.setProperty(sim_cam, "OUTPUT TRIGGER PERIOD[1]", "0.001")
+        mmc1.setProperty(sim_cam, "OUTPUT TRIGGER POLARITY[1]", "POSITIVE")
+        # mmc1.setProperty(sim_cam, "OUTPUT TRIGGER SOURCE[1]", "READOUT END")
         # line 3 at start of readout
-        self._mmc.setProperty(sim_cam, "OUTPUT TRIGGER DELAY[2]", "0.0000")
-        self._mmc.setProperty(sim_cam, "OUTPUT TRIGGER KIND[2]", "PROGRAMABLE")
-        self._mmc.setProperty(sim_cam, "OUTPUT TRIGGER PERIOD[2]", "0.001")
-        self._mmc.setProperty(sim_cam, "OUTPUT TRIGGER POLARITY[2]", "POSITIVE")
-        self._mmc.setProperty(sim_cam, "OUTPUT TRIGGER SOURCE[2]", "VSYNC")
+        mmc1.setProperty(sim_cam, "OUTPUT TRIGGER DELAY[2]", "0.0000")
+        mmc1.setProperty(sim_cam, "OUTPUT TRIGGER KIND[2]", "PROGRAMABLE")
+        mmc1.setProperty(sim_cam, "OUTPUT TRIGGER PERIOD[2]", "0.001")
+        mmc1.setProperty(sim_cam, "OUTPUT TRIGGER POLARITY[2]", "POSITIVE")
+        mmc1.setProperty(sim_cam, "OUTPUT TRIGGER SOURCE[2]", "VSYNC")
+
+        # ##################################
+        # setup zarr
+        # ##################################
+        nx_sim = mmc1.getImageWidth()
+        ny_sim = mmc1.getImageHeight()
+
+        nx_odt = mmc2.getImageWidth()
+        ny_odt = mmc2.getImageHeight()
+
+        img_data = zarr.open(img_fname, mode="w")
+        img_data.create_dataset("sim", shape=(nsim_pics, ny_sim, nx_sim), chunks=(1, ny_sim, nx_sim), dtype='int16', compressor="none")
+        img_data.create_dataset("odt", shape=(nodt_pics, ny_odt, nx_odt), chunks=(1, ny_odt, nx_odt), dtype='int16', compressor="none")
+
+        img_data.create_dataset("dmd_firmware_program", shape=dmd_data.shape, dtype='int16', compressor='none')
+        img_data.dmd_firmware_program[:] = dmd_data
+
+        img_data.create_dataset("daq_digital_program", shape=digital_program.shape, dtype='int8', compressor="none")
+        img_data.daq_digital_program[:] = digital_program
+
+        img_data.create_dataset("daq_analog_program", shape=analog_program.shape, dtype='float32', compressor="none")
+        img_data.daq_analog_program[:] = analog_program
+
+        img_data.attrs["date_time"] = 0
 
 
         # ##################################
         # burst acquisition
         # ##################################
-        sx = 801
-        cx = 1024
-        sy = 511
-        # cy = 1024
-        cy = 1120
-        self._mmc.setROI(odt_cam, cx - sx // 2, cy - sy // 2, sx, sy)
 
-        # startSequenceAcquisition() with first argument a string does not initialize the circular buffer
-        self._mmc.clearCircularBuffer()
-        self._mmc.initializeCircularBuffer()
-        # todo: test if I can run two sequence acquisitions like this
-        self._mmc.startSequenceAcquisition(sim_cam, nsim_pics, 0, True)
-        self._mmc.startSequenceAcquisition(odt_cam, nodt_pics, 0, True)
+        # set circular buffer
+        mmc2.setCircularBufferMemoryFootprint(3000)
 
-        time.sleep(10)
-        imgs = []
-        while (self._mmc.getRemainingImageCount() != 0):
-            print("images remaining")
-            imgs.append(self._mmc.popNextImage())
+        # start camera
+        mmc1.startSequenceAcquisition(nsim_pics, 0, True)
+        mmc2.startSequenceAcquisition(nodt_pics, 0, True)
 
-        print("found %d images" % (len(imgs)))
+        # start daq
+        self.daq.start_sequence()
 
-        for ii in imgs:
-            print(len(ii))
+        # read images and save
+        pgm_time_s = dt * digital_program.shape[0] * ntimes
+        timeout = 10 + pgm_time_s
+        tstart = time.perf_counter()
+
+        ii_sim = 0
+        ii_odt = 0
+
+        daq_stopped = False
+        def get_remaining_image_count(): return mmc1.getRemainingImageCount(), mmc2.getRemainingImageCount()
+        for icount in range(nsim_pics + nodt_pics):
+
+            tnow = time.perf_counter() - tstart
+            if tnow > pgm_time_s and not daq_stopped:
+                self.daq.stop_sequence()
+                daq_stopped = True
+
+            while (get_remaining_image_count() == (0, 0)):
+                tnow = time.perf_counter() - tstart
+                if tnow > pgm_time_s and not daq_stopped:
+                    self.daq.stop_sequence()
+                    daq_stopped = True
+
+                if tnow > timeout:
+                    print("timeout reached")
+                    break
+
+            n1, n2 = get_remaining_image_count()
+            if n1 > 0:
+                img_data.sim[ii_sim] = mmc1.popNextImage()
+                ii_sim += 1
+
+            if n2 > 0:
+                img_data.odt[ii_odt] = mmc2.popNextImage()
+                ii_odt += 1
+
+        print("remaining images in buffer: ", end="")
+        print(get_remaining_image_count())
+
+        mmc1.stopSequenceAcquisition()
+        mmc2.stopSequenceAcquisition()
+        if not daq_stopped:
+            self.daq.stop_sequence()
+
+        off_preset = mcsim.expt_ctrl.expt_map.preset_to_array(daq_presets["off"],
+                                                              mcsim.expt_ctrl.expt_map.do_line_names, nchannels=16)
+
+        self.daq.set_digital_once(off_preset)
+
+        print("ii_sim=%d/%d, ii_odt=%d/%d" % (ii_sim, nsim_pics, ii_odt, nodt_pics))
+        print("acquisition finished")
 
         return
 
