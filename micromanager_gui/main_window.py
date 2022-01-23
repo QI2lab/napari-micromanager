@@ -30,7 +30,9 @@ import mcsim.expt_ctrl.dlp6500 as dmd_ctrl
 import mcsim.expt_ctrl.set_dmd_sim as dmd_map
 import mcsim.expt_ctrl.daq
 import mcsim.expt_ctrl.expt_map as daq_map
+# import mcsim.analysis.analysis_tools # if I add this line, napari no longer recognizes this as a plugin...why?
 
+# from skimage.restoration import unwrap_phase
 from numpy import fft
 
 
@@ -75,7 +77,9 @@ class _MainUI:
     snap_channel_groupBox: QtW.QGroupBox
     snap_channel_comboBox: QtW.QComboBox
     exp_spinBox: QtW.QDoubleSpinBox
-    fft_groupBox: QtW.QGroupBox
+    image_proc_mode_comboBox: QtW.QComboBox
+    fx_doubleSpinBox: QtW.QDoubleSpinBox
+    fy_doubleSpinBox: QtW.QDoubleSpinBox
     snap_Button: QtW.QPushButton
     live_Button: QtW.QPushButton
     max_min_val_label: QtW.QLabel
@@ -568,11 +572,32 @@ class MainWindow(QtW.QWidget, _MainUI):
                 # circular buffer empty
                 return
 
-        # different layers for different cameras
-        layer_name = "preview %s" % self._mmc_cam.getCameraDevice()
-        if self.fft_groupBox.isChecked():
+        # get image processing mode
+        mode = self.image_proc_mode_comboBox.currentText()
+
+        # different layers for different cameras and modes
+        layer_name = "%s %s" % (self._mmc_cam.getCameraDevice(), mode)
+
+        if mode == "normal":
+            pass
+        elif mode == "fft":
             data = np.abs(fft.fftshift(fft.fft2(fft.ifftshift(data))))
             layer_name += " fft"
+        # elif mode == "hologram":
+        #     holo_frq = (self.fx_doubleSpinBox.value(), self.fy_doubleSpinBox.value())
+        #
+        #     ft = fft.fftshift(fft.fft2(fft.ifftshift(data)))
+        #
+        #     ft_xlated = mctools.translate_ft(ft, holo_frq, drs=(1, 1))
+        #     # todo: cut off extra info
+        #
+        #     im = fft.fftshift(fft.ifft2(fft.ifftshift(ft_xlated)))
+        #
+        #     data = im
+        #     # todo: could also display amplitude data...
+        #     # data = unwrap_phase(np.angle(im))
+        else:
+            raise ValueError()
 
         try:
             preview_layer = self.viewer.layers[layer_name]
@@ -647,11 +672,14 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         # get daq values for channel
         preset = daq_map.presets[channel]
-        do_line_names = daq_map.do_line_names
-        digital_array = daq_map.preset_to_array(preset, do_line_names, nchannels=self.daq.n_digital_lines)
+        digital_array, analog_array = daq_map.preset_to_array(preset, mcsim.expt_ctrl.expt_map.daq_do_map,
+                                                              mcsim.expt_ctrl.expt_map.daq_ao_map,
+                                                              n_digital_channels=self.daq.n_digital_lines,
+                                                              n_analog_channels=self.daq.n_analog_lines)
+
         # set daq
+        self.daq.set_analog_once(analog_array)
         self.daq.set_digital_once(digital_array)
-        # self.daq.set_analog_once()
 
         # set dmd
         dmd_map.program_dmd_seq(self.dmd, mode, channel, 1, 0, False, None, False, True)

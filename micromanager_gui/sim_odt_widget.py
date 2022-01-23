@@ -244,7 +244,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         save_dir = Path(self.dir_lineEdit.text()) / self.fname_lineEdit.text()
         img_fname = save_dir / "sim_odt.zarr"
 
-        mmc = self._mmcores[0]
         mmc1 = self._mmcores[0]
         mmc2 = self._mmcores[1]
 
@@ -469,18 +468,36 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         print("remaining images in buffer: ", end="")
         print(get_remaining_image_count())
 
+        # ##################################
+        # stop sequence acquisition
+        # ##################################
         mmc1.stopSequenceAcquisition()
         mmc2.stopSequenceAcquisition()
+
         if not daq_stopped:
             self.daq.stop_sequence()
 
-        off_preset = mcsim.expt_ctrl.expt_map.preset_to_array(daq_presets["off"],
-                                                              mcsim.expt_ctrl.expt_map.do_line_names, nchannels=16)
-
-        self.daq.set_digital_once(off_preset)
+        # ##################################
+        # set DAQ back to off state (for digital lines only)
+        # ##################################
+        off_do, off_ao = mcsim.expt_ctrl.expt_map.preset_to_array(daq_presets["off"],
+                                                              mcsim.expt_ctrl.expt_map.daq_do_map,
+                                                              mcsim.expt_ctrl.expt_map.daq_ao_map,
+                                                              n_digital_channels=self.daq.n_digital_lines,
+                                                              n_analog_channels=self.daq.n_analog_lines
+                                                              )
+        self.daq.set_digital_once(off_do)
 
         print("ii_sim=%d/%d, ii_odt=%d/%d" % (ii_sim, nsim_pics, ii_odt, nodt_pics))
         print("acquisition finished")
+
+        # ##################################
+        # reset cameras to internal triggering...
+        # ##################################
+        mmc1.setProperty(sim_cam, "TRIGGER SOURCE", "INTERNAL")
+
+        mmc2.setProperty(odt_cam, "TriggerMode", "Internal Trigger")
+        mmc2.clearROI()
 
         return
 
