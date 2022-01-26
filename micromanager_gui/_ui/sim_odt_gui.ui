@@ -1065,20 +1065,11 @@
       <number>0</number>
      </property>
      <item>
-      <spacer name="run_spacer">
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
+      <widget class="QCheckBox" name="show_dataset_checkBox">
+       <property name="text">
+        <string>show in viewer</string>
        </property>
-       <property name="sizeType">
-        <enum>QSizePolicy::Preferred</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>20</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
+      </widget>
      </item>
      <item>
       <widget class="QPushButton" name="run_Button">

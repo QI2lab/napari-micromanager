@@ -23,6 +23,7 @@ import mcsim.expt_ctrl.dlp6500
 import mcsim.expt_ctrl.set_dmd_sim
 import numpy as np
 import time
+import datetime
 import zarr
 
 ICONS = Path(__file__).parent / "icons"
@@ -78,6 +79,7 @@ class _MultiDUI:
     below_doubleSpinBox: QtW.QDoubleSpinBox
     z_range_abovebelow_doubleSpinBox: QtW.QDoubleSpinBox
 
+    show_dataset_checkBox: QtW.QCheckBox
     run_Button: QtW.QPushButton
     pause_Button: QtW.QPushButton
     cancel_Button: QtW.QPushButton
@@ -99,7 +101,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
     # metadata associated with a given experiment
     SEQUENCE_META: dict[MDASequence, SequenceMeta] = {}
 
-    def __init__(self, mmcores: list[RemoteMMCore], daq: mcsim.expt_ctrl.daq.daq, dmd: mcsim.expt_ctrl.dlp6500.dlp6500, parent=None):
+    def __init__(self, mmcores: list[RemoteMMCore], daq: mcsim.expt_ctrl.daq.daq, dmd: mcsim.expt_ctrl.dlp6500.dlp6500,
+                 viewer, parent=None):
 
         mmcore = mmcores[0]
         self._mmcores = mmcores
@@ -107,6 +110,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         self.daq = daq
         self.dmd = dmd
+        self.viewer = viewer
         super().__init__(parent)
         self.setup_ui()
 
@@ -241,8 +245,13 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 self.fname_lineEdit.text() and Path(self.dir_lineEdit.text()).is_dir()):
             raise ValueError("Select a filename and a valid directory.")
 
-        save_dir = Path(self.dir_lineEdit.text()) / self.fname_lineEdit.text()
-        img_fname = save_dir / "sim_odt.zarr"
+        if self.save_groupBox.isChecked():
+            subdir = self.fname_lineEdit.text()
+            save_path = Path(self.dir_lineEdit.text()) / subdir / "sim_odt.zarr"
+        else:
+            save_path = None
+            subdir = None
+
 
         mmc1 = self._mmcores[0]
         mmc2 = self._mmcores[1]
@@ -299,7 +308,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # warmup todo: how to deal with this when multiple channels?
         # ##################################
         do_warmup = np.zeros(16, dtype=np.uint8)
-        do_warmup[daq_do_map["odt_laser"]] = 1
+        do_warmup[daq_do_map["odt_laser"]] = 1 # todo: don't want to do this in general?
+        do_warmup[daq_do_map["odt_shutter"]] = 1 # todo: don't want to do this in general?
+        do_warmup[daq_do_map["dmd_enable"]] = 1 # otherwise DMD will not be correctly synced
         self.daq.set_digital_once(do_warmup)
 
         time.sleep(5)
@@ -315,7 +326,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         n_trig_width = int(np.ceil(3e-3 / dt))
 
         # total number of pictures
-        nsim_pics = n_sim_patterns_channel * len([ch for ch in channels if ch != "odt"]) * ntimes * nz
+        nsim_channels = len([ch for ch in channels if ch != "odt"])
+        nsim_pics = n_sim_patterns_channel * nsim_channels * ntimes * nz
         nodt_pics = n_odt_patterns * n_odt_per_sim * ntimes * nz * len([ch for ch in channels if ch == "odt"])
 
         digital_program, analog_program, dt = build_odt_sim_sequence(daq_do_map, daq_ao_map, channels,
@@ -346,13 +358,18 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         mmc2.setProperty(odt_cam, "Exposure", exposure_tms_odt)
         # set external triggering
         mmc2.setProperty(odt_cam, "TriggerMode", "Edge Trigger")
+        mmc2.setProperty(odt_cam, 'PP  1   ENABLED', 'No')
+        mmc2.setProperty(odt_cam, 'PP  2   ENABLED', 'No')
+        mmc2.setProperty(odt_cam, 'PP  3   ENABLED', 'No')
+        mmc2.setProperty(odt_cam, 'PP  4   ENABLED', 'No')
+        mmc2.setProperty(odt_cam, 'PP  5   ENABLED', 'No')
 
         # set ROI
         sx = 801
         cx = 1024
         sy = 511
         # cy = 1120
-        cy = 715
+        cy = 935
         mmc2.setROI(cx - sx // 2, cy - sy // 2, sx, sy)
 
         # ##################################
@@ -399,20 +416,49 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         nx_odt = mmc2.getImageWidth()
         ny_odt = mmc2.getImageHeight()
 
-        img_data = zarr.open(img_fname, mode="w")
-        img_data.create_dataset("sim", shape=(nsim_pics, ny_sim, nx_sim), chunks=(1, ny_sim, nx_sim), dtype='int16', compressor="none")
-        img_data.create_dataset("odt", shape=(nodt_pics, ny_odt, nx_odt), chunks=(1, ny_odt, nx_odt), dtype='int16', compressor="none")
+        if save_path is not None:
+            img_data = zarr.open(save_path, mode="w")
+            img_data.attrs["save_directory"] = str(save_path)
+        else:
+            img_data = zarr.open(mode="w")
 
+        # other metadata
+        now = datetime.datetime.now()
+        img_data.attrs["date_time"] = '%04d_%02d_%02d_%02d;%02d;%02d' % (now.year, now.month, now.day, now.hour, now.minute, now.second)
+
+        # sim dataset
+        img_data.create_dataset("sim", shape=(ntimes, nz, nsim_channels, n_sim_patterns_channel, ny_sim, nx_sim),
+                                chunks=(1, 1, 1, 1, ny_sim, nx_sim), dtype='int16', compressor="none")
+        img_data.sim.attrs["channels"] = [ch for ch in channels if ch != "odt"]
+
+
+        # odt dataset
+        img_data.create_dataset("odt", shape=(n_odt_per_sim * ntimes, nz, n_odt_patterns, ny_odt, nx_odt),
+                                chunks=(1, 1, 1, ny_odt, nx_odt), dtype='int16', compressor="none")
+
+        dmd_patterns = mcsim.expt_ctrl.set_dmd_sim.firmware_pattern_map
+        dmd_patterns = dmd_patterns[0] + dmd_patterns[1]
+        dmd_odt_patterns = [p for p in dmd_patterns if p["type"] == "odt"]
+        xoffsets = [p["xoffset"] for p in dmd_odt_patterns]
+        yoffsets = [p["yoffset"] for p in dmd_odt_patterns]
+
+        img_data.odt.attrs["x_offsets"] = xoffsets
+        img_data.odt.attrs["y_offsets"] = yoffsets
+        img_data.odt.attrs["carrier_frq"] = list(dmd_odt_patterns[0]["frequency"])
+        img_data.odt.attrs["angle"] = dmd_odt_patterns[0]["angle"]
+        img_data.odt.attrs["radius"] = dmd_odt_patterns[0]["radius"]
+
+        # dmd firmware program
         img_data.create_dataset("dmd_firmware_program", shape=dmd_data.shape, dtype='int16', compressor='none')
         img_data.dmd_firmware_program[:] = dmd_data
 
+        # daq program
         img_data.create_dataset("daq_digital_program", shape=digital_program.shape, dtype='int8', compressor="none")
         img_data.daq_digital_program[:] = digital_program
 
         img_data.create_dataset("daq_analog_program", shape=analog_program.shape, dtype='float32', compressor="none")
         img_data.daq_analog_program[:] = analog_program
 
-        img_data.attrs["date_time"] = 0
 
 
         # ##################################
@@ -434,8 +480,18 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         timeout = 10 + pgm_time_s
         tstart = time.perf_counter()
 
+        # counters
         ii_sim = 0
         ii_odt = 0
+
+        iz_sim = 0
+        ic_sim = 0
+        ip_sim = 0
+        it_sim = 0
+
+        ip_odt = 0
+        it_odt = 0
+        iz_odt = 0
 
         daq_stopped = False
         def get_remaining_image_count(): return mmc1.getRemainingImageCount(), mmc2.getRemainingImageCount()
@@ -458,12 +514,47 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             n1, n2 = get_remaining_image_count()
             if n1 > 0:
-                img_data.sim[ii_sim] = mmc1.popNextImage()
+                img_data.sim[it_sim, iz_sim, ic_sim, ip_sim] = mmc1.popNextImage()
+
+                # indexing logic. We acquire images (from slow to fast) time, z-position, channel, pattern
                 ii_sim += 1
+                if ip_sim != (n_sim_patterns_channel - 1):
+                    # increment pattern everytime
+                    ip_sim += 1
+                else:
+                    ip_sim = 0
+
+                    # increment channel after pattern
+                    if ic_sim != (nsim_channels - 1):
+                        ic_sim += 1
+                    else:
+                        ic_sim = 0
+
+                        # increment z after channels
+                        if iz_sim != (nz - 1):
+                            iz_sim += 1
+                        else:
+                            iz_sim = 0
+                            if it_sim != (ntimes - 1):
+                                it_sim += 1
 
             if n2 > 0:
-                img_data.odt[ii_odt] = mmc2.popNextImage()
+                img_data.odt[it_odt, iz_odt, ip_odt] = mmc2.popNextImage()
+
+                # indexing logic. We acquire images (from slow to fast) time, z-position, pattern
                 ii_odt += 1
+                if ip_odt != (n_odt_patterns - 1):
+                    # increment pattern everytime
+                    ip_odt += 1
+                else:
+                    ip_odt = 0
+
+                    # increment z after channels
+                    if iz_odt != (nz - 1):
+                        iz_odt += 1
+                    else:
+                        if it_odt != (ntimes * n_odt_per_sim - 1):
+                            it_odt += 1
 
         print("remaining images in buffer: ", end="")
         print(get_remaining_image_count())
@@ -498,6 +589,38 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         mmc2.setProperty(odt_cam, "TriggerMode", "Internal Trigger")
         mmc2.clearROI()
+
+        # ##################################
+        # optionally create viewer layer...
+        # ##################################
+        if self.show_dataset_checkBox.isChecked():
+
+            # show odt
+            if not np.any(np.array(img_data.odt.shape) == 0):
+                if subdir == "" or subdir is None:
+                    layer_name = "odt preview"
+                else:
+                    layer_name = subdir + " odt"
+
+                try:
+                    preview_layer = self.viewer.layers[layer_name]
+                    preview_layer.data = img_data.odt
+                except KeyError:
+                    preview_layer = self.viewer.add_image(img_data.odt, name=layer_name)
+
+
+            # show SIM
+            if not np.any(np.array(img_data.sim.shape) == 0):
+                if subdir == "" or subdir is None:
+                    layer_name = "sim preview"
+                else:
+                    layer_name = subdir + " sim"
+
+                try:
+                    preview_layer = self.viewer.layers[layer_name]
+                    preview_layer.data = img_data.sim
+                except KeyError:
+                    preview_layer = self.viewer.add_image(img_data.sim, name=layer_name)
 
         return
 

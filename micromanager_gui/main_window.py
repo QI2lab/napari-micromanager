@@ -30,9 +30,8 @@ import mcsim.expt_ctrl.dlp6500 as dmd_ctrl
 import mcsim.expt_ctrl.set_dmd_sim as dmd_map
 import mcsim.expt_ctrl.daq
 import mcsim.expt_ctrl.expt_map as daq_map
-# import mcsim.analysis.analysis_tools # if I add this line, napari no longer recognizes this as a plugin...why?
-
-# from skimage.restoration import unwrap_phase
+import mcsim.analysis.analysis_tools as mctools
+from skimage.restoration import unwrap_phase
 from numpy import fft
 
 
@@ -83,6 +82,9 @@ class _MainUI:
     snap_Button: QtW.QPushButton
     live_Button: QtW.QPushButton
     max_min_val_label: QtW.QLabel
+    max_scale_doubleSpinBox: QtW.QDoubleSpinBox
+    min_scale_doubleSpinBox: QtW.QDoubleSpinBox
+    autoscale_Button: QtW.QPushButton
     px_size_doubleSpinBox: QtW.QDoubleSpinBox
     properties_Button: QtW.QPushButton
     illumination_Button: QtW.QPushButton
@@ -92,7 +94,6 @@ class _MainUI:
     set_channel_Button: QtW.QPushButton
     channel_comboBox: QtW.QComboBox
     mode_comboBox: QtW.QComboBox
-    autoscale_Button: QtW.QPushButton
 
     def setup_ui(self):
         uic.loadUi(self.UI_FILE, self)  # load QtDesigner .ui file
@@ -140,7 +141,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.daq = mcsim.expt_ctrl.daq.nidaq()
 
         # tab widgets
-        self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd)
+        self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer)
         self.mda = MultiDWidget(self._mmc)
         self.explorer = ExploreSample(self.viewer, self._mmc)
         self.tabWidget.addTab(self.sim_odt_acq, "SIM/ODT Acquisition")
@@ -198,9 +199,19 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.snap_channel_comboBox.currentTextChanged.connect(self._channel_changed)
         self.set_camera_comboBox.currentTextChanged.connect(self._camera_changed)
 
+        # set up processing modes combo box
+        proc_modes = ["normal", "fft", "hologram", "hologram unwrapped"]
+        self.image_proc_mode_comboBox.addItems(proc_modes)
+        self.snap_channel_comboBox.setCurrentText(proc_modes[0])
+
         # connect spinboxes
         self.exp_spinBox.valueChanged.connect(self._update_exp)
         self.exp_spinBox.setKeyboardTracking(False)
+
+        # self.fx_doubleSpinBox.setValue(2.212)
+        # self.fy_doubleSpinBox.setValue(1.445)
+        self.fx_doubleSpinBox.setValue(1600.)
+        self.fy_doubleSpinBox.setValue(1400.)
 
         # refresh options in case a config is already loaded by another remote
         self._refresh_options()
@@ -354,6 +365,16 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.load_cfg2_Button.setEnabled(False)
         print("loading", self.cfg2_LineEdit.text())
         self._mmcores[1].loadSystemConfiguration(self.cfg2_LineEdit.text())
+
+        try:
+            # turn off prime BSI express crazy speckle correction
+            cam = self._mmcores[1].getCameraDevice()
+            self._mmcores[1].setProperty(cam, 'PP  1   ENABLED', 'No')
+            self._mmcores[1].setProperty(cam, 'PP  2   ENABLED', 'No')
+            self._mmcores[1].setProperty(cam, 'PP  3   ENABLED', 'No')
+            self._mmcores[1].setProperty(cam, 'PP  4   ENABLED', 'No')
+        except:
+            print("error disabling photometrics camera despeckle correction")
 
     def _refresh_camera_options(self):
         cam_device = self._mmc_cam.getCameraDevice()
@@ -516,17 +537,18 @@ class MainWindow(QtW.QWidget, _MainUI):
             self.snap()
 
     def autoscale_active_layer(self):
-        # todo currently autoscale all layers becuase this is easier...
 
-        for l in self.viewer.layers:
-            vmin = np.percentile(l.data, 0.1)
-            vmax = np.percentile(l.data, 99.9)
+        min_p = self.min_scale_doubleSpinBox.value()
+        max_p = self.max_scale_doubleSpinBox.value()
 
-            l.contrast_limits=(vmin, vmax)
+        # only scale the visible layer, which is the last layer which is visible
+        for l in reversed(self.viewer.layers):
+            if l.visible:
+                vmin = np.percentile(l.data, min_p)
+                vmax = np.percentile(l.data, max_p)
 
-            if l.name[-3:] == "fft":
-                l.gamma = 0.1
-
+                l.contrast_limits = (vmin, vmax)
+                break
 
 
     def change_objective(self):
@@ -582,20 +604,40 @@ class MainWindow(QtW.QWidget, _MainUI):
             pass
         elif mode == "fft":
             data = np.abs(fft.fftshift(fft.fft2(fft.ifftshift(data))))
-            layer_name += " fft"
-        # elif mode == "hologram":
-        #     holo_frq = (self.fx_doubleSpinBox.value(), self.fy_doubleSpinBox.value())
-        #
-        #     ft = fft.fftshift(fft.fft2(fft.ifftshift(data)))
-        #
-        #     ft_xlated = mctools.translate_ft(ft, holo_frq, drs=(1, 1))
-        #     # todo: cut off extra info
-        #
-        #     im = fft.fftshift(fft.ifft2(fft.ifftshift(ft_xlated)))
-        #
-        #     data = im
-        #     # todo: could also display amplitude data...
-        #     # data = unwrap_phase(np.angle(im))
+            # dxy = 6.5 / 50
+            # ny, nx = data.shape
+            # scale = (1 / (ny * dxy), 1 / (ny * dxy))
+        elif mode == "hologram" or mode == "hologram unwrapped":
+            ft = fft.fftshift(fft.fft2(fft.ifftshift(data)))
+            ny, nx = ft.shape
+
+            # todo: could display in some nicer way...but...
+            dxy = 6.5 / 50
+            fx = fft.fftshift(fft.fftfreq(nx, dxy))
+            fy = fft.fftshift(fft.fftfreq(ny, dxy))
+            fxfx, fyfy = np.meshgrid(fx, fy)
+            ff = np.sqrt(fxfx**2 + fyfy**2)
+            dfx = fx[1] - fx[0]
+            dfy = fy[1] - fy[0]
+            fmax = 0.55 / 0.785
+
+            # convert from pixels in image to real units
+            holo_frq = np.array([dfx * (self.fx_doubleSpinBox.value() - nx // 2),
+                                 dfy * (self.fy_doubleSpinBox.value() - ny // 2)])
+
+            ft_xlated = mctools.translate_ft(ft, -holo_frq, drs=(dxy, dxy), use_gpu=False)
+            ft_xlated[ff > fmax] = 0
+
+            im = fft.fftshift(fft.ifft2(fft.ifftshift(ft_xlated)))
+
+            # todo: could also display amplitude data...
+            if mode == "hologram":
+                data = np.angle(im)
+            else:
+                data = unwrap_phase(np.angle(im))
+                # add center back ...
+                data -= np.mean(data[ny//2 - 2: ny//2 + 2, nx//2 - 2: nx//2 + 2])
+
         else:
             raise ValueError()
 
