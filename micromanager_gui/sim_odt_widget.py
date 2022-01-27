@@ -259,7 +259,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         if len(self._mmc.getLoadedDevices()) < 2:
             raise ValueError("Load a cfg file first.")
 
-        # grab information
+        # ##############################
+        # grab sequence information from GUI
+        # ##############################
         channels = [self.channel_tableWidget.cellWidget(c, 0).currentText() for c in range(self.channel_tableWidget.rowCount())]
         exposure_tms_sim = self.sim_exposure_SpinBox.value()
         exposure_tms_odt = self.odt_exposure_SpinBox.value()
@@ -285,6 +287,12 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         daq_ao_map = mcsim.expt_ctrl.expt_map.daq_ao_map
         daq_presets = mcsim.expt_ctrl.expt_map.presets
 
+        # ##############################
+        # turn off live mode if on
+        # ##############################
+        mmc1.stopSequenceAcquisition()
+        mmc2.stopSequenceAcquisition()
+
         # ##################################
         # program DMD
         # ##################################
@@ -296,10 +304,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         self.daq.set_digital_once(digital_start)
 
         # program the DMD
-        # todo: read from channel table
+        blank = [False if ch == "odt" else True for ch in channels]
         modes = ["default"] * len(channels)
         pic_inds, bit_inds = mcsim.expt_ctrl.set_dmd_sim.program_dmd_seq(self.dmd, modes, channels, nrepeats=1,
-                                                                         ndarkframes=0, blank=False,
+                                                                         ndarkframes=0, blank=blank,
                                                                          mode_pattern_indices=None,
                                                                          triggered=True, verbose=True)
         dmd_data = np.vstack((pic_inds, bit_inds))
@@ -366,7 +374,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         # set ROI
         sx = 801
-        cx = 1024
+        cx = 1124
         sy = 511
         # cy = 1120
         cy = 935
@@ -375,19 +383,15 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##################################
         # get SIM camera and set properties
         # ##################################
+
         sim_cam = mmc1.getCameraDevice()
 
-        # set camera properties
+        #set camera properties
         mmc1.setProperty(sim_cam, "ScanMode", "2")
-        mmc1.setProperty(sim_cam, "Exposure", exposure_tms_odt)
+        mmc1.setProperty(sim_cam, "Exposure", exposure_tms_sim)
         # set external triggering
-        # self._mmc.setProperty(sim_cam, "TRIGGER ACTIVE", "EDGE")
-        # self._mmc.setProperty(sim_cam, "TRIGGER DELAY", "0.000")
-        ## mmc.setProperty(odt_cam, "TRIGGER GLOBAL EXPOSURE", "DELAYED")
-        ## self._mmc.setProperty(odt_cam, "TRIGGER GLOBAL EXPOSURE", "GLOBAL RESET")
         mmc1.setProperty(sim_cam, "TRIGGER SOURCE", "EXTERNAL")
         mmc1.setProperty(sim_cam, "TriggerPolarity", "POSITIVE")
-        # mmc1.setProperty(sim_cam, "TRIGGER SOURCE", "INTERNAL")
 
         # set output signal
         # line 1 trigger ready
