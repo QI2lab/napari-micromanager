@@ -30,6 +30,7 @@ import mcsim.expt_ctrl.dlp6500 as dmd_ctrl
 import mcsim.expt_ctrl.set_dmd_sim as dmd_map
 import mcsim.expt_ctrl.daq
 import mcsim.expt_ctrl.expt_map as daq_map
+from mcsim.expt_ctrl.setup_optotune_mre2 import initialize_mre2
 import mcsim.analysis.analysis_tools as mctools
 from skimage.restoration import unwrap_phase
 from numpy import fft
@@ -100,8 +101,8 @@ class _MainUI:
 
         # set some defaults
         # self.cfg_LineEdit.setText("demo")
-        self.cfg_LineEdit.setText(r"C:\Users\shepherd lab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\sim_odt_nidaq_ham_c1.cfg")
-        self.cfg2_LineEdit.setText(r"C:\Users\shepherd lab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\sim_odt_nidaq_ham_c2.cfg")
+        self.cfg_LineEdit.setText(r"C:/Users/q2ilab/Documents/mcsim_private/mcSIM/mcsim/expt_ctrl/sim_odt_nidaq_ham_c1.cfg")
+        self.cfg2_LineEdit.setText(r"C:/Users/q2ilab/Documents/mcsim_private/mcSIM/mcsim/expt_ctrl/sim_odt_nidaq_ham_c2.cfg")
 
         # button icons
         for attr, icon in [
@@ -219,6 +220,9 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.viewer.layers.events.connect(self.update_max_min)
         self.viewer.layers.selection.events.active.connect(self.update_max_min)
         self.viewer.dims.events.current_step.connect(self.update_max_min)
+
+        # todo: find a better place to put initialization code ... maybe should have a mechanism for running a startup script...
+        initialize_mre2()
 
     def illumination(self):
         if not hasattr(self, "_illumination"):
