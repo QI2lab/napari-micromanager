@@ -61,6 +61,11 @@ class _MultiDUI:
     interval_spinBox: QtW.QSpinBox
     time_comboBox: QtW.QComboBox
 
+    cx_spinBox: QtW.QSpinBox
+    sx_spinBox: QtW.QSpinBox
+    cy_spinBox: QtW.QSpinBox
+    sy_spinBox: QtW.QSpinBox
+
     stack_groupBox: QtW.QGroupBox
     z_tabWidget: QtW.QTabWidget
     step_size_doubleSpinBox: QtW.QDoubleSpinBox
@@ -116,6 +121,16 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         self.pause_Button.released.connect(self._mmc.toggle_pause)
         self.cancel_Button.released.connect(self._mmc.cancel)
+
+        # initial value for ROI
+        self.sx_spinBox.setValue(801)
+        self.cx_spinBox.setValue(1275)
+        self.sy_spinBox.setValue(511)
+        self.cy_spinBox.setValue(885)
+
+        # default value for exposure times
+        self.odt_exposure_SpinBox.setValue(3.)
+        self.sim_exposure_SpinBox.setValue(100.)
 
         # connect buttons
         self.add_ch_Button.clicked.connect(self.add_channel)
@@ -373,11 +388,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         mmc2.setProperty(odt_cam, 'PP  5   ENABLED', 'No')
 
         # set ROI
-        sx = 801
-        cx = 1124
-        sy = 511
-        # cy = 1120
-        cy = 935
+        # todo: add check in bounds...
+        cx = self.cx_spinBox.value()
+        sx = self.sx_spinBox.value()
+        cy = self.cy_spinBox.value()
+        sy = self.sy_spinBox.value()
         mmc2.setROI(cx - sx // 2, cy - sy // 2, sx, sy)
 
         # ##################################
