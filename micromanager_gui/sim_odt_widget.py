@@ -227,11 +227,23 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             # create a combo_box for channels in the table
             self.channel_comboBox = QtW.QComboBox(self)
+            self.mode_comboBox = QtW.QComboBox(self)
 
             pks = list(presets.keys())
             self.channel_comboBox.addItems(pks)
 
             self.channel_tableWidget.setCellWidget(idx, 0, self.channel_comboBox)
+            self.channel_tableWidget.setCellWidget(idx, 1, self.mode_comboBox)
+
+            self.channel_comboBox.currentTextChanged.connect(self._on_channel_changed)
+
+    def _on_channel_changed(self):
+        dmd_cmap = mcsim.expt_ctrl.set_dmd_sim.channel_map
+        for ii in range(self.channel_tableWidget.rowCount()):
+            ch = self.channel_tableWidget.cellWidget(ii, 0).currentText()
+            modes = list(dmd_cmap[ch].keys())
+            self.channel_tableWidget.cellWidget(ii, 1).addItems(modes)
+
 
     def remove_channel(self):
         # remove selected position
@@ -278,6 +290,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # grab sequence information from GUI
         # ##############################
         channels = [self.channel_tableWidget.cellWidget(c, 0).currentText() for c in range(self.channel_tableWidget.rowCount())]
+        channels_modes = [self.channel_tableWidget.cellWidget(c, 1).currentText() for c in range(self.channel_tableWidget.rowCount())]
         exposure_tms_sim = self.sim_exposure_SpinBox.value()
         exposure_tms_odt = self.odt_exposure_SpinBox.value()
 
@@ -320,7 +333,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         # program the DMD
         blank = [False if ch == "odt" else True for ch in channels]
-        modes = ["default"] * len(channels)
+        # modes = ["default"] * len(channels)
+        modes = [chm if ch == "odt" else "default" for ch, chm in zip(channels, channels_modes)]
         pic_inds, bit_inds = mcsim.expt_ctrl.set_dmd_sim.program_dmd_seq(self.dmd, modes, channels, nrepeats=1,
                                                                          ndarkframes=0, blank=blank,
                                                                          mode_pattern_indices=None,
@@ -342,7 +356,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # program daq
         # ##################################
         # number of patterns for single channel
-        n_odt_patterns = len(mcsim.expt_ctrl.set_dmd_sim.channel_map["odt"]["default"]["picture_indices"])
+        if "odt" in channels:
+            odt_mode = [m for m, ch in zip(modes, channels) if ch == "odt"][0]
+            n_odt_patterns = len(mcsim.expt_ctrl.set_dmd_sim.channel_map["odt"][odt_mode]["picture_indices"])
+        else:
+            n_odt_patterns = 0
         n_sim_patterns_channel = len(mcsim.expt_ctrl.set_dmd_sim.channel_map["blue"]["sim"]["picture_indices"])
         n_odt_per_sim = 1
         dt = 105e-6

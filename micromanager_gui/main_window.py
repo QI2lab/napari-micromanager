@@ -96,6 +96,10 @@ class _MainUI:
     channel_comboBox: QtW.QComboBox
     mode_comboBox: QtW.QComboBox
 
+    pic_index_spinBox: QtW.QSpinBox
+    bit_index_spinBox: QtW.QSpinBox
+    set_dmd_pattern_index_pushButton: QtW.QPushButton
+
     def setup_ui(self):
         uic.loadUi(self.UI_FILE, self)  # load QtDesigner .ui file
 
@@ -176,12 +180,11 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.up_Button.clicked.connect(self.stage_z_up)
         self.down_Button.clicked.connect(self.stage_z_down)
         self.autoscale_Button.clicked.connect(self.autoscale_active_layer)
-
         self.snap_Button.clicked.connect(self.snap)
         self.live_Button.clicked.connect(self.toggle_live)
-
         self.illumination_Button.clicked.connect(self.illumination)
         self.properties_Button.clicked.connect(self._show_prop_browser)
+        self.set_dmd_pattern_index_pushButton.clicked.connect(self._set_dmd_pattern_index)
 
         # populate channel combo box
         pks = list(mcsim.expt_ctrl.expt_map.presets.keys())
@@ -729,3 +732,11 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         # set dmd
         dmd_map.program_dmd_seq(self.dmd, mode, channel, 1, 0, False, None, False, True)
+
+    def _set_dmd_pattern_index(self):
+        pic_ind = self.pic_index_spinBox.value()
+        bit_ind = self.bit_index_spinBox.value()
+        self.dmd.start_stop_sequence('stop')
+
+        self.dmd.set_pattern_sequence([pic_ind], [bit_ind], 105, 0, triggered=False,
+                                 clear_pattern_after_trigger=False, bit_depth=1, num_repeats=0, mode='pre-stored')
