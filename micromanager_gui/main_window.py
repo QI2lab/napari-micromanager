@@ -17,6 +17,7 @@ from ._saving import save_sequence
 from ._util import blockSignals, event_indices, extend_array_for_index
 from .explore_sample import ExploreSample
 from .sim_odt_widget import SimOdtWidget
+from .dmd_widget import DmdWidget
 from .multid_widget import MultiDWidget, SequenceMeta
 from .prop_browser import PropBrowser
 
@@ -147,9 +148,11 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         # tab widgets
         self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer)
+        self.dmd_widget = DmdWidget(self._mmcores, self.daq, self.dmd, self.viewer)
         self.mda = MultiDWidget(self._mmc)
         self.explorer = ExploreSample(self.viewer, self._mmc)
         self.tabWidget.addTab(self.sim_odt_acq, "SIM/ODT Acquisition")
+        self.tabWidget.addTab(self.dmd_widget, "DMD")
         self.tabWidget.addTab(self.mda, "Multi-D Acquisition")
         self.tabWidget.addTab(self.explorer, "Sample Explorer")
 

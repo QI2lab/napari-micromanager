@@ -846,7 +846,7 @@
            </size>
           </property>
           <property name="text">
-           <string>SIM exposure (s):</string>
+           <string>SIM exposure (ms):</string>
           </property>
          </widget>
          <widget class="QLabel" name="label_13">
@@ -877,7 +877,7 @@
            </size>
           </property>
           <property name="text">
-           <string>ODT exposure (s):</string>
+           <string>ODT exposure (ms):</string>
           </property>
          </widget>
          <widget class="QDoubleSpinBox" name="sim_exposure_SpinBox">

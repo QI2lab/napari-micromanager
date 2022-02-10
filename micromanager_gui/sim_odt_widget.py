@@ -465,25 +465,31 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         # sim dataset
         img_data.create_dataset("sim", shape=(ntimes, nz, nsim_channels, n_sim_patterns_channel, ny_sim, nx_sim),
-                                chunks=(1, 1, 1, 1, ny_sim, nx_sim), dtype='int16', compressor="none")
+                                chunks=(1, 1, 1, 1, ny_sim, nx_sim), dtype='uint16', compressor="none")
         img_data.sim.attrs["channels"] = [ch for ch in channels if ch != "odt"]
+        img_data.sim.attrs["exposure_time_ms"] = exposure_tms_sim
 
 
         # odt dataset
         img_data.create_dataset("odt", shape=(n_odt_per_sim * ntimes, nz, n_odt_patterns, ny_odt, nx_odt),
-                                chunks=(1, 1, 1, ny_odt, nx_odt), dtype='int16', compressor="none")
+                                chunks=(1, 1, 1, ny_odt, nx_odt), dtype='uint16', compressor="none")
+        img_data.odt.attrs["exposure_time_ms"] = exposure_tms_odt
 
-        dmd_patterns = mcsim.expt_ctrl.set_dmd_sim.firmware_pattern_map
-        dmd_patterns = dmd_patterns[0] + dmd_patterns[1]
-        dmd_odt_patterns = [p for p in dmd_patterns if p["type"] == "odt"]
-        xoffsets = [p["xoffset"] for p in dmd_odt_patterns]
-        yoffsets = [p["yoffset"] for p in dmd_odt_patterns]
+        # get odt pattern data
+        odt_firmware_data = mcsim.expt_ctrl.set_dmd_sim.channel_map["odt"][odt_mode]
+        odt_pic_inds = odt_firmware_data["picture_indices"]
+        odt_bit_inds = odt_firmware_data["bit_indices"]
+        dmd_pattern_data = mcsim.expt_ctrl.set_dmd_sim.firmware_pattern_map
 
+        xyoffsets = [(dmd_pattern_data[ii][jj]["xoffset"], dmd_pattern_data[ii][jj]["yoffset"]) for ii, jj in zip(odt_pic_inds, odt_bit_inds)]
+        xoffsets, yoffsets = zip(*xyoffsets)
+
+        # set odt dataset metadata
         img_data.odt.attrs["x_offsets"] = xoffsets
         img_data.odt.attrs["y_offsets"] = yoffsets
-        img_data.odt.attrs["carrier_frq"] = list(dmd_odt_patterns[0]["frequency"])
-        img_data.odt.attrs["angle"] = dmd_odt_patterns[0]["angle"]
-        img_data.odt.attrs["radius"] = dmd_odt_patterns[0]["radius"]
+        img_data.odt.attrs["carrier_frq"] = list(dmd_pattern_data[odt_pic_inds[0]][odt_bit_inds[0]]["frequency"])
+        img_data.odt.attrs["angle"] = dmd_pattern_data[odt_pic_inds[0]][odt_bit_inds[0]]["angle"]
+        img_data.odt.attrs["radius"] = dmd_pattern_data[odt_pic_inds[0]][odt_bit_inds[0]]["radius"]
 
         # dmd firmware program
         img_data.create_dataset("dmd_firmware_program", shape=dmd_data.shape, dtype='int16', compressor='none')
