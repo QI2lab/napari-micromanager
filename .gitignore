@@ -147,3 +147,6 @@ micromanager_gui/qmmcore.py
 MMSetup_*.exe
 .cenv
 .qt_for_python
+
+# pycharm project data
+.idea

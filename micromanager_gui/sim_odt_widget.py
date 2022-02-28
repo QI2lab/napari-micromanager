@@ -124,9 +124,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         # initial value for ROI
         self.sx_spinBox.setValue(801)
-        self.cx_spinBox.setValue(1275)
+        # self.cx_spinBox.setValue(1275)
+        self.cx_spinBox.setValue(1024)
         self.sy_spinBox.setValue(511)
-        self.cy_spinBox.setValue(885)
+        # self.cy_spinBox.setValue(885)
+        self.cy_spinBox.setValue(1024)
 
         # default value for exposure times
         self.odt_exposure_SpinBox.setValue(3.)
@@ -366,6 +368,13 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         dt = 105e-6
         n_trig_width = int(np.ceil(3e-3 / dt))
 
+        # odt stabilize time
+        if len(channels) == 1 and channels[0] == "odt":
+            odt_stabilize_t = 0
+        else:
+            odt_stabilize_t = 1000e-3
+        
+
         # total number of pictures
         nsim_channels = len([ch for ch in channels if ch != "odt"])
         nsim_pics = n_sim_patterns_channel * nsim_channels * ntimes * nz
@@ -376,7 +385,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                                                      n_odt_patterns, n_sim_patterns_channel,
                                                                      dt=dt, interval=interval_ms*1e-3,
                                                                      n_odt_per_sim=n_odt_per_sim,
-                                                                     n_trig_width=n_trig_width)
+                                                                     n_trig_width=n_trig_width,
+                                                                     odt_stabilize_t=odt_stabilize_t,
+                                                                     min_odt_frame_time=8.7e-3)
 
         # check program and number of pictures match
         if np.sum(digital_program[:, daq_do_map["odt_cam"]]) // n_trig_width != nodt_pics // ntimes:
@@ -476,20 +487,21 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         img_data.odt.attrs["exposure_time_ms"] = exposure_tms_odt
 
         # get odt pattern data
-        odt_firmware_data = mcsim.expt_ctrl.set_dmd_sim.channel_map["odt"][odt_mode]
-        odt_pic_inds = odt_firmware_data["picture_indices"]
-        odt_bit_inds = odt_firmware_data["bit_indices"]
-        dmd_pattern_data = mcsim.expt_ctrl.set_dmd_sim.firmware_pattern_map
+        if "odt" in channels:
+            odt_firmware_data = mcsim.expt_ctrl.set_dmd_sim.channel_map["odt"][odt_mode]
+            odt_pic_inds = odt_firmware_data["picture_indices"]
+            odt_bit_inds = odt_firmware_data["bit_indices"]
+            dmd_pattern_data = mcsim.expt_ctrl.set_dmd_sim.firmware_pattern_map
 
-        xyoffsets = [(dmd_pattern_data[ii][jj]["xoffset"], dmd_pattern_data[ii][jj]["yoffset"]) for ii, jj in zip(odt_pic_inds, odt_bit_inds)]
-        xoffsets, yoffsets = zip(*xyoffsets)
+            xyoffsets = [(dmd_pattern_data[ii][jj]["xoffset"], dmd_pattern_data[ii][jj]["yoffset"]) for ii, jj in zip(odt_pic_inds, odt_bit_inds)]
+            xoffsets, yoffsets = zip(*xyoffsets)
 
-        # set odt dataset metadata
-        img_data.odt.attrs["x_offsets"] = xoffsets
-        img_data.odt.attrs["y_offsets"] = yoffsets
-        img_data.odt.attrs["carrier_frq"] = list(dmd_pattern_data[odt_pic_inds[0]][odt_bit_inds[0]]["frequency"])
-        img_data.odt.attrs["angle"] = dmd_pattern_data[odt_pic_inds[0]][odt_bit_inds[0]]["angle"]
-        img_data.odt.attrs["radius"] = dmd_pattern_data[odt_pic_inds[0]][odt_bit_inds[0]]["radius"]
+            # set odt dataset metadata
+            img_data.odt.attrs["x_offsets"] = xoffsets
+            img_data.odt.attrs["y_offsets"] = yoffsets
+            img_data.odt.attrs["carrier_frq"] = list(dmd_pattern_data[odt_pic_inds[0]][odt_bit_inds[0]]["frequency"])
+            img_data.odt.attrs["angle"] = dmd_pattern_data[odt_pic_inds[0]][odt_bit_inds[0]]["angle"]
+            img_data.odt.attrs["radius"] = dmd_pattern_data[odt_pic_inds[0]][odt_bit_inds[0]]["radius"]
 
         # dmd firmware program
         img_data.create_dataset("dmd_firmware_program", shape=dmd_data.shape, dtype='int16', compressor='none')
@@ -522,6 +534,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         pgm_time_s = dt * digital_program.shape[0] * ntimes
         timeout = 10 + pgm_time_s
         tstart = time.perf_counter()
+
+        print("program expected time = %0.2fs" % pgm_time_s)
 
         # counters
         ii_sim = 0
@@ -580,6 +594,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                             iz_sim = 0
                             if it_sim != (ntimes - 1):
                                 it_sim += 1
+                                print("SIM time %d, elapsed time = %0.2fs" % (it_sim + 1, time.perf_counter() - tstart), end="\r")
 
             if n2 > 0:
                 img_data.odt[it_odt, iz_odt, ip_odt] = mmc2.popNextImage()
@@ -598,7 +613,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     else:
                         if it_odt != (ntimes * n_odt_per_sim - 1):
                             it_odt += 1
-
+                            print("ODT time %d, elapsed time = %0.2fs" % (it_odt + 1, time.perf_counter() - tstart), end="\r")
+        print("")
         print("remaining images in buffer: ", end="")
         print(get_remaining_image_count())
 
