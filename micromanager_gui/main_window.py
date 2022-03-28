@@ -28,9 +28,9 @@ if TYPE_CHECKING:
 
 # dmd and daq control
 import mcsim.expt_ctrl.dlp6500 as dmd_ctrl
-import mcsim.expt_ctrl.set_dmd_sim as dmd_map
+import mcsim.expt_ctrl.set_dmd_pattern_firmware as dmd_map
 import mcsim.expt_ctrl.daq
-import mcsim.expt_ctrl.expt_map as daq_map
+import mcsim.expt_ctrl.daq_map as daq_map
 from mcsim.expt_ctrl.setup_optotune_mre2 import initialize_mre2
 import mcsim.analysis.analysis_tools as mctools
 from skimage.restoration import unwrap_phase
@@ -190,7 +190,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.set_dmd_pattern_index_pushButton.clicked.connect(self._set_dmd_pattern_index)
 
         # populate channel combo box
-        pks = list(mcsim.expt_ctrl.expt_map.presets.keys())
+        pks = list(daq_map.presets.keys())
         self.channel_comboBox.addItems(pks)
         # update mode combo box when channel combo box is changed
         self.channel_comboBox.currentTextChanged.connect(self._refresh_mode_options)
@@ -724,8 +724,7 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         # get daq values for channel
         preset = daq_map.presets[channel]
-        digital_array, analog_array = daq_map.preset_to_array(preset, mcsim.expt_ctrl.expt_map.daq_do_map,
-                                                              mcsim.expt_ctrl.expt_map.daq_ao_map,
+        digital_array, analog_array = daq_map.preset_to_array(preset, daq_map.daq_do_map, daq_map.daq_ao_map,
                                                               n_digital_channels=self.daq.n_digital_lines,
                                                               n_analog_channels=self.daq.n_analog_lines)
 

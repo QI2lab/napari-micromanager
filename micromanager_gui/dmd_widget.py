@@ -15,12 +15,12 @@ if TYPE_CHECKING:
     from pymmcore_plus import RemoteMMCore
 
 # daq
-import mcsim.expt_ctrl.expt_map
+import mcsim.expt_ctrl.daq_map as daq_map
 import mcsim.expt_ctrl.daq
 
 # dmd
 import mcsim.expt_ctrl.dlp6500
-import mcsim.expt_ctrl.set_dmd_sim
+import mcsim.expt_ctrl.set_dmd_pattern_firmware
 import time
 import datetime
 import zarr
@@ -233,9 +233,9 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
         # grab DAQ line info
         # ##############################
         # line info
-        daq_do_map = mcsim.expt_ctrl.expt_map.daq_do_map
-        daq_ao_map = mcsim.expt_ctrl.expt_map.daq_ao_map
-        daq_presets = mcsim.expt_ctrl.expt_map.presets
+        daq_do_map = daq_map.daq_do_map
+        daq_ao_map = daq_map.daq_ao_map
+        daq_presets = daq_map.presets
 
         # ##################################
         # get odt camera and set up
@@ -311,12 +311,10 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
         # ##################################
         # set DAQ back to off state (for digital lines only)
         # ##################################
-        off_do, off_ao = mcsim.expt_ctrl.expt_map.preset_to_array(daq_presets["off"],
-                                                              mcsim.expt_ctrl.expt_map.daq_do_map,
-                                                              mcsim.expt_ctrl.expt_map.daq_ao_map,
-                                                              n_digital_channels=self.daq.n_digital_lines,
-                                                              n_analog_channels=self.daq.n_analog_lines
-                                                              )
+        off_do, off_ao = daq_map.preset_to_array(daq_presets["off"], daq_map.daq_do_map, daq_map.daq_ao_map,
+                                                 n_digital_channels=self.daq.n_digital_lines,
+                                                 n_analog_channels=self.daq.n_analog_lines
+                                                 )
         self.daq.set_digital_once(off_do)
 
         print("reset DAQ")
