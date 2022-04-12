@@ -96,6 +96,7 @@ class _MainUI:
     set_channel_Button: QtW.QPushButton
     channel_comboBox: QtW.QComboBox
     mode_comboBox: QtW.QComboBox
+    daq_shutter_checkBox: QtW.QCheckBox
 
     pic_index_spinBox: QtW.QSpinBox
     bit_index_spinBox: QtW.QSpinBox
@@ -144,7 +145,9 @@ class MainWindow(QtW.QWidget, _MainUI):
         # connect to DMD
         self.dmd = dmd_ctrl.dlp6500win(debug=True)
         # connect to daq
-        self.daq = mcsim.expt_ctrl.daq.nidaq()
+        self.daq = mcsim.expt_ctrl.daq.nidaq(dev_name="Dev1",
+                                             digital_lines="port0/line0:15", digital_line_names=daq_map.daq_do_map,
+                                             analog_lines=["ao0", "ao1", "ao2"], analog_line_names=daq_map.daq_ao_map)
 
         # tab widgets
         self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer)
@@ -219,6 +222,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         # self.fy_doubleSpinBox.setValue(1.445)
         self.fx_doubleSpinBox.setValue(1600.)
         self.fy_doubleSpinBox.setValue(1400.)
+        self.daq_shutter_checkBox.setCheckState(True)
 
         # refresh options in case a config is already loaded by another remote
         self._refresh_options()
@@ -686,18 +690,36 @@ class MainWindow(QtW.QWidget, _MainUI):
 
     def snap(self):
         self.stop_live()
+
+        if self.daq_shutter_checkBox.isChecked():
+            self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["sim_shutter"])
+
         self._mmc_cam.snapImage()
+
+        if self.daq_shutter_checkBox.isChecked():
+            self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["sim_shutter"])
+
         self.update_viewer(self._mmc_cam.getImage())
 
     def start_live(self):
+
         self._mmc_cam.startContinuousSequenceAcquisition(self.exp_spinBox.value())
         self.streaming_timer = QTimer()
         self.streaming_timer.timeout.connect(self.update_viewer)
+
+        if self.daq_shutter_checkBox.isChecked():
+            self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["sim_shutter"])
+
         self.streaming_timer.start(int(self.exp_spinBox.value()))
         self.live_Button.setText("Stop")
 
     def stop_live(self):
         self._mmc_cam.stopSequenceAcquisition()
+
+        if self.daq_shutter_checkBox.isChecked():
+            self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["sim_shutter"])
+
+
         if self.streaming_timer is not None:
             self.streaming_timer.stop()
             self.streaming_timer = None
@@ -731,6 +753,10 @@ class MainWindow(QtW.QWidget, _MainUI):
         # set daq
         self.daq.set_analog_once(analog_array)
         self.daq.set_digital_once(digital_array)
+
+        # if using shutter, make sure it is closed
+        if self.daq_shutter_checkBox.isChecked():
+            self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["sim_shutter"])
 
         # set dmd
         dmd_map.program_dmd_seq(self.dmd, mode, channel, 1, 0, False, None, False, True)
