@@ -30,7 +30,6 @@ if TYPE_CHECKING:
 import mcsim.expt_ctrl.dlp6500 as dmd_ctrl
 import mcsim.expt_ctrl.set_dmd_pattern_firmware as dmd_map
 import mcsim.expt_ctrl.daq
-import mcsim.expt_ctrl.daq_map as daq_map
 from mcsim.expt_ctrl.setup_optotune_mre2 import initialize_mre2
 import mcsim.analysis.analysis_tools as mctools
 from skimage.restoration import unwrap_phase
@@ -144,10 +143,17 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         # connect to DMD
         self.dmd = dmd_ctrl.dlp6500win(debug=True)
+
+        # load line data for daq
+        # todo: set this path from the GUI
+        fname_daq_map = Path(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\daq_config.json")
+        daq_do_map, daq_ao_map, presets, _ = mcsim.expt_ctrl.daq.load_config_file(fname_daq_map)
+
         # connect to daq
         self.daq = mcsim.expt_ctrl.daq.nidaq(dev_name="Dev1",
-                                             digital_lines="port0/line0:15", digital_line_names=daq_map.daq_do_map,
-                                             analog_lines=["ao0", "ao1", "ao2"], analog_line_names=daq_map.daq_ao_map)
+                                             digital_lines="port0/line0:15", digital_line_names=daq_do_map,
+                                             analog_lines=["ao0", "ao1", "ao2", "ao3"], analog_line_names=daq_ao_map,
+                                             presets=presets)
 
         # tab widgets
         self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer)
@@ -193,7 +199,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.set_dmd_pattern_index_pushButton.clicked.connect(self._set_dmd_pattern_index)
 
         # populate channel combo box
-        pks = list(daq_map.presets.keys())
+        pks = list(self.daq.presets.keys())
         self.channel_comboBox.addItems(pks)
         # update mode combo box when channel combo box is changed
         self.channel_comboBox.currentTextChanged.connect(self._refresh_mode_options)
@@ -222,7 +228,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         # self.fy_doubleSpinBox.setValue(1.445)
         self.fx_doubleSpinBox.setValue(1600.)
         self.fy_doubleSpinBox.setValue(1400.)
-        self.daq_shutter_checkBox.setCheckState(True)
+        #self.daq_shutter_checkBox.setCheckState(True) # seems setting this delays the loading of the plugin in napari by ~5 seconds
 
         # refresh options in case a config is already loaded by another remote
         self._refresh_options()
@@ -745,14 +751,15 @@ class MainWindow(QtW.QWidget, _MainUI):
         mode = self.mode_comboBox.currentText()
 
         # get daq values for channel
-        preset = daq_map.presets[channel]
-        digital_array, analog_array = daq_map.preset_to_array(preset, daq_map.daq_do_map, daq_map.daq_ao_map,
-                                                              n_digital_channels=self.daq.n_digital_lines,
-                                                              n_analog_channels=self.daq.n_analog_lines)
-
-        # set daq
-        self.daq.set_analog_once(analog_array)
-        self.daq.set_digital_once(digital_array)
+        # preset = self.daq.presets[channel]
+        # digital_array, analog_array = daq.preset_to_array(preset, self.daq.digital_line_names, self.daq.analog_line_names,
+        #                                                       n_digital_channels=self.daq.n_digital_lines,
+        #                                                       n_analog_channels=self.daq.n_analog_lines)
+        #
+        # # set daq
+        # self.daq.set_analog_once(analog_array)
+        # self.daq.set_digital_once(digital_array)
+        self.daq.set_preset(channel)
 
         # if using shutter, make sure it is closed
         if self.daq_shutter_checkBox.isChecked():
