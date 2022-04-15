@@ -18,6 +18,7 @@ from ._util import blockSignals, event_indices, extend_array_for_index
 from .explore_sample import ExploreSample
 from .sim_odt_widget import SimOdtWidget
 from .dmd_widget import DmdWidget
+from .daq_widget import DaqWidget
 from .multid_widget import MultiDWidget, SequenceMeta
 from .prop_browser import PropBrowser
 
@@ -97,6 +98,7 @@ class _MainUI:
     mode_comboBox: QtW.QComboBox
     daq_shutter_checkBox: QtW.QCheckBox
 
+    pattern_time_SpinBox: QtW.QDoubleSpinBox
     pic_index_spinBox: QtW.QSpinBox
     bit_index_spinBox: QtW.QSpinBox
     set_dmd_pattern_index_pushButton: QtW.QPushButton
@@ -158,10 +160,12 @@ class MainWindow(QtW.QWidget, _MainUI):
         # tab widgets
         self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer)
         self.dmd_widget = DmdWidget(self._mmcores, self.daq, self.dmd, self.viewer)
+        self.daq_widget = DaqWidget(self._mmcores, self.daq, self.dmd, self.viewer)
         self.mda = MultiDWidget(self._mmc)
         self.explorer = ExploreSample(self.viewer, self._mmc)
         self.tabWidget.addTab(self.sim_odt_acq, "SIM/ODT Acquisition")
         self.tabWidget.addTab(self.dmd_widget, "DMD")
+        self.tabWidget.addTab(self.daq_widget, "DAQ")
         self.tabWidget.addTab(self.mda, "Multi-D Acquisition")
         self.tabWidget.addTab(self.explorer, "Sample Explorer")
 
@@ -219,6 +223,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         proc_modes = ["normal", "fft", "hologram", "hologram unwrapped"]
         self.image_proc_mode_comboBox.addItems(proc_modes)
         self.snap_channel_comboBox.setCurrentText(proc_modes[0])
+
+        self.pattern_time_SpinBox.setValue(0.105)
 
         # connect spinboxes
         self.exp_spinBox.valueChanged.connect(self._update_exp)
@@ -751,22 +757,17 @@ class MainWindow(QtW.QWidget, _MainUI):
         mode = self.mode_comboBox.currentText()
 
         # get daq values for channel
-        # preset = self.daq.presets[channel]
-        # digital_array, analog_array = daq.preset_to_array(preset, self.daq.digital_line_names, self.daq.analog_line_names,
-        #                                                       n_digital_channels=self.daq.n_digital_lines,
-        #                                                       n_analog_channels=self.daq.n_analog_lines)
-        #
-        # # set daq
-        # self.daq.set_analog_once(analog_array)
-        # self.daq.set_digital_once(digital_array)
         self.daq.set_preset(channel)
 
         # if using shutter, make sure it is closed
         if self.daq_shutter_checkBox.isChecked():
             self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["sim_shutter"])
 
+        # time to display DMD pattern before moving to the next
+        frame_time_us = int(np.round(self.pattern_time_SpinBox.value() * 1000))
+
         # set dmd
-        dmd_map.program_dmd_seq(self.dmd, mode, channel, 1, 0, False, None, False, True)
+        dmd_map.program_dmd_seq(self.dmd, mode, channel, 1, 0, False, None, False, True, exp_time_us=frame_time_us)
 
     def _set_dmd_pattern_index(self):
         pic_ind = self.pic_index_spinBox.value()

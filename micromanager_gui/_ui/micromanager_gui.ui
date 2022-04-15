@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>544</width>
+    <width>558</width>
     <height>981</height>
    </rect>
   </property>
@@ -1345,9 +1345,9 @@
           <property name="geometry">
            <rect>
             <x>-1</x>
-            <y>59</y>
+            <y>49</y>
             <width>501</width>
-            <height>51</height>
+            <height>61</height>
            </rect>
           </property>
           <property name="title">
@@ -1413,10 +1413,47 @@
            </property>
           </widget>
          </widget>
+         <widget class="QDoubleSpinBox" name="pattern_time_SpinBox">
+          <property name="geometry">
+           <rect>
+            <x>130</x>
+            <y>30</y>
+            <width>62</width>
+            <height>22</height>
+           </rect>
+          </property>
+          <property name="decimals">
+           <number>3</number>
+          </property>
+          <property name="maximum">
+           <double>10000.000000000000000</double>
+          </property>
+         </widget>
+         <widget class="QLabel" name="label_14">
+          <property name="geometry">
+           <rect>
+            <x>10</x>
+            <y>30</y>
+            <width>100</width>
+            <height>16</height>
+           </rect>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>100</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="text">
+           <string>pattern time (ms)</string>
+          </property>
+         </widget>
          <zorder>set_channel_Button</zorder>
          <zorder>mode_comboBox</zorder>
          <zorder>groupBox_6</zorder>
          <zorder>channel_comboBox</zorder>
+         <zorder>pattern_time_SpinBox</zorder>
+         <zorder>label_14</zorder>
         </widget>
        </item>
        <item row="3" column="0" colspan="3">

@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from pymmcore_plus import RemoteMMCore
 
 # daq
-import mcsim.expt_ctrl.daq_map as daq_map
 import mcsim.expt_ctrl.daq
 
 # dmd
@@ -233,9 +232,9 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
         # grab DAQ line info
         # ##############################
         # line info
-        daq_do_map = daq_map.daq_do_map
-        daq_ao_map = daq_map.daq_ao_map
-        daq_presets = daq_map.presets
+        daq_do_map = self.daq.digital_line_names
+        daq_ao_map = self.daq.analog_line_names
+        daq_presets = self.daq.presets
 
         # ##################################
         # get odt camera and set up
@@ -311,11 +310,11 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
         # ##################################
         # set DAQ back to off state (for digital lines only)
         # ##################################
-        off_do, off_ao = daq_map.preset_to_array(daq_presets["off"], daq_map.daq_do_map, daq_map.daq_ao_map,
-                                                 n_digital_channels=self.daq.n_digital_lines,
-                                                 n_analog_channels=self.daq.n_analog_lines
-                                                 )
-        self.daq.set_digital_once(off_do)
+        # off_do, off_ao = daq_map.preset_to_array(daq_presets["off"], daq_map.daq_do_map, daq_map.daq_ao_map,
+        #                                          n_digital_channels=self.daq.n_digital_lines,
+        #                                          n_analog_channels=self.daq.n_analog_lines
+        #                                          )
+        self.daq.set_preset("off")
 
         print("reset DAQ")
 

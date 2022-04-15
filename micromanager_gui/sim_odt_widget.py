@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 # daq
 import mcsim.expt_ctrl.daq
-from mcsim.expt_ctrl.program_sim_odt import build_odt_sim_sequence, get_sim_odt_sequence
+from mcsim.expt_ctrl.program_sim_odt import get_sim_odt_sequence
 # dmd
 import mcsim.expt_ctrl.dlp6500
 import mcsim.expt_ctrl.set_dmd_pattern_firmware
@@ -248,6 +248,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         dmd_cmap = mcsim.expt_ctrl.set_dmd_pattern_firmware.channel_map
         for ii in range(self.channel_tableWidget.rowCount()):
             ch = self.channel_tableWidget.cellWidget(ii, 0).currentText()
+
+            # clear old modes
+            self.channel_tableWidget.cellWidget(ii, 1).clear()
+
+            # add new modes
             modes = list(dmd_cmap[ch].keys())
             self.channel_tableWidget.cellWidget(ii, 1).addItems(modes)
 
@@ -352,6 +357,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##############################
         # zstack
         # ##############################
+        # get current z-position info
+        z_now = mmc1.getZPosition()
+        z_volts_start = self.daq.last_known_analog_val[self.daq.analog_line_names["z_stage"]]
+
         do_zstack = self.stack_groupBox.isChecked()
         if do_zstack:
             zpositions = self._get_zstack_params()
@@ -363,9 +372,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             guess_calibration_um_per_v = (float(focus_dev_props["Upper Limit"]) - float(focus_dev_props["Lower Limit"])) / 10
 
             # guess voltages to reach desired positions
-            z_now = mmc1.getZPosition()
-            z_volts_start = self.daq.last_known_analog_val[self.daq.analog_line_names["z_stage"]]
-
             dzs = zpositions - z_now
             z_volts_guesses = z_volts_start + dzs / guess_calibration_um_per_v
 
@@ -389,10 +395,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             dz = np.mean(z_real[1:] - z_real[:-1])
 
         else:
+            calibration_um_per_v = 0
             zpositions = [0]
             nz = len(zpositions)
             z_volts = np.array([0])
-            z_real = np.array(mmc1.getZPosition())
+            z_real = np.atleast_1d(mmc1.getZPosition())
             dz = 0
 
         # ##############################
@@ -585,6 +592,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                 chunks=(1, 1, 1, 1, ny_sim, nx_sim), dtype='uint16', compressor="none")
         img_data.sim.attrs["channels"] = [ch for ch in channels if ch != "odt"]
         img_data.sim.attrs["exposure_time_ms"] = exposure_tms_sim
+        img_data.sim.attrs["dx_um"] = 6.5 / 100
+        img_data.sim.attrs["dy_um"] = 6.5 / 100
 
 
         # odt dataset
@@ -595,6 +604,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         img_data.odt.attrs["exposure_time_ms"] = exposure_tms_odt
         img_data.odt.attrs["frame_time_ms"] = min_odt_frame_time_ms
         img_data.odt.attrs["volume_time_ms"] = min_odt_frame_time_ms * n_odt_patterns # todo: correct this
+        img_data.odt.attrs["dx_um"] = 0
+        img_data.odt.attrs["dy_um"] = 0
 
         # get odt pattern data
         if "odt" in channels:
