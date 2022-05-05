@@ -19,7 +19,6 @@ import mcsim.expt_ctrl.daq
 
 # dmd
 import mcsim.expt_ctrl.dlp6500
-import mcsim.expt_ctrl.set_dmd_pattern_firmware
 import time
 import datetime
 import zarr

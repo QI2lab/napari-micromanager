@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -28,9 +29,7 @@ if TYPE_CHECKING:
     import useq
 
 # dmd and daq control
-import mcsim.expt_ctrl.dlp6500 as dmd_ctrl
-import mcsim.expt_ctrl.set_dmd_pattern_firmware as dmd_map
-import mcsim.expt_ctrl.daq
+from mcsim.expt_ctrl import dlp6500, daq
 from mcsim.expt_ctrl.setup_optotune_mre2 import initialize_mre2
 import mcsim.analysis.analysis_tools as mctools
 from skimage.restoration import unwrap_phase
@@ -143,22 +142,39 @@ class MainWindow(QtW.QWidget, _MainUI):
         self._mmc = self._mmcores[0]
         self._mmc_cam = self._mmcores[1]
 
+        # load affine calibration data
+        affine_data = None
+        try:
+            affine_config_fname = Path(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\affine_transformations.json")
+            with open(affine_config_fname, "r") as f:
+                affine_data = json.load(f)
+        except Exception as e:
+            print(e)
+
+        # load OTF calibration data
+        otf_data = None
+        try:
+            otf_config_fname = Path(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\otf_calibration.json")
+            with open(otf_config_fname, "r") as f:
+                otf_data = json.load(f)
+        except Exception as e:
+            print(e)
+
         # connect to DMD
-        self.dmd = dmd_ctrl.dlp6500win(debug=True)
+        # todo: set this path from GUI
+        # todo: NOTE DMD channel names much match DAQ channel names. Need some way to keep these synchronized
+        fname_dmd_config = Path(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\dmd_config.json")
+        self.dmd = dlp6500.dlp6500win(debug=True, config_file=fname_dmd_config)
 
         # load line data for daq
         # todo: set this path from the GUI
-        fname_daq_map = Path(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\daq_config.json")
-        daq_do_map, daq_ao_map, presets, _ = mcsim.expt_ctrl.daq.load_config_file(fname_daq_map)
-
-        # connect to daq
-        self.daq = mcsim.expt_ctrl.daq.nidaq(dev_name="Dev1",
-                                             digital_lines="port0/line0:15", digital_line_names=daq_do_map,
-                                             analog_lines=["ao0", "ao1", "ao2", "ao3"], analog_line_names=daq_ao_map,
-                                             presets=presets)
+        fname_daq_config = Path(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\daq_config.json")
+        self.daq = daq.nidaq(dev_name="Dev1", digital_lines="port0/line0:15", analog_lines=["ao0", "ao1", "ao2", "ao3"],
+                             config_file=fname_daq_config)
 
         # tab widgets
-        self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer)
+        self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer,
+                                        otf_data=otf_data, affine_data=affine_data)
         self.dmd_widget = DmdWidget(self._mmcores, self.daq, self.dmd, self.viewer)
         self.daq_widget = DaqWidget(self._mmcores, self.daq, self.dmd, self.viewer)
         self.mda = MultiDWidget(self._mmc)
@@ -476,7 +492,7 @@ class MainWindow(QtW.QWidget, _MainUI):
 
     def _refresh_mode_options(self):
         chan = self.channel_comboBox.currentText()
-        modes = list(dmd_map.channel_map[chan].keys())
+        modes = list(self.dmd.presets[chan].keys())
 
         self.mode_comboBox.clear()
         self.mode_comboBox.addItems(modes)
@@ -767,7 +783,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         frame_time_us = int(np.round(self.pattern_time_SpinBox.value() * 1000))
 
         # set dmd
-        dmd_map.program_dmd_seq(self.dmd, mode, channel, 1, 0, False, None, False, True, exp_time_us=frame_time_us)
+        self.dmd.program_dmd_seq(mode, channel, 1, 0, False, None, False, True, exp_time_us=frame_time_us)
 
     def _set_dmd_pattern_index(self):
         pic_ind = self.pic_index_spinBox.value()
