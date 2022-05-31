@@ -433,7 +433,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # turn off live mode if on
         # ##############################
         mmc1.stopSequenceAcquisition()
-        #mmc2.stopSequenceAcquisition()
+        mmc2.stopSequenceAcquisition()
 
         # ##################################
         # set DAQ to initial state
@@ -451,15 +451,12 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##################################
         # program DMD
         # ##################################
-
-
-        # program the DMD
         blank = [False if ch == "odt" else True for ch in channels]
         modes = [chm if ch == "odt" else "default" for ch, chm in zip(channels, channels_modes)]
-        # pic_inds, bit_inds = mcsim.expt_ctrl.set_dmd_pattern_firmware.program_dmd_seq(self.dmd, modes, channels, nrepeats=1,
-        #                                                                  ndarkframes=0, blank=blank,
-        #                                                                  mode_pattern_indices=None,
-        #                                                                  triggered=True, verbose=True)
+
+        print(f"channels: {channels}")
+        print(f"modes: {modes}")
+        print(f"blank: {blank}")
         pic_inds, bit_inds = self.dmd.program_dmd_seq(modes, channels, nrepeats=1, ndarkframes=0, blank=blank,
                                                       mode_pattern_indices=None, triggered=True, verbose=True)
         dmd_data = np.vstack((pic_inds, bit_inds))
@@ -477,14 +474,14 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##################################
         # trigger camera twice, required for Phantom camera
         # ##################################
-        self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam"])
-        time.sleep(0.1)
-        self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam"])
-        time.sleep(0.1)
-        self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam"])
-        time.sleep(0.1)
-        self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam"])
-        time.sleep(0.1)
+        # self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam"])
+        # time.sleep(0.1)
+        # self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam"])
+        # time.sleep(0.1)
+        # self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam"])
+        # time.sleep(0.1)
+        # self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam"])
+        # time.sleep(0.1)
 
 
         # ##################################
@@ -497,14 +494,13 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         else:
             n_odt_patterns = 0
 
-        # n_sim_patterns_channel = len(mcsim.expt_ctrl.set_dmd_pattern_firmware.channel_map["blue"]["sim"]["picture_indices"])
         n_sim_patterns_channel = len(self.dmd.presets["blue"]["sim"]["picture_indices"])
         n_odt_per_sim = 1
-        # n_trig_width = int(np.floor(min_odt_frame_time_ms * 1e-3 / 2 / dt))
-        n_trig_width = 1
+        n_trig_width = np.max([int(np.floor(min_odt_frame_time_ms * 1e-3 / 2 / dt)), 1])
+        # n_trig_width = 1
 
         # odt stabilize time
-        if len(channels) == 1 and channels[0] == "odt":
+        if (len(channels) == 1 or ntimes == 1) and channels[0] == "odt":
             odt_stabilize_t = 0
         else:
             odt_stabilize_t = 1000e-3
@@ -515,17 +511,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         nsim_pics = n_sim_patterns_channel * nsim_channels * ntimes * nz
         nodt_pics = n_odt_patterns * n_odt_per_sim * ntimes * nz * len([ch for ch in channels if ch == "odt"])
 
-        # digital_program, analog_program = build_odt_sim_sequence(daq_do_map, daq_ao_map, channels,
-        #                                                              exposure_tms_odt*1e-3,
-        #                                                              exposure_tms_sim*1e-3,
-        #                                                              n_odt_patterns, n_sim_patterns_channel,
-        #                                                              dt=dt,
-        #                                                              interval=interval_ms*1e-3,
-        #                                                              dmd_delay=104e-6,
-        #                                                              n_odt_per_sim=n_odt_per_sim,
-        #                                                              n_trig_width=n_trig_width,
-        #                                                              odt_stabilize_t=odt_stabilize_t,
-        #                                                              min_odt_frame_time=min_odt_frame_time_ms*1e-3)
         # line info
         daq_do_map = self.daq.digital_line_names
         daq_ao_map = self.daq.analog_line_names
@@ -534,12 +519,17 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         digital_program, analog_program = get_sim_odt_sequence(daq_do_map, daq_ao_map, daq_presets, channels,
                                                                exposure_tms_odt*1e-3, exposure_tms_sim*1e-3,
                                                                n_odt_patterns, n_sim_patterns_channel, dt=dt,
-                                                               interval=interval_ms*1e-3, n_odt_per_sim=n_odt_per_sim,
-                                                               n_trig_width=n_trig_width, odt_stabilize_t=odt_stabilize_t,
+                                                               interval=interval_ms*1e-3,
+                                                               n_odt_per_sim=n_odt_per_sim,
+                                                               n_trig_width=n_trig_width,
+                                                               odt_stabilize_t=odt_stabilize_t,
                                                                min_odt_frame_time=min_odt_frame_time_ms*1e-3,
-                                                               sim_stabilize_t=200e-3, shutter_delay_time=50e-3,
-                                                               z_voltages=z_volts, use_dmd_as_odt_shutter=False,
-                                                               n_digital_ch=self.daq.n_digital_lines, n_analog_ch=self.daq.n_analog_lines)
+                                                               sim_stabilize_t=200e-3,
+                                                               shutter_delay_time=50e-3,
+                                                               z_voltages=z_volts,
+                                                               use_dmd_as_odt_shutter=False,
+                                                               n_digital_ch=self.daq.n_digital_lines,
+                                                               n_analog_ch=self.daq.n_analog_lines)
 
         # check program and number of pictures match
         # if np.sum(digital_program[:, daq_do_map["odt_cam"]]) // n_trig_width != nodt_pics // ntimes // nz:
@@ -559,17 +549,17 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##################################
         # get odt camera and set up
         # ##################################
-        # odt_cam = mmc2.getCameraDevice()
-        #
-        # # set camera properties
-        # mmc2.setProperty(odt_cam, "Exposure", exposure_tms_odt)
-        # # set external triggering
-        # mmc2.setProperty(odt_cam, "TriggerMode", "Edge Trigger")
-        # mmc2.setProperty(odt_cam, 'PP  1   ENABLED', 'No')
-        # mmc2.setProperty(odt_cam, 'PP  2   ENABLED', 'No')
-        # mmc2.setProperty(odt_cam, 'PP  3   ENABLED', 'No')
-        # mmc2.setProperty(odt_cam, 'PP  4   ENABLED', 'No')
-        # mmc2.setProperty(odt_cam, 'PP  5   ENABLED', 'No')
+        odt_cam = mmc2.getCameraDevice()
+
+        # set camera properties
+        mmc2.setProperty(odt_cam, "Exposure", exposure_tms_odt)
+        # set external triggering
+        mmc2.setProperty(odt_cam, "TriggerMode", "Edge Trigger")
+        mmc2.setProperty(odt_cam, 'PP  1   ENABLED', 'No')
+        mmc2.setProperty(odt_cam, 'PP  2   ENABLED', 'No')
+        mmc2.setProperty(odt_cam, 'PP  3   ENABLED', 'No')
+        mmc2.setProperty(odt_cam, 'PP  4   ENABLED', 'No')
+        mmc2.setProperty(odt_cam, 'PP  5   ENABLED', 'No')
 
         # set ROI
         # todo: add check in bounds...
@@ -577,15 +567,14 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         sx = self.sx_spinBox.value()
         cy = self.cy_spinBox.value()
         sy = self.sy_spinBox.value()
-        # mmc2.setROI(cx - sx // 2, cy - sy // 2, sx, sy)
+        mmc2.setROI(cx - sx // 2, cy - sy // 2, sx, sy)
 
-        # nx_odt = mmc2.getImageWidth()
-        # ny_odt = mmc2.getImageHeight()
+        nx_odt = mmc2.getImageWidth()
+        ny_odt = mmc2.getImageHeight()
 
         # ##################################
         # get SIM camera and set properties
         # ##################################
-
         sim_cam = mmc1.getCameraDevice()
 
         #set camera properties
@@ -665,28 +654,28 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         img_data.sim.attrs["otf_model_parameters"] = self.otf_data["fit_params"]
 
         # odt dataset
-        # img_data.create_dataset("odt", shape=(n_odt_per_sim * ntimes, nz, n_odt_patterns, ny_odt, nx_odt),
-        #                         chunks=(1, 1, 1, ny_odt, nx_odt), dtype='uint16', compressor="none")
-        img_data.create_dataset("odt", shape=(n_odt_per_sim * ntimes, nz, n_odt_patterns, 1, 1),
-                                chunks=(1, 1, 1, 1, 1), dtype='uint16', compressor="none")
+        img_data.create_dataset("odt", shape=(n_odt_per_sim * ntimes, nz, n_odt_patterns, ny_odt, nx_odt),
+                                chunks=(1, 1, 1, ny_odt, nx_odt), dtype='uint16', compressor="none")
+        # img_data.create_dataset("odt", shape=(n_odt_per_sim * ntimes, nz, n_odt_patterns, 1, 1),
+        #                         chunks=(1, 1, 1, 1, 1), dtype='uint16', compressor="none")
         img_data.odt.attrs["exposure_time_ms"] = exposure_tms_odt
         img_data.odt.attrs["frame_time_ms"] = min_odt_frame_time_ms
         img_data.odt.attrs["volume_time_ms"] = min_odt_frame_time_ms * n_odt_patterns # todo: correct this
-        img_data.odt.attrs["dx_um"] = 18.5 / 60
-        img_data.odt.attrs["dy_um"] = 18.5 / 60
+        img_data.odt.attrs["dx_um"] = 6.5 / 60 #18.5 / 60
+        img_data.odt.attrs["dy_um"] = 6.5 / 60 #18.5 / 60
         img_data.odt.attrs["na_excitation"] = 1.3
         img_data.odt.attrs["na_detection"] = 1
 
         # get odt pattern data
         if "odt" in channels:
-            #odt_firmware_data = mcsim.expt_ctrl.set_dmd_pattern_firmware.channel_map["odt"][odt_mode]
             odt_firmware_data = self.dmd.presets["odt"][odt_mode]
             odt_pic_inds = odt_firmware_data["picture_indices"]
             odt_bit_inds = odt_firmware_data["bit_indices"]
-            #dmd_pattern_data = mcsim.expt_ctrl.set_dmd_pattern_firmware.firmware_pattern_map
+            odt_firmware_inds = dlp6500.pic_bit_ind_2firmware_ind(odt_pic_inds, odt_bit_inds)
             dmd_pattern_data = self.dmd.firmware_pattern_info
 
-            xyoffsets = [(dmd_pattern_data[ii][jj]["xoffset"], dmd_pattern_data[ii][jj]["yoffset"]) for ii, jj in zip(odt_pic_inds, odt_bit_inds)]
+            #xyoffsets = [(dmd_pattern_data[ii][jj]["xoffset"], dmd_pattern_data[ii][jj]["yoffset"]) for ii, jj in zip(odt_pic_inds, odt_bit_inds)]
+            xyoffsets = [(dmd_pattern_data[ii]["xoffset"], dmd_pattern_data[ii]["yoffset"]) for ii in odt_firmware_inds]
             xoffsets, yoffsets = zip(*xyoffsets)
 
             # set odt dataset metadata
@@ -694,9 +683,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                                 cx - sx // 2, cx - sx // 2 + sx]
             img_data.odt.attrs["x_offsets"] = xoffsets
             img_data.odt.attrs["y_offsets"] = yoffsets
-            img_data.odt.attrs["carrier_frq"] = list(dmd_pattern_data[odt_pic_inds[0]][odt_bit_inds[0]]["frequency"])
-            img_data.odt.attrs["angle"] = dmd_pattern_data[odt_pic_inds[0]][odt_bit_inds[0]]["angle"]
-            img_data.odt.attrs["radius"] = dmd_pattern_data[odt_pic_inds[0]][odt_bit_inds[0]]["radius"]
+            img_data.odt.attrs["carrier_frq"] = list(dmd_pattern_data[odt_firmware_inds[0]]["frequency"])
+            img_data.odt.attrs["angle"] = dmd_pattern_data[odt_firmware_inds[0]]["angle"]
+            img_data.odt.attrs["radius"] = dmd_pattern_data[odt_firmware_inds[0]]["radius"]
 
         # dmd firmware program
         img_data.create_dataset("dmd_firmware_program", shape=dmd_data.shape, dtype='int16', compressor='none')
@@ -716,11 +705,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##################################
 
         # set circular buffer
-        # mmc2.setCircularBufferMemoryFootprint(odt_circ_buffer_mb)
+        mmc2.setCircularBufferMemoryFootprint(odt_circ_buffer_mb)
 
         # start camera
         mmc1.startSequenceAcquisition(nsim_pics, 0, True)
-        # mmc2.startSequenceAcquisition(nodt_pics, 0, True)
+        mmc2.startSequenceAcquisition(nodt_pics, 0, True)
 
         # start daq
         self.daq.start_sequence()
@@ -842,7 +831,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # stop sequence acquisition
         # ##################################
         mmc1.stopSequenceAcquisition()
-        #mmc2.stopSequenceAcquisition()
+        mmc2.stopSequenceAcquisition()
 
         if not daq_stopped:
             self.daq.stop_sequence()
@@ -861,8 +850,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##################################
         mmc1.setProperty(sim_cam, "TRIGGER SOURCE", "INTERNAL")
 
-        # mmc2.setProperty(odt_cam, "TriggerMode", "Internal Trigger")
-        # mmc2.clearROI()
+        mmc2.setProperty(odt_cam, "TriggerMode", "Internal Trigger")
+        mmc2.clearROI()
 
         # ##################################
         # optionally create viewer layer...
