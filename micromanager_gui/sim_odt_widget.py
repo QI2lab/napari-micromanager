@@ -425,7 +425,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             calibration_um_per_v = 0
             zpositions = [0]
             nz = len(zpositions)
-            z_volts = np.array([0])
+            z_volts = np.array([z_volts_start])
             z_real = np.atleast_1d(mmc1.getZPosition())
             dz = 0
 
@@ -630,6 +630,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # sim dataset
         img_data.create_dataset("sim", shape=(ntimes, nz, nsim_channels, n_sim_patterns_channel, ny_sim, nx_sim),
                                 chunks=(1, 1, 1, 1, ny_sim, nx_sim), dtype='uint16', compressor="none")
+        img_data.sim.attrs["dimensions"] = ["time", "z", "channel", "pattern", "y", "x"]
         img_data.sim.attrs["channels"] = sim_channels
         img_data.sim.attrs["exposure_time_ms"] = exposure_tms_sim
         img_data.sim.attrs["dx_um"] = 6.5 / 100
@@ -658,6 +659,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                 chunks=(1, 1, 1, ny_odt, nx_odt), dtype='uint16', compressor="none")
         # img_data.create_dataset("odt", shape=(n_odt_per_sim * ntimes, nz, n_odt_patterns, 1, 1),
         #                         chunks=(1, 1, 1, 1, 1), dtype='uint16', compressor="none")
+        img_data.odt.attrs["dimensions"] = ["time", "z", "pattern", "y", "x"]
         img_data.odt.attrs["exposure_time_ms"] = exposure_tms_odt
         img_data.odt.attrs["frame_time_ms"] = min_odt_frame_time_ms
         img_data.odt.attrs["volume_time_ms"] = min_odt_frame_time_ms * n_odt_patterns # todo: correct this
@@ -689,14 +691,17 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         # dmd firmware program
         img_data.create_dataset("dmd_firmware_program", shape=dmd_data.shape, dtype='int16', compressor='none')
+        img_data.dmd_firmware_program.attrs["dimensions"] = ["pattern", "time"]
         img_data.dmd_firmware_program[:] = dmd_data
 
         # daq program
         img_data.create_dataset("daq_digital_program", shape=digital_program.shape, dtype='int8', compressor="none")
+        img_data.daq_digital_program.attrs["dimensions"] = ["time", "channel"]
         img_data.daq_digital_program[:] = digital_program
         img_data.daq_digital_program.attrs["channel_map"] = daq_do_map
 
         img_data.create_dataset("daq_analog_program", shape=analog_program.shape, dtype='float32', compressor="none")
+        img_data.daq_analog_program.attrs["dimensions"] = ["time", "channel"]
         img_data.daq_analog_program[:] = analog_program
         img_data.daq_analog_program.attrs["channel_map"] = daq_ao_map
 
