@@ -51,6 +51,12 @@ class _MainUI:
     cfg2_LineEdit: QtW.QLineEdit
     browse_cfg2_Button: QtW.QPushButton
     load_cfg2_Button: QtW.QPushButton
+    dmd_cfg_lineEdit: QtW.QLineEdit
+    dmd_load_cfg_Button: QtW.QPushButton
+    browse_dmd_cfg_Button: QtW.QPushButton
+    daq_cfg_lineEdit: QtW.QLineEdit
+    daq_load_cfg_Button: QtW.QPushButton
+    browse_daq_cfg_Button: QtW.QPushButton
     objective_groupBox: QtW.QGroupBox
     objective_comboBox: QtW.QComboBox
     camera_groupBox: QtW.QGroupBox
@@ -97,10 +103,22 @@ class _MainUI:
     mode_comboBox: QtW.QComboBox
     daq_shutter_checkBox: QtW.QCheckBox
 
+    # dmd frame
     pattern_time_SpinBox: QtW.QDoubleSpinBox
     pic_index_spinBox: QtW.QSpinBox
     bit_index_spinBox: QtW.QSpinBox
     set_dmd_pattern_index_pushButton: QtW.QPushButton
+    dmd_snap_checkBox: QtW.QCheckBox
+
+    # daq frame
+    daq_channel_groupBox: QtW.QGroupBox
+    daq_channel_tableWidget: QtW.QTableWidget
+    add_ch_Button: QtW.QPushButton
+    clear_ch_Button: QtW.QPushButton
+    remove_ch_Button: QtW.QPushButton
+    daq_update_immediately_checkBox: QtW.QCheckBox
+    daq_update_pushButton: QtW.QPushButton
+    daq_snap_checkBox: QtW.QCheckBox
 
     def setup_ui(self):
         uic.loadUi(self.UI_FILE, self)  # load QtDesigner .ui file
@@ -109,6 +127,8 @@ class _MainUI:
         # self.cfg_LineEdit.setText("demo")
         self.cfg_LineEdit.setText(r"C:/Users/q2ilab/Documents/mcsim_private/mcSIM/mcsim/expt_ctrl/sim_odt_nidaq_c1.cfg")
         self.cfg2_LineEdit.setText(r"C:/Users/q2ilab/Documents/mcsim_private/mcSIM/mcsim/expt_ctrl/sim_odt_nidaq_c2.cfg")
+        self.dmd_cfg_lineEdit.setText(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\dmd_config.json")
+        self.daq_cfg_lineEdit.setText(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\daq_config.json")
 
         # button icons
         for attr, icon in [
@@ -160,30 +180,9 @@ class MainWindow(QtW.QWidget, _MainUI):
         except Exception as e:
             print(e)
 
-        # connect to DMD
-        # todo: set this path from GUI
-        # todo: NOTE DMD channel names much match DAQ channel names. Need some way to keep these synchronized
-        fname_dmd_config = Path(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\dmd_config.json")
-        self.dmd = dlp6500.dlp6500win(debug=True, config_file=fname_dmd_config)
-
-        # load line data for daq
-        # todo: set this path from the GUI
-        fname_daq_config = Path(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\daq_config.json")
-        self.daq = daq.nidaq(dev_name="Dev1", digital_lines="port0/line0:15", analog_lines=["ao0", "ao1", "ao2", "ao3"],
-                             config_file=fname_daq_config)
-
-        # tab widgets
-        self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer,
-                                        otf_data=otf_data, affine_data=affine_data)
-        self.dmd_widget = DmdWidget(self._mmcores, self.daq, self.dmd, self.viewer)
-        self.daq_widget = DaqWidget(self._mmcores, self.daq, self.dmd, self.viewer)
-        self.mda = MultiDWidget(self._mmc)
-        self.explorer = ExploreSample(self.viewer, self._mmc)
-        self.tabWidget.addTab(self.sim_odt_acq, "SIM/ODT Acquisition")
-        self.tabWidget.addTab(self.dmd_widget, "DMD")
-        self.tabWidget.addTab(self.daq_widget, "DAQ")
-        self.tabWidget.addTab(self.mda, "Multi-D Acquisition")
-        self.tabWidget.addTab(self.explorer, "Sample Explorer")
+        # place holders for later
+        self.dmd = None
+        self.daq = None
 
         # connect mmcore signals
         sig = self._mmc.events
@@ -205,6 +204,10 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.browse_cfg_Button.clicked.connect(self.browse_cfg)
         self.load_cfg2_Button.clicked.connect(self.load_cfg2)
         self.browse_cfg2_Button.clicked.connect(self.browse_cfg2)
+        self.browse_dmd_cfg_Button.clicked.connect(self.browse_dmd_cfg)
+        self.dmd_load_cfg_Button.clicked.connect(self.load_dmd_cfg)
+        self.browse_daq_cfg_Button.clicked.connect(self.browse_daq_cfg)
+        self.daq_load_cfg_Button.clicked.connect(self.load_daq_cfg)
         self.left_Button.clicked.connect(self.stage_x_left)
         self.right_Button.clicked.connect(self.stage_x_right)
         self.y_up_Button.clicked.connect(self.stage_y_up)
@@ -218,9 +221,14 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.properties_Button.clicked.connect(self._show_prop_browser)
         self.set_dmd_pattern_index_pushButton.clicked.connect(self._set_dmd_pattern_index)
 
-        # populate channel combo box
-        pks = list(self.daq.presets.keys())
-        self.channel_comboBox.addItems(pks)
+        # connect buttons
+        self.add_ch_Button.clicked.connect(self.add_channel)
+        self.remove_ch_Button.clicked.connect(self.remove_channel)
+        self.clear_ch_Button.clicked.connect(self.clear_channel)
+        self.daq_update_pushButton.clicked.connect(self._on_daq_setting_change)
+        self.daq_update_immediately_checkBox.clicked.connect(self._on_channel_changed)
+
+
         # update mode combo box when channel combo box is changed
         self.channel_comboBox.currentTextChanged.connect(self._refresh_mode_options)
 
@@ -261,6 +269,41 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         # todo: find a better place to put initialization code ... maybe should have a mechanism for running a startup script...
         initialize_mre2()
+
+        # try to load initial configurations ...
+        try:
+            self.load_cfg()
+        except OSError as e:
+            print(e)
+
+        try:
+            self.load_cfg2()
+        except OSError as e:
+            print(e)
+
+        try:
+            self.load_dmd_cfg()
+        except Exception as e:
+            print(e)
+
+        try:
+            self.load_daq_cfg()
+        except Exception as e:
+            print(e)
+
+        # tab widgets
+        # todo: right now no way to update the daq/dmd instances in these widgets ...
+        self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer,
+                                        otf_data=otf_data, affine_data=affine_data)
+        self.dmd_widget = DmdWidget(self._mmcores, self.daq, self.dmd, self.viewer)
+        self.mda = MultiDWidget(self._mmc)
+        self.explorer = ExploreSample(self.viewer, self._mmc)
+
+        self.tabWidget.addTab(self.sim_odt_acq, "SIM/ODT Acquisition")
+        self.tabWidget.addTab(self.dmd_widget, "DMD")
+        self.tabWidget.addTab(self.mda, "Multi-D Acquisition")
+        self.tabWidget.addTab(self.explorer, "Sample Explorer")
+
 
     def illumination(self):
         if not hasattr(self, "_illumination"):
@@ -379,7 +422,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.load_cfg_Button.setEnabled(True)
 
     def load_cfg(self):
-        self.load_cfg_Button.setEnabled(False)
+        #self.load_cfg_Button.setEnabled(False)
         print("loading", self.cfg_LineEdit.text())
         self._mmc.loadSystemConfiguration(self.cfg_LineEdit.text())
 
@@ -404,7 +447,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.load_cfg2_Button.setEnabled(True)
 
     def load_cfg2(self):
-        self.load_cfg2_Button.setEnabled(False)
+        #self.load_cfg2_Button.setEnabled(False)
         print("loading", self.cfg2_LineEdit.text())
         self._mmcores[1].loadSystemConfiguration(self.cfg2_LineEdit.text())
 
@@ -417,6 +460,28 @@ class MainWindow(QtW.QWidget, _MainUI):
             self._mmcores[1].setProperty(cam, 'PP  4   ENABLED', 'No')
         except:
             print("error disabling photometrics camera despeckle correction")
+
+    def browse_dmd_cfg(self):
+        file_dir = QtW.QFileDialog.getOpenFileName(self, "", "⁩", "json(*.json)")
+        self.dmd_cfg_lineEdit.setText(str(file_dir[0]))
+
+    def load_dmd_cfg(self):
+        fname_dmd_config = self.dmd_cfg_lineEdit.text()
+        self.dmd = dlp6500.dlp6500win(debug=True, config_file=fname_dmd_config)
+
+    def browse_daq_cfg(self):
+        file_dir = QtW.QFileDialog.getOpenFileName(self, "", "⁩", "json(*.json)")
+        self.daq_cfg_lineEdit.setText(str(file_dir[0]))
+
+    def load_daq_cfg(self):
+        fname_daq_config = self.daq_cfg_lineEdit.text()
+        self.daq = daq.nidaq(dev_name="Dev1", digital_lines="port0/line0:15",
+                             analog_lines=["ao0", "ao1", "ao2", "ao3"],
+                             config_file=fname_daq_config)
+
+        # populate channel combo box
+        self.channel_comboBox.clear()
+        self.channel_comboBox.addItems(list(self.daq.presets.keys()))
 
     def _refresh_camera_options(self):
         cam_device = self._mmc_cam.getCameraDevice()
@@ -491,12 +556,13 @@ class MainWindow(QtW.QWidget, _MainUI):
             self.z_lineEdit.setText(f"{self._mmc.getZPosition():.1f}")
 
     def _refresh_mode_options(self):
-        chan = self.channel_comboBox.currentText()
-        modes = list(self.dmd.presets[chan].keys())
-
         self.mode_comboBox.clear()
-        self.mode_comboBox.addItems(modes)
-        self.mode_comboBox.setCurrentText(modes[0])
+
+        if self.dmd is not None:
+            chan = self.channel_comboBox.currentText()
+            modes = list(self.dmd.presets[chan].keys())
+            self.mode_comboBox.addItems(modes)
+            self.mode_comboBox.setCurrentText(modes[0])
 
     def _refresh_options(self):
         self._refresh_camera_options()
@@ -691,8 +757,9 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         self.update_max_min()
 
-        if self.streaming_timer is None:
-            self.viewer.reset_view()
+        # todo: why want to do this?
+        # if self.streaming_timer is None:
+        #     self.viewer.reset_view()
 
     def update_max_min(self, event=None):
 
@@ -792,3 +859,115 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         self.dmd.set_pattern_sequence([pic_ind], [bit_ind], 105, 0, triggered=False,
                                  clear_pattern_after_trigger=False, bit_depth=1, num_repeats=0, mode='pre-stored')
+
+        if self.dmd_snap_checkBox.isChecked():
+            self.snap()
+
+    # add, remove, clear DAQ channel table
+    def add_channel(self):
+        digital_channels = list(self.daq.digital_line_names.keys())
+        analog_channels = list(self.daq.analog_line_names.keys())
+
+        # add channel
+        idx = self.daq_channel_tableWidget.rowCount()
+        self.daq_channel_tableWidget.insertRow(idx)
+
+        # create a combo_box for channels in the table
+        self.daq_channel_comboBox = QtW.QComboBox(self)
+        self.daq_value_spinBox = QtW.QDoubleSpinBox(self)
+
+        pks = digital_channels + analog_channels
+        self.daq_channel_comboBox.addItems(pks)
+
+        self.daq_channel_tableWidget.setCellWidget(idx, 0, self.daq_channel_comboBox)
+        self.daq_channel_tableWidget.setCellWidget(idx, 1, self.daq_value_spinBox)
+
+        self.channel_comboBox.currentTextChanged.connect(self._on_channel_changed)
+
+        # call function to make sure updated
+        self._on_channel_changed()
+
+    def _on_channel_changed(self):
+        digital_channels = list(self.daq.digital_line_names.keys())
+        analog_channels = list(self.daq.analog_line_names.keys())
+
+        for ii in range(self.daq_channel_tableWidget.rowCount()):
+            ch = self.daq_channel_tableWidget.cellWidget(ii, 0).currentText()
+
+            if ch in digital_channels:
+                self.daq_channel_tableWidget.cellWidget(ii, 1).setDecimals(0)
+                self.daq_channel_tableWidget.cellWidget(ii, 1).setSingleStep(1)
+                self.daq_channel_tableWidget.cellWidget(ii, 1).setMinimum(0)
+                self.daq_channel_tableWidget.cellWidget(ii, 1).setMaximum(1)
+
+                index = self.daq.digital_line_names[ch]
+                last_val_known = self.daq.last_known_digital_val[index]
+                self.daq_channel_tableWidget.cellWidget(ii, 1).setValue(last_val_known)
+
+            elif ch in analog_channels:
+                self.daq_channel_tableWidget.cellWidget(ii, 1).setDecimals(3)
+                self.daq_channel_tableWidget.cellWidget(ii, 1).setSingleStep(0.01)
+                self.daq_channel_tableWidget.cellWidget(ii, 1).setMinimum(-10.)
+                self.daq_channel_tableWidget.cellWidget(ii, 1).setMaximum(10.)
+
+                index = self.daq.analog_line_names[ch]
+                last_val_known = self.daq.last_known_analog_val[index]
+                self.daq_channel_tableWidget.cellWidget(ii, 1).setValue(last_val_known)
+            else:
+                raise ValueError(f"channel '{ch:s}' was not present in analog or digital channels")
+
+            # if update immediately, connect
+            if self.daq_update_immediately_checkBox.isChecked():
+                self.daq_channel_tableWidget.cellWidget(ii, 1).valueChanged.connect(self._on_daq_setting_change)
+                self.daq_channel_tableWidget.cellWidget(ii, 1).setKeyboardTracking(False)
+            else:
+                # disconnect will fail if not connected to anything
+                try:
+                    self.daq_channel_tableWidget.cellWidget(ii, 1).valueChanged.disconnect()
+                except TypeError:
+                    pass
+
+    def remove_channel(self):
+        # remove selected position
+        rows = {r.row() for r in self.daq_channel_tableWidget.selectedIndexes()}
+        for idx in sorted(rows, reverse=True):
+            self.daq_channel_tableWidget.removeRow(idx)
+
+    def clear_channel(self):
+        # clear all positions
+        self.daq_channel_tableWidget.clearContents()
+        self.daq_channel_tableWidget.setRowCount(0)
+
+
+    def _on_daq_setting_change(self):
+        # grab analog/digital lines from channels
+        digital_channels = list(self.daq.digital_line_names.keys())
+        analog_channels = list(self.daq.analog_line_names.keys())
+
+        dig_ch_now = {}
+        an_ch_now = {}
+        for ii in range(self.daq_channel_tableWidget.rowCount()):
+            ch_name = self.daq_channel_tableWidget.cellWidget(ii, 0).currentText()
+            val = self.daq_channel_tableWidget.cellWidget(ii, 1).value()
+
+            if ch_name in digital_channels:
+                dig_ch_now.update({ch_name: val})
+            elif ch_name in analog_channels:
+                an_ch_now.update({ch_name: val})
+            else:
+                raise ValueError(f"channel `{ch_name}` was not present in digital or analog channels")
+
+
+        if dig_ch_now != {}:
+            # unpack dictionaries to lists
+            dig_ch_to_set, dig_vals = zip(*list(dig_ch_now.items()))
+            dig_vals = np.array(dig_vals, dtype=np.uint8)
+            self.daq.set_digital_lines_by_name(dig_vals, dig_ch_to_set)
+
+        if an_ch_now != {}:
+            an_ch_to_set, an_vals = zip(*list(an_ch_now.items()))
+            an_vals = np.array(an_vals, dtype=float)
+            self.daq.set_analog_lines_by_name(an_vals, an_ch_to_set)
+
+        if self.daq_snap_checkBox.isChecked():
+            self.snap()

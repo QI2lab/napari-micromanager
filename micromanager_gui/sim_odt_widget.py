@@ -115,6 +115,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         self._mmcores = mmcores
         self._mmc = self._mmcores[0]
 
+        # todo: would it be better to pass through the main frame instead of these various attributes?
+        # todo: or maybe create a python microscope object which contains mmc, daq, DMD?
         self.daq = daq
         self.dmd = dmd
         self.affine_data = affine_data # todo: this is not a good way of passing this data around
@@ -126,12 +128,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         self.pause_Button.released.connect(self._mmc.toggle_pause)
         self.cancel_Button.released.connect(self._mmc.cancel)
 
+        # todo: maybe all of this stuff should go in a configuration file?
         # initial value for ROI
         self.sx_spinBox.setValue(801)
-        # self.cx_spinBox.setValue(1275)
         self.cx_spinBox.setValue(1024)
         self.sy_spinBox.setValue(511)
-        # self.cy_spinBox.setValue(885)
         self.cy_spinBox.setValue(1024)
 
         # default value for exposure times
@@ -247,7 +248,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             self.channel_comboBox.currentTextChanged.connect(self._on_channel_changed)
 
     def _on_channel_changed(self):
-        # dmd_cmap = mcsim.expt_ctrl.set_dmd_pattern_firmware.channel_map
         dmd_cmap = self.dmd.presets
         for ii in range(self.channel_tableWidget.rowCount()):
             ch = self.channel_tableWidget.cellWidget(ii, 0).currentText()
@@ -356,6 +356,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         else:
             ntimes = 1
             interval_ms = 0.
+
+        # xy-positions
+        npositions = 1
 
         # ##############################
         # zstack
@@ -628,9 +631,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
 
         # sim dataset
-        img_data.create_dataset("sim", shape=(ntimes, nz, nsim_channels, n_sim_patterns_channel, ny_sim, nx_sim),
-                                chunks=(1, 1, 1, 1, ny_sim, nx_sim), dtype='uint16', compressor="none")
-        img_data.sim.attrs["dimensions"] = ["time", "z", "channel", "pattern", "y", "x"]
+        img_data.create_dataset("sim", shape=(npositions, ntimes, nz, nsim_channels, n_sim_patterns_channel, ny_sim, nx_sim),
+                                chunks=(1, 1, 1, 1, 1, ny_sim, nx_sim), dtype='uint16', compressor="none")
+        img_data.sim.attrs["dimensions"] = ["position", "time", "z", "channel", "pattern", "y", "x"]
         img_data.sim.attrs["channels"] = sim_channels
         img_data.sim.attrs["exposure_time_ms"] = exposure_tms_sim
         img_data.sim.attrs["dx_um"] = 6.5 / 100
@@ -655,11 +658,13 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         img_data.sim.attrs["otf_model_parameters"] = self.otf_data["fit_params"]
 
         # odt dataset
-        img_data.create_dataset("odt", shape=(n_odt_per_sim * ntimes, nz, n_odt_patterns, ny_odt, nx_odt),
-                                chunks=(1, 1, 1, ny_odt, nx_odt), dtype='uint16', compressor="none")
+        img_data.create_dataset("odt", shape=(npositions, n_odt_per_sim * ntimes, nz, 1, n_odt_patterns, ny_odt, nx_odt),
+                                chunks=(1, 1, 1, 1, 1, ny_odt, nx_odt), dtype='uint16', compressor="none")
         # img_data.create_dataset("odt", shape=(n_odt_per_sim * ntimes, nz, n_odt_patterns, 1, 1),
         #                         chunks=(1, 1, 1, 1, 1), dtype='uint16', compressor="none")
-        img_data.odt.attrs["dimensions"] = ["time", "z", "pattern", "y", "x"]
+        # img_data.odt.attrs["dimensions"] = ["time", "z", "pattern", "y", "x"]
+        # only add "channel" so compatible shape with SIM for display
+        img_data.odt.attrs["dimensions"] = ["position", "time", "z", "channel", "pattern", "y", "x"]
         img_data.odt.attrs["exposure_time_ms"] = exposure_tms_odt
         img_data.odt.attrs["frame_time_ms"] = min_odt_frame_time_ms
         img_data.odt.attrs["volume_time_ms"] = min_odt_frame_time_ms * n_odt_patterns # todo: correct this
@@ -777,7 +782,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 break
 
             if n1 > 0:
-                img_data.sim[it_sim, iz_sim, ic_sim, ip_sim] = mmc1.popNextImage()
+                img_data.sim[0, it_sim, iz_sim, ic_sim, ip_sim] = mmc1.popNextImage()
 
                 # indexing logic. We acquire images (from slow to fast) time, z-position, channel, pattern
                 ii_sim += 1
@@ -807,7 +812,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                 it_sim += 1
 
             if n2 > 0:
-                img_data.odt[it_odt, iz_odt, ip_odt] = mmc2.popNextImage()
+                img_data.odt[0, it_odt, iz_odt, 0, ip_odt] = mmc2.popNextImage()
 
                 # indexing logic. We acquire images (from slow to fast) time, z-position, pattern
                 ii_odt += 1
@@ -874,8 +879,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     preview_layer = self.viewer.layers[layer_name]
                     preview_layer.data = img_data.odt
                 except KeyError:
-                    preview_layer = self.viewer.add_image(img_data.odt, name=layer_name)
-                self.viewer.dims.axis_labels = ["times", "z", "channels", "patterns", "y", "x"]
+                    self.viewer.add_image(img_data.odt, name=layer_name)
+                self.viewer.dims.axis_labels = ["positions", "times", "z", "channels", "patterns", "y", "x"]
 
             # show SIM
             if not np.any(np.array(img_data.sim.shape) == 0):
@@ -888,8 +893,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     preview_layer = self.viewer.layers[layer_name]
                     preview_layer.data = img_data.sim
                 except KeyError:
-                    preview_layer = self.viewer.add_image(img_data.sim, name=layer_name)
-                self.viewer.dims.axis_labels = ["times", "z", "channels", "patterns", "y", "x"]
+                    self.viewer.add_image(img_data.sim, name=layer_name)
+                self.viewer.dims.axis_labels = ["positions", "times", "z", "channels", "patterns", "y", "x"]
         return
 
 
