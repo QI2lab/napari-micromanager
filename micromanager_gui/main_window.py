@@ -19,7 +19,6 @@ from ._util import blockSignals, event_indices, extend_array_for_index
 from .explore_sample import ExploreSample
 from .sim_odt_widget import SimOdtWidget
 from .dmd_widget import DmdWidget
-from .daq_widget import DaqWidget
 from .multid_widget import MultiDWidget, SequenceMeta
 from .prop_browser import PropBrowser
 
@@ -606,11 +605,20 @@ class MainWindow(QtW.QWidget, _MainUI):
 
     def stage_x_left(self):
         self._mmc.setRelativeXYPosition(-float(self.xy_step_size_SpinBox.value()), 0.0)
+
+        # todo: for some reason with the MadCity stage doesn't update without this code even though the on_xy_stage_changed signal should be connected...
+        x, y = self._mmc.getXPosition(), self._mmc.getYPosition()
+        self._on_xy_stage_position_changed(self._mmc.getXYStageDevice(), x, y)
+
         if self.snap_on_click_xy_checkBox.isChecked():
             self.snap()
 
     def stage_x_right(self):
         self._mmc.setRelativeXYPosition(float(self.xy_step_size_SpinBox.value()), 0.0)
+
+        x, y = self._mmc.getXPosition(), self._mmc.getYPosition()
+        self._on_xy_stage_position_changed(self._mmc.getXYStageDevice(), x, y)
+
         if self.snap_on_click_xy_checkBox.isChecked():
             self.snap()
 
@@ -619,6 +627,10 @@ class MainWindow(QtW.QWidget, _MainUI):
             0.0,
             float(self.xy_step_size_SpinBox.value()),
         )
+
+        x, y = self._mmc.getXPosition(), self._mmc.getYPosition()
+        self._on_xy_stage_position_changed(self._mmc.getXYStageDevice(), x, y)
+
         if self.snap_on_click_xy_checkBox.isChecked():
             self.snap()
 
@@ -627,6 +639,10 @@ class MainWindow(QtW.QWidget, _MainUI):
             0.0,
             -float(self.xy_step_size_SpinBox.value()),
         )
+
+        x, y = self._mmc.getXPosition(), self._mmc.getYPosition()
+        self._on_xy_stage_position_changed(self._mmc.getXYStageDevice(), x, y)
+
         if self.snap_on_click_xy_checkBox.isChecked():
             self.snap()
 
