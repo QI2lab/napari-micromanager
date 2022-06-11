@@ -83,6 +83,7 @@ class _MainUI:
     snap_channel_comboBox: QtW.QComboBox
     exp_spinBox: QtW.QDoubleSpinBox
     image_proc_mode_comboBox: QtW.QComboBox
+    use_affine_xform_checkBox: QtW.QCheckBox
     fx_doubleSpinBox: QtW.QDoubleSpinBox
     fy_doubleSpinBox: QtW.QDoubleSpinBox
     snap_Button: QtW.QPushButton
@@ -161,12 +162,28 @@ class MainWindow(QtW.QWidget, _MainUI):
         self._mmc = self._mmcores[0]
         self._mmc_cam = self._mmcores[1]
 
-        # load affine calibration data
-        affine_data = None
+        # load DMD-to-camera affine transformation
+        dmd_affine_data = None
         try:
-            affine_config_fname = Path(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\affine_transformations.json")
+            affine_config_fname = Path(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\dmd_affine_transformations.json")
             with open(affine_config_fname, "r") as f:
-                affine_data = json.load(f)
+                dmd_affine_data = json.load(f)
+        except Exception as e:
+            print(e)
+
+        # load camera-to-camera affine transformations
+        cam_affine_data = None
+        cam_affine_xform_odt2sim = None
+        self.cam_affine_xform_napari_odt2sim = None
+        try:
+            cam_affine_config_fname = Path(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\cameras_affine_transformations.json")
+            with open(cam_affine_config_fname, "r") as f:
+                cam_affine_data = json.load(f)
+
+            swap_xy = np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]])
+            cam_affine_xform_odt2sim = np.array(cam_affine_data["xform"]).dot(swap_xy)
+            cam_affine_xform_napari_sim2odt = swap_xy.dot(cam_affine_xform_odt2sim)
+            self.cam_affine_xform_napari_odt2sim = np.linalg.inv(cam_affine_xform_napari_sim2odt)
         except Exception as e:
             print(e)
 
@@ -293,7 +310,9 @@ class MainWindow(QtW.QWidget, _MainUI):
         # tab widgets
         # todo: right now no way to update the daq/dmd instances in these widgets ...
         self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer,
-                                        otf_data=otf_data, affine_data=affine_data)
+                                        otf_data=otf_data,
+                                        dmd_affine_data=dmd_affine_data,
+                                        cam_affine_xform=cam_affine_xform_odt2sim)
         self.dmd_widget = DmdWidget(self._mmcores, self.daq, self.dmd, self.viewer)
         self.mda = MultiDWidget(self._mmc)
         self.explorer = ExploreSample(self.viewer, self._mmc)
@@ -722,28 +741,32 @@ class MainWindow(QtW.QWidget, _MainUI):
         mode = self.image_proc_mode_comboBox.currentText()
 
         # different layers for different cameras and modes
-        layer_name = "%s %s" % (self._mmc_cam.getCameraDevice(), mode)
+        cam_name = self._mmc_cam.getCameraDevice()
+
+        use_affine = self.use_affine_xform_checkBox.isChecked() and mode == "normal" and cam_name == self._mmcores[1].getCameraDevice()
+
+        if not use_affine:
+            layer_name = f"{cam_name:s} {mode:s}"
+        else:
+            layer_name = f"{cam_name:s} {mode:s} affine"
 
         if mode == "normal":
             pass
         elif mode == "fft":
             data = np.abs(fft.fftshift(fft.fft2(fft.ifftshift(data))))
-            # dxy = 6.5 / 50
-            # ny, nx = data.shape
-            # scale = (1 / (ny * dxy), 1 / (ny * dxy))
         elif mode == "hologram" or mode == "hologram unwrapped":
             ft = fft.fftshift(fft.fft2(fft.ifftshift(data)))
             ny, nx = ft.shape
 
             # todo: could display in some nicer way...but...
-            dxy = 6.5 / 50
+            dxy = 6.5 / 60
             fx = fft.fftshift(fft.fftfreq(nx, dxy))
             fy = fft.fftshift(fft.fftfreq(ny, dxy))
             fxfx, fyfy = np.meshgrid(fx, fy)
             ff = np.sqrt(fxfx**2 + fyfy**2)
             dfx = fx[1] - fx[0]
             dfy = fy[1] - fy[0]
-            fmax = 0.55 / 0.785
+            fmax = 1 / 0.785
 
             # convert from pixels in image to real units
             holo_frq = np.array([dfx * (self.fx_doubleSpinBox.value() - nx // 2),
@@ -763,13 +786,27 @@ class MainWindow(QtW.QWidget, _MainUI):
                 data -= np.mean(data[ny//2 - 2: ny//2 + 2, nx//2 - 2: nx//2 + 2])
 
         else:
-            raise ValueError()
+            raise ValueError(f"mode must be 'normal', 'fft', 'hologram', or 'hologram unwrapped' but was '{mode:s}'")
 
+        # display image
         try:
             preview_layer = self.viewer.layers[layer_name]
             preview_layer.data = data
         except KeyError:
-            preview_layer = self.viewer.add_image(data, name=layer_name)
+            if use_affine:
+                preview_layer = self.viewer.add_image(data, name=layer_name, affine=self.cam_affine_xform_napari_odt2sim)
+            else:
+                preview_layer = self.viewer.add_image(data, name=layer_name)
+
+        # make our most recent snapped image the only visible layer
+        self.viewer.layers[layer_name].visible = True
+
+        layer_names = [self.viewer.layers[ii].name for ii in range(len(self.viewer.layers))]
+        for ln in layer_names:
+            # only make layers which are translucent invisible. This way we can see two layers in different colors
+            # if change to "additive"
+            if ln != layer_name and self.viewer.layers[ln].blending == 'translucent':
+                self.viewer.layers[ln].visible = False
 
         self.update_max_min()
 
