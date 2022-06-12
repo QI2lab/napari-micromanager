@@ -1351,6 +1351,9 @@
           <property name="decimals">
            <number>3</number>
           </property>
+          <property name="maximum">
+           <double>10000.000000000000000</double>
+          </property>
          </widget>
          <widget class="QLabel" name="label_18">
           <property name="geometry">
@@ -1379,6 +1382,9 @@
             <width>80</width>
             <height>22</height>
            </rect>
+          </property>
+          <property name="maximum">
+           <double>100.000000000000000</double>
           </property>
          </widget>
          <widget class="QLabel" name="label_19">

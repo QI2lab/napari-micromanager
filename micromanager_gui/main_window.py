@@ -56,6 +56,9 @@ class _MainUI:
     daq_cfg_lineEdit: QtW.QLineEdit
     daq_load_cfg_Button: QtW.QPushButton
     browse_daq_cfg_Button: QtW.QPushButton
+    microscope_cfg_lineEdit: QtW.QLineEdit
+    browse_microscope_cfg_Button: QtW.QPushButton
+    microscope_load_cfg_Button: QtW.QPushButton
     objective_groupBox: QtW.QGroupBox
     objective_comboBox: QtW.QComboBox
     camera_groupBox: QtW.QGroupBox
@@ -124,11 +127,12 @@ class _MainUI:
         uic.loadUi(self.UI_FILE, self)  # load QtDesigner .ui file
 
         # set some defaults
-        # self.cfg_LineEdit.setText("demo")
         self.cfg_LineEdit.setText(r"C:/Users/q2ilab/Documents/mcsim_private/mcSIM/mcsim/expt_ctrl/sim_odt_nidaq_c1.cfg")
         self.cfg2_LineEdit.setText(r"C:/Users/q2ilab/Documents/mcsim_private/mcSIM/mcsim/expt_ctrl/sim_odt_nidaq_c2.cfg")
+        # todo: should I combine dmd/daq/microscope config json files?
         self.dmd_cfg_lineEdit.setText(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\dmd_config.json")
         self.daq_cfg_lineEdit.setText(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\daq_config.json")
+        self.microscope_cfg_lineEdit.setText(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\config.json")
 
         # button icons
         for attr, icon in [
@@ -147,7 +151,7 @@ class _MainUI:
 
 
 class MainWindow(QtW.QWidget, _MainUI):
-    def __init__(self, viewer: napari.viewer.Viewer, remote=True):
+    def __init__(self, viewer: napari.viewer.Viewer, remote=False):
         super().__init__()
         self.setup_ui()
 
@@ -162,43 +166,10 @@ class MainWindow(QtW.QWidget, _MainUI):
         self._mmc = self._mmcores[0]
         self._mmc_cam = self._mmcores[1]
 
-        # load DMD-to-camera affine transformation
-        dmd_affine_data = None
-        try:
-            affine_config_fname = Path(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\dmd_affine_transformations.json")
-            with open(affine_config_fname, "r") as f:
-                dmd_affine_data = json.load(f)
-        except Exception as e:
-            print(e)
-
-        # load camera-to-camera affine transformations
-        cam_affine_data = None
-        cam_affine_xform_odt2sim = None
-        self.cam_affine_xform_napari_odt2sim = None
-        try:
-            cam_affine_config_fname = Path(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\cameras_affine_transformations.json")
-            with open(cam_affine_config_fname, "r") as f:
-                cam_affine_data = json.load(f)
-
-            swap_xy = np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]])
-            cam_affine_xform_odt2sim = np.array(cam_affine_data["xform"]).dot(swap_xy)
-            cam_affine_xform_napari_sim2odt = swap_xy.dot(cam_affine_xform_odt2sim)
-            self.cam_affine_xform_napari_odt2sim = np.linalg.inv(cam_affine_xform_napari_sim2odt)
-        except Exception as e:
-            print(e)
-
-        # load OTF calibration data
-        otf_data = None
-        try:
-            otf_config_fname = Path(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\otf_calibration.json")
-            with open(otf_config_fname, "r") as f:
-                otf_data = json.load(f)
-        except Exception as e:
-            print(e)
-
         # place holders for later
         self.dmd = None
         self.daq = None
+        self.cam_affine_xform_napari_odt2sim = None
 
         # connect mmcore signals
         sig = self._mmc.events
@@ -224,6 +195,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.dmd_load_cfg_Button.clicked.connect(self.load_dmd_cfg)
         self.browse_daq_cfg_Button.clicked.connect(self.browse_daq_cfg)
         self.daq_load_cfg_Button.clicked.connect(self.load_daq_cfg)
+        self.browse_microscope_cfg_Button.clicked.connect(self.browse_microscope_cfg)
+        self.microscope_load_cfg_Button.clicked.connect(self.load_microscope_cfg)
         self.left_Button.clicked.connect(self.stage_x_left)
         self.right_Button.clicked.connect(self.stage_x_right)
         self.y_up_Button.clicked.connect(self.stage_y_up)
@@ -307,12 +280,20 @@ class MainWindow(QtW.QWidget, _MainUI):
         except Exception as e:
             print(e)
 
+        try:
+            self.load_microscope_cfg()
+
+            swap_xy = np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]])
+            cam_affine_xform_odt2sim = np.array(self.cfg_data["camera_affine_transforms"]["xform"]).dot(swap_xy)
+            cam_affine_xform_napari_sim2odt = swap_xy.dot(cam_affine_xform_odt2sim)
+            self.cam_affine_xform_napari_odt2sim = np.linalg.inv(cam_affine_xform_napari_sim2odt)
+        except Exception as e:
+            print(e)
+
         # tab widgets
         # todo: right now no way to update the daq/dmd instances in these widgets ...
-        self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer,
-                                        otf_data=otf_data,
-                                        dmd_affine_data=dmd_affine_data,
-                                        cam_affine_xform=cam_affine_xform_odt2sim)
+        self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer, configuration=self.cfg_data)
+
         self.dmd_widget = DmdWidget(self._mmcores, self.daq, self.dmd, self.viewer)
         self.mda = MultiDWidget(self._mmc)
         self.explorer = ExploreSample(self.viewer, self._mmc)
@@ -479,6 +460,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         except:
             print("error disabling photometrics camera despeckle correction")
 
+
     def browse_dmd_cfg(self):
         file_dir = QtW.QFileDialog.getOpenFileName(self, "", "⁩", "json(*.json)")
         self.dmd_cfg_lineEdit.setText(str(file_dir[0]))
@@ -490,6 +472,15 @@ class MainWindow(QtW.QWidget, _MainUI):
     def browse_daq_cfg(self):
         file_dir = QtW.QFileDialog.getOpenFileName(self, "", "⁩", "json(*.json)")
         self.daq_cfg_lineEdit.setText(str(file_dir[0]))
+
+    def browse_microscope_cfg(self):
+        file_dir = QtW.QFileDialog.getOpenFileName(self, "", "⁩", "json(*.json)")
+        self.microscope_cfg_lineEdit.setText(str(file_dir[0]))
+
+    def load_microscope_cfg(self):
+        fname_microscope_config = self.microscope_cfg_lineEdit.text()
+        with open(fname_microscope_config, "r") as f:
+            self.cfg_data = json.load(f)
 
     def load_daq_cfg(self):
         fname_daq_config = self.daq_cfg_lineEdit.text()
