@@ -147,12 +147,12 @@
             </column>
             <column>
              <property name="text">
-              <string>Mode</string>
+              <string>Patterns</string>
              </property>
             </column>
             <column>
              <property name="text">
-              <string>Cam</string>
+              <string>Mode</string>
              </property>
             </column>
            </widget>

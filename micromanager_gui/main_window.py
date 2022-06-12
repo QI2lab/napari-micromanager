@@ -282,26 +282,22 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         try:
             self.load_microscope_cfg()
-
-            swap_xy = np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]])
-            cam_affine_xform_odt2sim = np.array(self.cfg_data["camera_affine_transforms"]["xform"]).dot(swap_xy)
-            cam_affine_xform_napari_sim2odt = swap_xy.dot(cam_affine_xform_odt2sim)
-            self.cam_affine_xform_napari_odt2sim = np.linalg.inv(cam_affine_xform_napari_sim2odt)
         except Exception as e:
             print(e)
 
         # tab widgets
         # todo: right now no way to update the daq/dmd instances in these widgets ...
         self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer, configuration=self.cfg_data)
+        self.tabWidget.addTab(self.sim_odt_acq, "SIM/ODT Acquisition")
 
         self.dmd_widget = DmdWidget(self._mmcores, self.daq, self.dmd, self.viewer)
-        self.mda = MultiDWidget(self._mmc)
-        self.explorer = ExploreSample(self.viewer, self._mmc)
-
-        self.tabWidget.addTab(self.sim_odt_acq, "SIM/ODT Acquisition")
         self.tabWidget.addTab(self.dmd_widget, "DMD")
-        self.tabWidget.addTab(self.mda, "Multi-D Acquisition")
-        self.tabWidget.addTab(self.explorer, "Sample Explorer")
+
+        # self.mda = MultiDWidget(self._mmc)
+        # self.tabWidget.addTab(self.mda, "Multi-D Acquisition")
+
+        # self.explorer = ExploreSample(self.viewer, self._mmc)
+        # self.tabWidget.addTab(self.explorer, "Sample Explorer")
 
 
     def illumination(self):
@@ -481,6 +477,12 @@ class MainWindow(QtW.QWidget, _MainUI):
         fname_microscope_config = self.microscope_cfg_lineEdit.text()
         with open(fname_microscope_config, "r") as f:
             self.cfg_data = json.load(f)
+
+        # load affine transformation
+        swap_xy = np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]])
+        cam_affine_xform_odt2sim = np.array(self.cfg_data["camera_affine_transforms"]["xform"]).dot(swap_xy)
+        cam_affine_xform_napari_sim2odt = swap_xy.dot(cam_affine_xform_odt2sim)
+        self.cam_affine_xform_napari_odt2sim = np.linalg.inv(cam_affine_xform_napari_sim2odt)
 
     def load_daq_cfg(self):
         fname_daq_config = self.daq_cfg_lineEdit.text()
