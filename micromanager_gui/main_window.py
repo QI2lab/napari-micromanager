@@ -105,6 +105,8 @@ class _MainUI:
     channel_comboBox: QtW.QComboBox
     mode_comboBox: QtW.QComboBox
     daq_shutter_checkBox: QtW.QCheckBox
+    set_affine_ref_Button: QtW.QPushButton
+    track_affine_checkBox: QtW.QCheckBox
 
     # dmd frame
     pattern_time_SpinBox: QtW.QDoubleSpinBox
@@ -129,7 +131,7 @@ class _MainUI:
         # set some defaults
         self.cfg_LineEdit.setText(r"C:/Users/q2ilab/Documents/mcsim_private/mcSIM/mcsim/expt_ctrl/sim_odt_nidaq_c1.cfg")
         self.cfg2_LineEdit.setText(r"C:/Users/q2ilab/Documents/mcsim_private/mcSIM/mcsim/expt_ctrl/sim_odt_nidaq_c2.cfg")
-        # todo: should I combine dmd/daq/microscope config json files?
+        # todo: should I combine dmd/daq/microscope config json files? maybe should save the default file paths in the microscope config file
         self.dmd_cfg_lineEdit.setText(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\dmd_config.json")
         self.daq_cfg_lineEdit.setText(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\daq_config.json")
         self.microscope_cfg_lineEdit.setText(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\config.json")
@@ -209,6 +211,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.illumination_Button.clicked.connect(self.illumination)
         self.properties_Button.clicked.connect(self._show_prop_browser)
         self.set_dmd_pattern_index_pushButton.clicked.connect(self._set_dmd_pattern_index)
+        self.set_affine_ref_Button.clicked.connect(self._set_affine_ref)
 
         # connect buttons
         self.add_ch_Button.clicked.connect(self.add_channel)
@@ -299,6 +302,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         # self.explorer = ExploreSample(self.viewer, self._mmc)
         # self.tabWidget.addTab(self.explorer, "Sample Explorer")
 
+        self._set_affine_ref()
 
     def illumination(self):
         if not hasattr(self, "_illumination"):
@@ -606,6 +610,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         except ValueError:
             pass
 
+    def _set_affine_ref(self):
+        self.affine_ref = [self._mmc.getXPosition(), self._mmc.getYPosition()]
 
     def _on_xy_stage_position_changed(self, name, x, y):
         self.x_lineEdit.setText(f"{x:.1f}")
@@ -782,6 +788,15 @@ class MainWindow(QtW.QWidget, _MainUI):
             raise ValueError(f"mode must be 'normal', 'fft', 'hologram', or 'hologram unwrapped' but was '{mode:s}'")
 
         # display image
+        if self.track_affine_checkBox.isChecked():
+            xnow = self._mmc.getXPosition()
+            ynow = self._mmc.getYPosition()
+            dxy_um = self.cfg_data["camera_settings_1"]["dxy"]
+            translation = [-(self.affine_ref[1] - ynow) / dxy_um, -(self.affine_ref[0] - xnow) / dxy_um]
+            layer_name += f"x={xnow:.0f}, y={ynow:.0f}"
+        else:
+            translation = [0, 0]
+
         try:
             preview_layer = self.viewer.layers[layer_name]
             preview_layer.data = data
@@ -789,7 +804,11 @@ class MainWindow(QtW.QWidget, _MainUI):
             if use_affine:
                 preview_layer = self.viewer.add_image(data, name=layer_name, affine=self.cam_affine_xform_napari_odt2sim)
             else:
-                preview_layer = self.viewer.add_image(data, name=layer_name)
+                preview_layer = self.viewer.add_image(data, name=layer_name, translate=translation)
+
+                if self.track_affine_checkBox.isChecked():
+                    self.viewer.camera.center = (0, translation[0] + data.shape[0]//2, translation[1] + data.shape[0]//2)
+                    self.autoscale_active_layer()
 
         # make our most recent snapped image the only visible layer
         self.viewer.layers[layer_name].visible = True
@@ -798,8 +817,10 @@ class MainWindow(QtW.QWidget, _MainUI):
         for ln in layer_names:
             # only make layers which are translucent invisible. This way we can see two layers in different colors
             # if change to "additive"
-            if ln != layer_name and self.viewer.layers[ln].blending == 'translucent':
-                self.viewer.layers[ln].visible = False
+            # todo: do this in a smart way integrated with showing affine positions
+            # if ln != layer_name and self.viewer.layers[ln].blending == 'translucent':
+            #     self.viewer.layers[ln].visible = False
+            pass
 
         self.update_max_min()
 

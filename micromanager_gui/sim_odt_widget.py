@@ -681,6 +681,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         img_data.attrs["z_calibration_um_per_v"] = calibration_um_per_v
         img_data.attrs["dt"] = dt
 
+        # micromanager configuration
+        img_data.attrs["micromanager_core1_state"] = mmc1.getSystemState().dict()
+        img_data.attrs["micromanager_core2_state"] = mmc2.getSystemState().dict()
+
         if self.configuration is not None:
             img_data.attrs["configuration"] = self.configuration
 
@@ -705,11 +709,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         try:
             img_data.cam1.attrs["dx_um"] = self.configuration["camera_settings_1"]["dxy"]
             img_data.cam1.attrs["dy_um"] = self.configuration["camera_settings_1"]["dxy"]
-            img_data.cam1.attrs["na"] = self.configuration["camera_settings_1"]["na_detection"]
+            img_data.cam1.attrs["na_detection"] = self.configuration["camera_settings_1"]["na_detection"]
         except (ValueError, TypeError):
             img_data.cam1.attrs["dx_um"] = None
             img_data.cam1.attrs["dy_um"] = None
-            img_data.cam1.attrs["na"] = None
+            img_data.cam1.attrs["na_detection"] = None
 
         # sim pattern information for specific channels we are using
         sim_pattern_dat = [dlp6500.get_preset_info(self.dmd.presets[ch]["default"], self.dmd.firmware_pattern_info)[0] for ch in cam1_channels]
