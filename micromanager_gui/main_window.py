@@ -744,15 +744,10 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         use_affine = self.use_affine_xform_checkBox.isChecked() and mode == "normal" and cam_name == self._mmcores[1].getCameraDevice()
 
-        if not use_affine:
-            layer_name = f"{cam_name:s} {mode:s}"
-        else:
-            layer_name = f"{cam_name:s} {mode:s} affine"
-
         if mode == "normal":
             pass
         elif mode == "fft":
-            data = np.abs(fft.fftshift(fft.fft2(fft.ifftshift(data))))
+            data_ft = np.abs(fft.fftshift(fft.fft2(fft.ifftshift(data))))
         elif mode == "hologram" or mode == "hologram unwrapped":
             ft = fft.fftshift(fft.fft2(fft.ifftshift(data)))
             ny, nx = ft.shape
@@ -778,16 +773,18 @@ class MainWindow(QtW.QWidget, _MainUI):
 
             # todo: could also display amplitude data...
             if mode == "hologram":
-                data = np.angle(im)
+                data_ft = np.angle(im)
             else:
-                data = unwrap_phase(np.angle(im))
+                data_ft = unwrap_phase(np.angle(im))
                 # add center back ...
-                data -= np.mean(data[ny//2 - 2: ny//2 + 2, nx//2 - 2: nx//2 + 2])
+                data_ft -= np.mean(data_ft[ny//2 - 2: ny//2 + 2, nx//2 - 2: nx//2 + 2])
 
         else:
             raise ValueError(f"mode must be 'normal', 'fft', 'hologram', or 'hologram unwrapped' but was '{mode:s}'")
 
         # display image
+        layer_name = f"{cam_name:s}"
+
         if self.track_affine_checkBox.isChecked():
             xnow = self._mmc.getXPosition()
             ynow = self._mmc.getYPosition()
@@ -823,6 +820,15 @@ class MainWindow(QtW.QWidget, _MainUI):
             pass
 
         self.update_max_min()
+
+        if mode == "fft":
+            layer_name_ft = f"{cam_name:s} {mode:s}"
+
+            try:
+                preview_layer = self.viewer.layers[layer_name_ft]
+                preview_layer.data = data_ft
+            except KeyError:
+                preview_layer = self.viewer.add_image(data_ft, name=layer_name_ft, translate=[0, 2048])
 
         # todo: why want to do this?
         # if self.streaming_timer is None:
