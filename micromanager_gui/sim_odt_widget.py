@@ -724,17 +724,19 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         img_data.cam1.sim.attrs["phases"] = np.array([spd["phase"] for spd in sim_pattern_dat]).tolist()
         img_data.cam1.sim.attrs["frqs"] = np.array([spd["frq"] for spd in sim_pattern_dat]).tolist()
 
+        # OTF
         try:
-            # OTF
-            img_data.cam1.attrs["otf_model_parameters"] = self.configuration["otf_calibration"]["fit_params"]
+            img_data.cam1.attrs["otf_model_parameters"] = self.configuration["camera_settings_1"]["otf_calibration"]["fit_params"]
+        except (KeyError, TypeError) as e:
+            print(e)
+            img_data.cam1.attrs["affine_transformations"] = [[]] * ncam1_channels
 
-            # affine transformation information for specific channels we are using
-            img_data.cam1.attrs["affine_transformations"] = [self.configuration["camera_settings_1"]["dmd_affine_transforms"][ch]
-                                                            for ch in cam1_channels]
+        # affine transformation information for specific channels we are using
+        try:
+            img_data.cam1.attrs["affine_transformations"] = [self.configuration["camera_settings_1"]["dmd_affine_transforms"][ch] for ch in cam1_channels]
         except (KeyError, TypeError) as e:
             print(e)
             img_data.cam1.attrs["otf_model_parameters"] = None
-            img_data.cam1.attrs["affine_transformations"] = [[]] * ncam1_channels
 
         # ###################################
         # datasets for camera # 2
@@ -753,7 +755,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             img_data.cam2.attrs["dy_um"] = self.configuration["camera_settings_2"]["dxy"]
             img_data.cam2.attrs["na_excitation"] = self.configuration["camera_settings_1"]["na_excitation"]
             img_data.cam2.attrs["na_detection"] = self.configuration["camera_settings_1"]["na_detection"]
-        except (KeyError, TypeError):
+        except (KeyError, TypeError) as e:
+            print(e)
             img_data.cam2.attrs["dx_um"] = None
             img_data.cam2.attrs["dy_um"] = None
             img_data.cam2.attrs["na_excitation"] = None
