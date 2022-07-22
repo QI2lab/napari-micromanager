@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import dask.array
 from qtpy import QtWidgets as QtW
 from qtpy import uic
 from qtpy.QtCore import QSize, Qt
@@ -24,7 +25,7 @@ import numpy as np
 import time
 import datetime
 import zarr
-
+import dask.array as da
 import threading
 
 ICONS = Path(__file__).parent / "icons"
@@ -94,6 +95,7 @@ class _MultiDUI:
     odt_exposure_SpinBox: QtW.QDoubleSpinBox
     odt_frametime_SpinBox: QtW.QDoubleSpinBox
     odt_circbuff_SpinBox: QtW.QDoubleSpinBox
+    sim_circbuf_doubleSpinBox : QtW.QDoubleSpinBox
     daq_dt_doubleSpinBox: QtW.QDoubleSpinBox
     shutter_delay_doubleSpinBox: QtW.QDoubleSpinBox
     odt_warmup_doubleSpinBox: QtW.QDoubleSpinBox
@@ -142,6 +144,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         self.cancel_Button.released.connect(self._mmc.cancel)
 
         self.odt_circbuff_SpinBox.setValue(3.)
+        self.sim_circbuf_doubleSpinBox.setValue(3.)
         if self.configuration is not None:
             # initial value for ROI
             self.sx_spinBox.setValue(int(self.configuration["sim_odt_program_defaults"]["sx"]))
@@ -420,6 +423,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         exposure_tms_odt = self.odt_exposure_SpinBox.value()
         min_odt_frame_time_ms = self.odt_frametime_SpinBox.value()
         odt_circ_buffer_mb = int(np.round(self.odt_circbuff_SpinBox.value() * 1e3))
+        sim_circ_buffer_mb = int(np.round(self.sim_circbuf_doubleSpinBox.value() * 1e3))
         dt = int(np.round(self.daq_dt_doubleSpinBox.value())) * 1e-6
 
         sim_warmup_time_ms = self.sim_warmup_doubleSpinBox.value()
@@ -446,15 +450,16 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # xy-positions
         # ##############################
         do_position_scan = self.stage_groupBox.isChecked() and self.stage_tableWidget.rowCount() > 0
-        positions = []
+        xy_positions = []
+        xy_positions_real = []
         if do_position_scan:
             for r in range(self.stage_tableWidget.rowCount()):
-                positions.append([float(self.stage_tableWidget.item(r, 0).text()),
+                xy_positions.append([float(self.stage_tableWidget.item(r, 0).text()),
                                   float(self.stage_tableWidget.item(r, 1).text())])
         else:
-            positions.append([float(mmc1.getXPosition()),
+            xy_positions.append([float(mmc1.getXPosition()),
                               float(mmc1.getYPosition())])
-        npositions = len(positions)
+        npositions = len(xy_positions)
 
         # ##############################
         # zstack
@@ -675,7 +680,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         img_data.attrs["channels"] = channels
         img_data.attrs["pattern_modes"] = channels_pattern_mode
         img_data.attrs["acquisition_modes"] = acquisition_mode
-        img_data.attrs["xy_position_um"] = positions
+        img_data.attrs["xy_position_um_set"] = xy_positions
         img_data.attrs["z_position_um"] = list(z_real)
         img_data.attrs["dz_um"] = dz
         img_data.attrs["z_calibration_um_per_v"] = calibration_um_per_v
@@ -690,12 +695,14 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             # affine transformation from ODT ROI to SIM full image
             xform = np.array(self.configuration["camera_affine_transforms"]["xform"])
+            # todo: check this is correct
             xform_real_roi2full = affine.params2xform([1, 0, odt_cam_roi[2], 1, 0, odt_cam_roi[0]])
-            img_data.attrs["affine_odt_roi_to_sim"] = (xform.dot(xform_real_roi2full)).tolist()
+            xform_cam2_roi_to_cam1 = np.linalg.inv(xform).dot(xform_real_roi2full)
 
+            img_data.attrs["affine_cam2_roi_to_cam1"] = xform_cam2_roi_to_cam1.tolist()
         else:
             img_data.attrs["configuration"] = None
-            img_data.attrs["affine_odt_roi_to_sim"] = None
+            img_data.attrs["affine_cam2_roi_to_cam1"] = None
 
         # ###################################
         # datasets for camera # 1
@@ -802,6 +809,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # loop over positions and collect data
         # ##################################
         # set circular buffer
+        mmc1.setCircularBufferMemoryFootprint(sim_circ_buffer_mb)
         mmc2.setCircularBufferMemoryFootprint(odt_circ_buffer_mb)
 
         # start timer
@@ -824,7 +832,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         for pp in range(npositions):
             # move to new position
             if do_position_scan:
-                mmc1.setXYPosition(positions[pp][0], positions[pp][1])
+                mmc1.setXYPosition(xy_positions[pp][0], xy_positions[pp][1])
+
+                xy_positions_real.append([float(self._mmc.getXPosition()), float(self._mmc.getYPosition())])
 
             # ##################################
             # set DAQ to initial state
@@ -1035,10 +1045,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             thread_save_cam2.start()
 
             # wait until program is over, then stop daq
-            while True:
-                tnow = time.perf_counter() - tstart_acq
-                if tnow > (position_time_s + 0.1):
-                    break
+            t_elapsed_now = time.perf_counter() - tstart_acq
+            time.sleep(position_time_s - (t_elapsed_now) + 0.1)
 
             mmc1.stopSequenceAcquisition()
             mmc2.stopSequenceAcquisition()
@@ -1055,6 +1063,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # after all positions have run, set z-position back to start
         self.daq.set_analog_lines_by_name([z_volts_start], ["z_stage"])
 
+        # store real xy-positions
+        img_data.attrs["xy_position_um_real"] = xy_positions_real
+
         # ##################################
         # reset cameras to internal triggering...
         # ##################################
@@ -1066,6 +1077,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##################################
         # optionally create viewer layer...
         # ##################################
+        # todo: if we were saving, then reload data with dask because datasets may be large
+
         if self.show_dataset_checkBox.isChecked():
 
             # show odt
@@ -1074,6 +1087,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     layer_name = "odt preview"
                 else:
                     layer_name = subdir + " odt"
+
+                # odt_img_to_show = da.from_zarr()
 
                 try:
                     preview_layer = self.viewer.layers[layer_name]
@@ -1105,6 +1120,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 # todo: debug
                 # clims_low = [np.percentile(im, 1) for im in img_data.sim[0, 0, 0, 0, :, 0]]
                 # clims_high = [np.percentile(im, 99) for im in img_data.sim[0, 0, 0, 0, :, 0]]
+
+                # sim_img_to_show = da.from_array()
 
                 try:
                     preview_layer = self.viewer.layers[layer_name]

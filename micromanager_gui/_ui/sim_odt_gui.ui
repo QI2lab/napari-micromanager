@@ -39,8 +39,8 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>455</width>
-        <height>982</height>
+        <width>458</width>
+        <height>1032</height>
        </rect>
       </property>
       <layout class="QGridLayout" name="gridLayout_6">
@@ -1227,7 +1227,7 @@
          <property name="minimumSize">
           <size>
            <width>0</width>
-           <height>80</height>
+           <height>120</height>
           </size>
          </property>
          <property name="frameShape">
@@ -1565,6 +1565,35 @@
           </property>
           <property name="text">
            <string>shutter delay (ms)</string>
+          </property>
+         </widget>
+         <widget class="QDoubleSpinBox" name="sim_circbuf_doubleSpinBox">
+          <property name="geometry">
+           <rect>
+            <x>330</x>
+            <y>80</y>
+            <width>80</width>
+            <height>22</height>
+           </rect>
+          </property>
+         </widget>
+         <widget class="QLabel" name="label_24">
+          <property name="geometry">
+           <rect>
+            <x>320</x>
+            <y>100</y>
+            <width>100</width>
+            <height>16</height>
+           </rect>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>100</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="text">
+           <string>SIM circ buff (GB)</string>
           </property>
          </widget>
         </widget>

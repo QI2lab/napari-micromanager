@@ -171,7 +171,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         # place holders for later
         self.dmd = None
         self.daq = None
-        self.cam_affine_xform_napari_odt2sim = None
+        self.cam_affine_xform_napari_cam2_to_cam1 = None
 
         # connect mmcore signals
         sig = self._mmc.events
@@ -484,9 +484,9 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         # load affine transformation
         swap_xy = np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]])
-        cam_affine_xform_odt2sim = np.array(self.cfg_data["camera_affine_transforms"]["xform"]).dot(swap_xy)
-        cam_affine_xform_napari_sim2odt = swap_xy.dot(cam_affine_xform_odt2sim)
-        self.cam_affine_xform_napari_odt2sim = np.linalg.inv(cam_affine_xform_napari_sim2odt)
+        cam_affine_xform_cam1_to_cam2 = np.array(self.cfg_data["camera_affine_transforms"]["xform"])
+        cam_affine_xform_napari_cam1_to_cam2 = swap_xy.dot(cam_affine_xform_cam1_to_cam2.dot(swap_xy))
+        self.cam_affine_xform_napari_cam2_to_cam1 = np.linalg.inv(cam_affine_xform_napari_cam1_to_cam2)
 
     def load_daq_cfg(self):
         fname_daq_config = self.daq_cfg_lineEdit.text()
@@ -752,6 +752,7 @@ class MainWindow(QtW.QWidget, _MainUI):
             ft = fft.fftshift(fft.fft2(fft.ifftshift(data)))
             ny, nx = ft.shape
 
+            # todo: grab these values from configuration file
             # todo: could display in some nicer way...but...
             dxy = 6.5 / 60
             fx = fft.fftshift(fft.fftfreq(nx, dxy))
@@ -799,7 +800,7 @@ class MainWindow(QtW.QWidget, _MainUI):
             preview_layer.data = data
         except KeyError:
             if use_affine:
-                preview_layer = self.viewer.add_image(data, name=layer_name, affine=self.cam_affine_xform_napari_odt2sim)
+                preview_layer = self.viewer.add_image(data, name=layer_name, affine=self.cam_affine_xform_napari_cam2_to_cam1)
             else:
                 preview_layer = self.viewer.add_image(data, name=layer_name, translate=translation)
 
@@ -821,6 +822,8 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         self.update_max_min()
 
+        # show processed mode next to real space image
+        # todo: update for affine transformation possibility
         if mode == "fft":
             layer_name_ft = f"{cam_name:s} {mode:s}"
 
