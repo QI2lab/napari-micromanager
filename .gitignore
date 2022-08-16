@@ -148,5 +148,7 @@ MMSetup_*.exe
 .cenv
 .qt_for_python
 
+**/*.autosave
+
 # pycharm project data
 .idea
