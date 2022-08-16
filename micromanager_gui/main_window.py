@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-import json
-import re
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Tuple
 
 import napari
 import numpy as np
-from pymmcore_plus import CMMCorePlus, RemoteMMCore, DeviceType
+import zarr
+from pymmcore_plus import CMMCorePlus, DeviceType #, RemoteMMCore
 from qtpy import QtWidgets as QtW
 from qtpy import uic
 from qtpy.QtCore import QSize, QTimer
 from qtpy.QtGui import QColor, QIcon
+from superqt.utils import create_worker, ensure_main_thread
+from useq import MDASequence
 
 from ._illumination import IlluminationDialog
 from ._saving import save_sequence
@@ -23,13 +24,18 @@ from .multid_widget import MultiDWidget, SequenceMeta
 from .prop_browser import PropBrowser
 
 if TYPE_CHECKING:
+    from typing import Dict
+
     import napari.layers
     import napari.viewer
     import useq
+    from pymmcore_plus.core.events import QCoreSignaler
+    from pymmcore_plus.mda import PMDAEngine
 
 # dmd and daq control
+import json
+import re
 from mcsim.expt_ctrl import dlp6500, daq
-from mcsim.expt_ctrl.setup_optotune_mre2 import initialize_mre2
 import mcsim.analysis.analysis_tools as mctools
 from skimage.restoration import unwrap_phase
 from numpy import fft
@@ -128,14 +134,6 @@ class _MainUI:
     def setup_ui(self):
         uic.loadUi(self.UI_FILE, self)  # load QtDesigner .ui file
 
-        # set some defaults
-        self.cfg_LineEdit.setText(r"C:/Users/q2ilab/Documents/mcsim_private/mcSIM/mcsim/expt_ctrl/sim_odt_nidaq_c1.cfg")
-        self.cfg2_LineEdit.setText(r"C:/Users/q2ilab/Documents/mcsim_private/mcSIM/mcsim/expt_ctrl/sim_odt_nidaq_c2.cfg")
-        # todo: should I combine dmd/daq/microscope config json files? maybe should save the default file paths in the microscope config file
-        self.dmd_cfg_lineEdit.setText(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\dmd_config.json")
-        self.daq_cfg_lineEdit.setText(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\daq_config.json")
-        self.microscope_cfg_lineEdit.setText(r"C:\Users\q2ilab\Documents\mcsim_private\mcSIM\mcsim\expt_ctrl\config.json")
-
         # button icons
         for attr, icon in [
             ("left_Button", "left_arrow_1_green.svg"),
@@ -162,29 +160,38 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         # create connection to mmcore server or process-local variant
         # create two cores, the first is the main core, the second only runs the second camera
-        self._mmcores = [RemoteMMCore(port=54333) if remote else CMMCorePlus(),
-                         RemoteMMCore(port=54334) if remote else CMMCorePlus()]
+        # self._mmcores = [RemoteMMCore(port=54333) if remote else CMMCorePlus(),
+        #                  RemoteMMCore(port=54334) if remote else CMMCorePlus()]
+        self._mmcores = [CMMCorePlus(), CMMCorePlus()]
 
         self._mmc = self._mmcores[0]
         self._mmc_cam = self._mmcores[1]
 
-        # place holders for later
-        self.dmd = None
-        self.daq = None
+        # placeholders for later
+        # since these are passed through to the other widgets, they can be updated but not reassigned
+        self.dmd = dlp6500.dlp6500win(initialize=False)
+        self.daq = daq.nidaq(initialize=False)
+        self.cfg_data = {}
         self.cam_affine_xform_napari_cam2_to_cam1 = None
 
         # connect mmcore signals
-        sig = self._mmc.events
+        sig: QCoreSignaler = self._mmc.events
 
         # note: don't use lambdas with closures on `self`, since the connection
         # to core may outlive the lifetime of this particular widget.
-        sig.sequenceStarted.connect(self._on_mda_started)
-        sig.sequenceFinished.connect(self._on_mda_finished)
+
+        # mda events
+        # sig.sequenceStarted.connect(self._on_mda_started)
+        # sig.sequenceFinished.connect(self._on_mda_finished)
+        self._mmc.mda.events.frameReady.connect(self._on_mda_frame)
+        self._mmc.mda.events.sequenceStarted.connect(self._on_mda_started)
+        self._mmc.mda.events.sequenceFinished.connect(self._on_mda_finished)
+        self._mmc.events.mdaEngineRegistered.connect(self._update_mda_engine)
+
         sig.systemConfigurationLoaded.connect(self._refresh_options)
         sig.XYStagePositionChanged.connect(self._on_xy_stage_position_changed)
         sig.stagePositionChanged.connect(self._on_stage_position_changed)
         sig.exposureChanged.connect(self._on_exp_change)
-        sig.frameReady.connect(self._on_mda_frame)
         sig.channelGroupChanged.connect(self._refresh_channel_list)
         sig.configSet.connect(self._on_config_set)
 
@@ -259,35 +266,6 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.viewer.layers.selection.events.active.connect(self.update_max_min)
         self.viewer.dims.events.current_step.connect(self.update_max_min)
 
-        # todo: find a better place to put initialization code ... maybe should have a mechanism for running a startup script...
-        initialize_mre2()
-
-        # try to load initial configurations ...
-        try:
-            self.load_cfg()
-        except OSError as e:
-            print(e)
-
-        try:
-            self.load_cfg2()
-        except OSError as e:
-            print(e)
-
-        try:
-            self.load_dmd_cfg()
-        except Exception as e:
-            print(e)
-
-        try:
-            self.load_daq_cfg()
-        except Exception as e:
-            print(e)
-
-        try:
-            self.load_microscope_cfg()
-        except Exception as e:
-            print(e)
-
         # tab widgets
         # todo: right now no way to update the daq/dmd instances in these widgets ...
         self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer, configuration=self.cfg_data)
@@ -296,13 +274,6 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.dmd_widget = DmdWidget(self._mmcores, self.daq, self.dmd, self.viewer)
         self.tabWidget.addTab(self.dmd_widget, "DMD")
 
-        # self.mda = MultiDWidget(self._mmc)
-        # self.tabWidget.addTab(self.mda, "Multi-D Acquisition")
-
-        # self.explorer = ExploreSample(self.viewer, self._mmc)
-        # self.tabWidget.addTab(self.explorer, "Sample Explorer")
-
-        self._set_affine_ref()
 
     def illumination(self):
         if not hasattr(self, "_illumination"):
@@ -425,6 +396,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         print("loading", self.cfg_LineEdit.text())
         self._mmc.loadSystemConfiguration(self.cfg_LineEdit.text())
 
+        self._set_affine_ref()
+
     def browse_cfg2(self):
         self._mmcores[1].unloadAllDevices()  # unload all devicies
         print(f"Loaded Devices: {self._mmcores[1].getLoadedDevices()}")
@@ -451,7 +424,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self._mmcores[1].loadSystemConfiguration(self.cfg2_LineEdit.text())
 
         try:
-            # turn off prime BSI express crazy speckle correction
+            # turn off prime BSI express speckle correction
             cam = self._mmcores[1].getCameraDevice()
             self._mmcores[1].setProperty(cam, 'PP  1   ENABLED', 'No')
             self._mmcores[1].setProperty(cam, 'PP  2   ENABLED', 'No')
@@ -460,14 +433,13 @@ class MainWindow(QtW.QWidget, _MainUI):
         except:
             print("error disabling photometrics camera despeckle correction")
 
-
     def browse_dmd_cfg(self):
         file_dir = QtW.QFileDialog.getOpenFileName(self, "", "⁩", "json(*.json)")
         self.dmd_cfg_lineEdit.setText(str(file_dir[0]))
 
     def load_dmd_cfg(self):
         fname_dmd_config = self.dmd_cfg_lineEdit.text()
-        self.dmd = dlp6500.dlp6500win(debug=True, config_file=fname_dmd_config)
+        self.dmd.initialize(debug=True, config_file=fname_dmd_config)
 
     def browse_daq_cfg(self):
         file_dir = QtW.QFileDialog.getOpenFileName(self, "", "⁩", "json(*.json)")
@@ -480,7 +452,9 @@ class MainWindow(QtW.QWidget, _MainUI):
     def load_microscope_cfg(self):
         fname_microscope_config = self.microscope_cfg_lineEdit.text()
         with open(fname_microscope_config, "r") as f:
-            self.cfg_data = json.load(f)
+            self.cfg_data.update(json.load(f))
+
+        self.sim_odt_acq.set_cfg()
 
         # load affine transformation
         swap_xy = np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]])
@@ -490,9 +464,9 @@ class MainWindow(QtW.QWidget, _MainUI):
 
     def load_daq_cfg(self):
         fname_daq_config = self.daq_cfg_lineEdit.text()
-        self.daq = daq.nidaq(dev_name="Dev1", digital_lines="port0/line0:15",
-                             analog_lines=["ao0", "ao1", "ao2", "ao3"],
-                             config_file=fname_daq_config)
+        self.daq.initialize(dev_name="Dev1", digital_lines="port0/line0:15",
+                            analog_lines=["ao0", "ao1", "ao2", "ao3"],
+                            config_file=fname_daq_config)
 
         # populate channel combo box
         self.channel_comboBox.clear()
@@ -573,7 +547,7 @@ class MainWindow(QtW.QWidget, _MainUI):
     def _refresh_mode_options(self):
         self.mode_comboBox.clear()
 
-        if self.dmd is not None:
+        if self.dmd.initialized:
             chan = self.channel_comboBox.currentText()
             modes = list(self.dmd.presets[chan].keys())
             self.mode_comboBox.addItems(modes)
@@ -897,11 +871,20 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.live_Button.setText("Live")
         self.live_Button.setIcon(CAM_ICON)
 
+    def _update_mda_engine(self, newEngine: PMDAEngine, oldEngine: PMDAEngine):
+        oldEngine.events.frameReady.connect(self._on_mda_frame)
+        oldEngine.events.sequenceStarted.disconnect(self._on_mda_started)
+        oldEngine.events.sequenceFinished.disconnect(self._on_mda_finished)
+
+        newEngine.events.frameReady.connect(self._on_mda_frame)
+        newEngine.events.sequenceStarted.connect(self._on_mda_started)
+        newEngine.events.sequenceFinished.connect(self._on_mda_finished)
+
     def toggle_live(self, event=None):
         if self.streaming_timer is None:
 
             ch_group = self._mmc.getOrGuessChannelGroup()
-            if ch_group is not None:
+            if ch_group != []:
                 self._mmc.setConfig(ch_group, self.snap_channel_comboBox.currentText())
 
             self.start_live()

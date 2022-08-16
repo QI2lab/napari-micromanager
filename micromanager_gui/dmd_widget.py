@@ -12,7 +12,7 @@ from typing_extensions import Literal
 from useq import MDASequence
 
 if TYPE_CHECKING:
-    from pymmcore_plus import RemoteMMCore
+    from pymmcore_plus import CMMCorePlus
 
 # daq
 import mcsim.expt_ctrl.daq
@@ -86,7 +86,7 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
     # metadata associated with a given experiment
     SEQUENCE_META: dict[MDASequence, SequenceMeta] = {}
 
-    def __init__(self, mmcores: list[RemoteMMCore], daq: mcsim.expt_ctrl.daq.daq, dmd: mcsim.expt_ctrl.dlp6500.dlp6500,
+    def __init__(self, mmcores: list[CMMCorePlus], daq: mcsim.expt_ctrl.daq.daq, dmd: mcsim.expt_ctrl.dlp6500.dlp6500,
                  viewer, parent=None):
 
         mmcore = mmcores[0]
@@ -99,8 +99,8 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
         super().__init__(parent)
         self.setup_ui()
 
-        self.pause_Button.released.connect(self._mmc.toggle_pause)
-        self.cancel_Button.released.connect(self._mmc.cancel)
+        # self.pause_Button.released.connect(self._mmc.toggle_pause)
+        # self.cancel_Button.released.connect(self._mmc.cancel)
 
         # default value for exposure times
         self.exposure_SpinBox.setValue(10.)
@@ -110,29 +110,9 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
         self.browse_patterns_button.clicked.connect(self.load_dmd_patterns)
         self.run_Button.clicked.connect(self._on_run_clicked)
 
-        # events
-        mmcore.events.sequenceStarted.connect(self._on_mda_started)
-        mmcore.events.sequenceFinished.connect(self._on_mda_finished)
-        mmcore.events.sequencePauseToggled.connect(self._on_mda_paused)
-
     def _set_enabled(self, enabled: bool):
         self.save_groupBox.setEnabled(enabled)
         self.time_groupBox.setEnabled(enabled)
-
-    def _on_mda_started(self, sequence):
-        self._set_enabled(False)
-        self.pause_Button.show()
-        self.cancel_Button.show()
-        self.run_Button.hide()
-
-    def _on_mda_finished(self, sequence):
-        self._set_enabled(True)
-        self.pause_Button.hide()
-        self.cancel_Button.hide()
-        self.run_Button.show()
-
-    def _on_mda_paused(self, paused):
-        self.pause_Button.setText("GO" if paused else "PAUSE")
 
     def set_multi_d_acq_dir(self):
         # set the directory

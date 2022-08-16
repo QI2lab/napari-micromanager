@@ -125,41 +125,22 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
     def __init__(self, mmcores: list[RemoteMMCore], daq: mcsim.expt_ctrl.daq.daq, dmd: dlp6500,
                  viewer, parent=None, configuration=None):
 
-        mmcore = mmcores[0]
         self._mmcores = mmcores
         self._mmc = self._mmcores[0]
 
-        # todo: would it be better to pass through the main frame instead of these various attributes?
-        # todo: or maybe create a python microscope object which contains mmc, daq, DMD?
         self.daq = daq
         self.dmd = dmd
-
         self.configuration = configuration
 
         self.viewer = viewer
         super().__init__(parent)
         self.setup_ui()
 
-        self.pause_Button.released.connect(self._mmc.toggle_pause)
-        self.cancel_Button.released.connect(self._mmc.cancel)
+        #self.pause_Button.released.connect(self._mmc.toggle_pause)
+        # self.cancel_Button.released.connect(self._mmc.cancel)
 
         self.odt_circbuff_SpinBox.setValue(3.)
         self.sim_circbuf_doubleSpinBox.setValue(3.)
-        if self.configuration is not None:
-            # initial value for ROI
-            self.sx_spinBox.setValue(int(self.configuration["sim_odt_program_defaults"]["sx"]))
-            self.cx_spinBox.setValue(int(self.configuration["sim_odt_program_defaults"]["cx"]))
-            self.sy_spinBox.setValue(int(self.configuration["sim_odt_program_defaults"]["sy"]))
-            self.cy_spinBox.setValue(int(self.configuration["sim_odt_program_defaults"]["cy"]))
-
-            # default value for exposure times
-            self.odt_exposure_SpinBox.setValue(float(self.configuration["sim_odt_program_defaults"]["odt_exposure_ms"]))
-            self.sim_exposure_SpinBox.setValue(float(self.configuration["sim_odt_program_defaults"]["sim_exposure_ms"]))
-            self.odt_frametime_SpinBox.setValue(float(self.configuration["sim_odt_program_defaults"]["odt_frametime_ms"]))
-            self.daq_dt_doubleSpinBox.setValue(int(self.configuration["sim_odt_program_defaults"]["daq_dt_us"]))
-            self.sim_warmup_doubleSpinBox.setValue(float(self.configuration["sim_odt_program_defaults"]["sim_warmup_time_ms"]))
-            self.odt_warmup_doubleSpinBox.setValue(float(self.configuration["sim_odt_program_defaults"]["odt_warmup_time_ms"]))
-            self.shutter_delay_doubleSpinBox.setValue(float(self.configuration["sim_odt_program_defaults"]["shutter_delay_ms"]))
 
         # connect buttons
         self.add_pos_Button.clicked.connect(self.add_position)
@@ -194,9 +175,26 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         self.stack_groupBox.toggled.connect(self._update_n_images)
 
         # events
-        mmcore.events.sequenceStarted.connect(self._on_mda_started)
-        mmcore.events.sequenceFinished.connect(self._on_mda_finished)
-        mmcore.events.sequencePauseToggled.connect(self._on_mda_paused)
+        # mmcore.events.sequenceStarted.connect(self._on_mda_started)
+        # mmcore.events.sequenceFinished.connect(self._on_mda_finished)
+        # mmcore.events.sequencePauseToggled.connect(self._on_mda_paused)
+
+    def set_cfg(self):
+        defaults = self.configuration["sim_odt_program_defaults"]
+        # initial value for ROI
+        self.sx_spinBox.setValue(int(defaults["sx"]))
+        self.cx_spinBox.setValue(int(defaults["cx"]))
+        self.sy_spinBox.setValue(int(defaults["sy"]))
+        self.cy_spinBox.setValue(int(defaults["cy"]))
+
+        # default value for exposure times
+        self.odt_exposure_SpinBox.setValue(float(defaults["odt_exposure_ms"]))
+        self.sim_exposure_SpinBox.setValue(float(defaults["sim_exposure_ms"]))
+        self.odt_frametime_SpinBox.setValue(float(defaults["odt_frametime_ms"]))
+        self.daq_dt_doubleSpinBox.setValue(int(defaults["daq_dt_us"]))
+        self.sim_warmup_doubleSpinBox.setValue(float(defaults["sim_warmup_time_ms"]))
+        self.odt_warmup_doubleSpinBox.setValue(float(defaults["odt_warmup_time_ms"]))
+        self.shutter_delay_doubleSpinBox.setValue(float(defaults["shutter_delay_ms"]))
 
     def _set_enabled(self, enabled: bool):
         self.save_groupBox.setEnabled(enabled)
@@ -235,20 +233,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         self.n_images_label.setText(f"{round((range / step) + 1)}")
 
-    def _on_mda_started(self, sequence):
-        self._set_enabled(False)
-        self.pause_Button.show()
-        self.cancel_Button.show()
-        self.run_Button.hide()
-
-    def _on_mda_finished(self, sequence):
-        self._set_enabled(True)
-        self.pause_Button.hide()
-        self.cancel_Button.hide()
-        self.run_Button.show()
-
-    def _on_mda_paused(self, paused):
-        self.pause_Button.setText("GO" if paused else "PAUSE")
 
     # add, remove, clear channel table
     def add_channel(self):
