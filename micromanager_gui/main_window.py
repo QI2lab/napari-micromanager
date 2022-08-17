@@ -657,13 +657,29 @@ class MainWindow(QtW.QWidget, _MainUI):
         min_p = self.min_scale_doubleSpinBox.value()
         max_p = self.max_scale_doubleSpinBox.value()
 
-        # only scale the visible layer, which is the last layer which is visible
+        # only scale the visible layer, which is the first layer which is not hidden
+        # todo: this doesn't always work ... how to figure out which layer is "on top"
         for l in reversed(self.viewer.layers):
             if l.visible:
-                vmin = np.percentile(l.data, min_p)
-                vmax = np.percentile(l.data, max_p)
+                # get slider position and only scale for the visible slice
+                # channel_dim = 4
+                # current_step = list(self.viewer.dims.current_step[:-2])
+                # current_step.pop(channel_dim)
 
-                l.contrast_limits = (vmin, vmax)
+                # don't let this code breaking crash the program...
+                try:
+                    # todo: think this only works if don't have scale = dxy set
+                    current_slice = l.world_to_data(self.viewer.dims.current_step)[:-2]
+                    current_slice = tuple([int(c) for c in current_slice])
+
+                    vmin = np.percentile(l.data[tuple(current_slice)].ravel(), min_p)
+                    vmax = np.percentile(l.data[tuple(current_slice)].ravel(), max_p)
+
+                    # converting to float will force dask to compute
+                    l.contrast_limits = (float(vmin), float(vmax))
+                except Exception as e:
+                    print(e)
+
                 break
 
 
