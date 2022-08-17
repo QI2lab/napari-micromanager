@@ -38,7 +38,7 @@
       <property name="geometry">
        <rect>
         <x>0</x>
-        <y>0</y>
+        <y>-108</y>
         <width>458</width>
         <height>1032</height>
        </rect>
@@ -1608,9 +1608,15 @@
       <number>0</number>
      </property>
      <item>
-      <widget class="QCheckBox" name="show_dataset_checkBox">
+      <widget class="QPushButton" name="show_Button">
+       <property name="minimumSize">
+        <size>
+         <width>90</width>
+         <height>40</height>
+        </size>
+       </property>
        <property name="text">
-        <string>show in viewer</string>
+        <string>SHOW Imgs</string>
        </property>
       </widget>
      </item>

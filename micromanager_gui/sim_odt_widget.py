@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import dask.array
 from qtpy import QtWidgets as QtW
 from qtpy import uic
 from qtpy.QtCore import QSize, Qt
@@ -15,11 +14,6 @@ from useq import MDASequence
 if TYPE_CHECKING:
     from pymmcore_plus import RemoteMMCore
 
-# daq
-import mcsim.expt_ctrl.daq
-from mcsim.expt_ctrl.program_sim_odt import get_sim_odt_sequence
-# dmd
-from mcsim.expt_ctrl import dlp6500
 from localize_psf import affine
 import numpy as np
 import time
@@ -27,6 +21,11 @@ import datetime
 import zarr
 import dask.array as da
 import threading
+# daq and dmd
+import mcsim.expt_ctrl.daq
+from mcsim.expt_ctrl.program_sim_odt import get_sim_odt_sequence
+from mcsim.expt_ctrl import dlp6500
+
 
 ICONS = Path(__file__).parent / "icons"
 OBJECTIVE_DEVICE = "Objective"
@@ -86,7 +85,7 @@ class _MultiDUI:
     below_doubleSpinBox: QtW.QDoubleSpinBox
     z_range_abovebelow_doubleSpinBox: QtW.QDoubleSpinBox
 
-    show_dataset_checkBox: QtW.QCheckBox
+    show_Button: QtW.QPushButton
     run_Button: QtW.QPushButton
     pause_Button: QtW.QPushButton
     cancel_Button: QtW.QPushButton
@@ -131,6 +130,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         self.daq = daq
         self.dmd = dmd
         self.configuration = configuration
+        self.img_data = None
+        self.acquisition_modes = ["default", "both", "average"]
 
         self.viewer = viewer
         super().__init__(parent)
@@ -152,6 +153,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         self.browse_save_Button.clicked.connect(self.set_multi_d_acq_dir)
         self.run_Button.clicked.connect(self._on_run_clicked)
+        self.show_Button.clicked.connect(self.show_dataset)
         # self.run_Button.clicked.connect(self.on_run_clicked)
 
         # connect for z stack
@@ -165,9 +167,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         self.above_doubleSpinBox.valueChanged.connect(self._update_abovebelow_range)
         self.below_doubleSpinBox.valueChanged.connect(self._update_abovebelow_range)
 
-        self.z_range_abovebelow_doubleSpinBox.valueChanged.connect(
-            self._update_n_images
-        )
+        self.z_range_abovebelow_doubleSpinBox.valueChanged.connect(self._update_n_images)
         self.zrange_spinBox.valueChanged.connect(self._update_n_images)
         self.z_range_topbottom_doubleSpinBox.valueChanged.connect(self._update_n_images)
         self.step_size_doubleSpinBox.valueChanged.connect(self._update_n_images)
@@ -252,7 +252,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             self.channel_comboBox.addItems(pks)
 
             # populate camera options
-            self.camera_select_comboBox.addItems(["default", "both"])
+            self.camera_select_comboBox.addItems(self.acquisition_modes)
 
             self.channel_tableWidget.setCellWidget(idx, 0, self.channel_comboBox)
             self.channel_tableWidget.setCellWidget(idx, 1, self.mode_comboBox)
@@ -379,13 +379,13 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         # todo: next thing is to allow different "channels" to have different numbers of pictures
         # this would enable also doing things like widefield or etc...along with SIM
+        saving = self.save_groupBox.isChecked()
 
         # saving
-        if self.save_groupBox.isChecked() and not (
-                self.fname_lineEdit.text() and Path(self.dir_lineEdit.text()).is_dir()):
+        if saving and not (self.fname_lineEdit.text() and Path(self.dir_lineEdit.text()).is_dir()):
             raise ValueError("Select a filename and a valid directory.")
 
-        if self.save_groupBox.isChecked():
+        if saving:
             subdir = self.fname_lineEdit.text()
             save_path = Path(self.dir_lineEdit.text()) / subdir / "sim_odt.zarr"
 
@@ -433,17 +433,18 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##############################
         # xy-positions
         # ##############################
-        do_position_scan = self.stage_groupBox.isChecked() and self.stage_tableWidget.rowCount() > 0
+        do_xy_scan = self.stage_groupBox.isChecked() and self.stage_tableWidget.rowCount() > 0
+
         xy_positions = []
         xy_positions_real = []
-        if do_position_scan:
+        if do_xy_scan:
             for r in range(self.stage_tableWidget.rowCount()):
                 xy_positions.append([float(self.stage_tableWidget.item(r, 0).text()),
                                   float(self.stage_tableWidget.item(r, 1).text())])
         else:
             xy_positions.append([float(mmc1.getXPosition()),
                               float(mmc1.getYPosition())])
-        npositions = len(xy_positions)
+        nxy_positions = len(xy_positions)
 
         # ##############################
         # zstack
@@ -533,16 +534,16 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # channels for camera 2
         cam2_channels = [ch for ch, cam in zip(channels, acquisition_mode) if ch == "odt" or cam == "both"]
         ncam2_channels = len(cam2_channels)
-        n_odt_sim_channels = len([ch for ch in cam2_channels if ch != "odt"])
+        ncam2_sim_channels = len([ch for ch in cam2_channels if ch != "odt"])
 
-        if ncam2_channels - n_odt_sim_channels > 1:
+        if ncam2_channels - ncam2_sim_channels > 1:
             raise NotImplementedError("currently only one ODT channel is allowed")
 
         print(f'channels = {channels}')
-        print(f"channel_pattern_modes = {channels_pattern_mode}")
-        print(f"cams = {acquisition_mode}")
-        print(f"sim_channels = {cam1_channels}")
-        print(f"odt_cam_channels = {cam2_channels}")
+        print(f"pattern modes = {channels_pattern_mode}")
+        print(f"acquisition modes = {acquisition_mode}")
+        print(f"cam1 channels = {cam1_channels}")
+        print(f"cam2 channels = {cam2_channels}")
 
         # ##################################
         # get odt camera and set up
@@ -566,13 +567,13 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         cy = self.cy_spinBox.value()
         sy = self.sy_spinBox.value()
 
-        odt_cam_roi = [cy - sy // 2, cy - sy // 2 + sy,
+        cam2_roi = [cy - sy // 2, cy - sy // 2 + sy,
                        cx - sx // 2, cx - sx // 2 + sx]
 
         mmc2.setROI(cx - sx // 2, cy - sy // 2, sx, sy)
 
-        nx_odt = mmc2.getImageWidth()
-        ny_odt = mmc2.getImageHeight()
+        nx_cam2 = mmc2.getImageWidth()
+        ny_cam2 = mmc2.getImageHeight()
 
         # ##################################
         # get SIM camera and set properties
@@ -604,8 +605,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         mmc1.setProperty(sim_cam, "OUTPUT TRIGGER POLARITY[2]", "POSITIVE")
         mmc1.setProperty(sim_cam, "OUTPUT TRIGGER SOURCE[2]", "VSYNC")
 
-        nx_sim = mmc1.getImageWidth()
-        ny_sim = mmc1.getImageHeight()
+        nx_cam1 = mmc1.getImageWidth()
+        ny_cam1 = mmc1.getImageHeight()
 
         # ##################################
         # prepare daq program, but don't program device yet
@@ -649,15 +650,20 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                                                      use_dmd_as_odt_shutter=False,
                                                                      n_digital_ch=self.daq.n_digital_lines,
                                                                      n_analog_ch=self.daq.n_analog_lines,
-                                                                     cameras=[c if c == "both" else "sim" for c in acquisition_mode])
+                                                                     acquisition_mode=[c if c == "both" or c == "average" else "sim" for c in acquisition_mode])
+
         # ##################################
         # create zarr
         # ##################################
         if save_path is not None:
             img_data = zarr.open(save_path, mode="w")
             img_data.attrs["save_directory"] = str(save_path)
+
+            self.img_data = zarr.open(save_path, mode="r")
         else:
             img_data = zarr.open(mode="w")
+
+            self.img_data = img_data
 
         # other metadata
         img_data.attrs["timestamp"] = datetime.datetime.now().strftime('%Y_%d_%m_%H;%M;%S')
@@ -680,7 +686,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             # affine transformation from ODT ROI to SIM full image
             xform = np.array(self.configuration["camera_affine_transforms"]["xform"])
             # todo: check this is correct
-            xform_real_roi2full = affine.params2xform([1, 0, odt_cam_roi[2], 1, 0, odt_cam_roi[0]])
+            xform_real_roi2full = affine.params2xform([1, 0, cam2_roi[2], 1, 0, cam2_roi[0]])
             xform_cam2_roi_to_cam1 = np.linalg.inv(xform).dot(xform_real_roi2full)
 
             img_data.attrs["affine_cam2_roi_to_cam1"] = xform_cam2_roi_to_cam1.tolist()
@@ -688,70 +694,88 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             img_data.attrs["configuration"] = None
             img_data.attrs["affine_cam2_roi_to_cam1"] = None
 
-        # ###################################
-        # datasets for camera # 1
-        # ###################################
-        # sim dataset
-        img_data.create_dataset("cam1/sim", shape=(npositions, ntimes, nz, nparams, ncam1_channels, n_sim_patterns_channel, ny_sim, nx_sim),
-                                chunks=(1, 1, 1, 1, 1, 1, ny_sim, nx_sim), dtype='uint16', compressor="none")
-        img_data.cam1.sim.attrs["dimensions"] = ["position", "time", "z", "parameters", "channel", "pattern", "y", "x"]
-        img_data.cam1.attrs["channels"] = cam1_channels
-        img_data.cam1.attrs["exposure_time_ms"] = exposure_tms_sim
-        try:
-            img_data.cam1.attrs["dx_um"] = self.configuration["camera_settings_1"]["dxy"]
-            img_data.cam1.attrs["dy_um"] = self.configuration["camera_settings_1"]["dxy"]
-            img_data.cam1.attrs["na_detection"] = self.configuration["camera_settings_1"]["na_detection"]
-        except (ValueError, TypeError):
-            img_data.cam1.attrs["dx_um"] = None
-            img_data.cam1.attrs["dy_um"] = None
-            img_data.cam1.attrs["na_detection"] = None
 
-        # sim pattern information for specific channels we are using
-        sim_pattern_dat = [dlp6500.get_preset_info(self.dmd.presets[ch]["default"], self.dmd.firmware_pattern_info)[0] for ch in cam1_channels]
-        img_data.cam1.sim.attrs["nangles"] = np.array([spd["nangles"][0] for spd in sim_pattern_dat]).tolist()
-        img_data.cam1.sim.attrs["nphases"] = np.array([spd["nphases"][0] for spd in sim_pattern_dat]).tolist()
-        img_data.cam1.sim.attrs["lattice_vects1"] = np.array([spd["a1"] for spd in sim_pattern_dat]).tolist()
-        img_data.cam1.sim.attrs["lattice_vects2"] = np.array([spd["a2"] for spd in sim_pattern_dat]).tolist()
-        img_data.cam1.sim.attrs["phases"] = np.array([spd["phase"] for spd in sim_pattern_dat]).tolist()
-        img_data.cam1.sim.attrs["frqs"] = np.array([spd["frq"] for spd in sim_pattern_dat]).tolist()
+        axis_list = ["position", "time", "z", "parameters", "channel", "pattern", "y", "x"]
+
+        # ###################################
+        # group for camera # 1
+        # ###################################
+        g1 = img_data.create_group("cam1")
+        g1.attrs["channels"] = cam1_channels
+        g1.attrs["exposure_time_ms"] = exposure_tms_sim
+
+        try:
+            g1.attrs["dx_um"] = self.configuration["camera_settings_1"]["dxy"]
+            g1.attrs["dy_um"] = self.configuration["camera_settings_1"]["dxy"]
+            g1.attrs["na_detection"] = self.configuration["camera_settings_1"]["na_detection"]
+        except (ValueError, TypeError):
+            g1.attrs["dx_um"] = None
+            g1.attrs["dy_um"] = None
+            g1.attrs["na_detection"] = None
 
         # OTF
         try:
-            img_data.cam1.attrs["otf_model_parameters"] = self.configuration["camera_settings_1"]["otf_calibration"]["fit_params"]
+            g1.attrs["otf_model_parameters"] = self.configuration["camera_settings_1"]["otf_calibration"]["fit_params"]
         except (KeyError, TypeError) as e:
             print(e)
-            img_data.cam1.attrs["affine_transformations"] = [[]] * ncam1_channels
+            g1.attrs["affine_transformations"] = [[]] * ncam1_channels
 
         # affine transformation information for specific channels we are using
         try:
-            img_data.cam1.attrs["affine_transformations"] = [self.configuration["camera_settings_1"]["dmd_affine_transforms"][ch] for ch in cam1_channels]
+            g1.attrs["affine_transformations"] = [self.configuration["camera_settings_1"]["dmd_affine_transforms"][ch] for ch in cam1_channels]
         except (KeyError, TypeError) as e:
             print(e)
-            img_data.cam1.attrs["otf_model_parameters"] = None
+            g1.attrs["otf_model_parameters"] = None
+
+        # ###################################
+        # datsets for camera # 1
+        # ###################################
+        # sim dataset
+        g1.create_dataset("sim", shape=(nxy_positions, ntimes, nz, nparams, ncam1_channels, n_sim_patterns_channel, ny_cam1, nx_cam1),
+                                chunks=(1, 1, 1, 1, 1, 1, ny_cam1, nx_cam1), dtype="uint16", compressor="none")
+        g1.sim.attrs["dimensions"] = axis_list
+        g1.sim.attrs["channels"] = cam1_channels
+
+        # sim pattern information for specific channels we are using
+        sim_pattern_dat = [dlp6500.get_preset_info(self.dmd.presets[ch]["default"], self.dmd.firmware_pattern_info)[0] for ch in cam1_channels]
+        g1.sim.attrs["nangles"] = np.array([spd["nangles"][0] for spd in sim_pattern_dat]).tolist()
+        g1.sim.attrs["nphases"] = np.array([spd["nphases"][0] for spd in sim_pattern_dat]).tolist()
+        g1.sim.attrs["lattice_vects1"] = np.array([spd["a1"] for spd in sim_pattern_dat]).tolist()
+        g1.sim.attrs["lattice_vects2"] = np.array([spd["a2"] for spd in sim_pattern_dat]).tolist()
+        g1.sim.attrs["phases"] = np.array([spd["phase"] for spd in sim_pattern_dat]).tolist()
+        g1.sim.attrs["frqs"] = np.array([spd["frq"] for spd in sim_pattern_dat]).tolist()
+
+        # ###################################
+        # group for camera # 2
+        # ###################################
+        g2 = img_data.create_group("cam2")
+        g2.attrs["channels"] = cam2_channels
+        g2.attrs["exposure_time_ms"] = exposure_tms_odt
+
+        try:
+            g2.attrs["dx_um"] = self.configuration["camera_settings_2"]["dxy"]
+            g2.attrs["dy_um"] = self.configuration["camera_settings_2"]["dxy"]
+            g2.attrs["na_excitation"] = self.configuration["camera_settings_1"]["na_excitation"]
+            g2.attrs["na_detection"] = self.configuration["camera_settings_1"]["na_detection"]
+        except (KeyError, TypeError) as e:
+            print(e)
+            g2.attrs["dx_um"] = None
+            g2.attrs["dy_um"] = None
+            g2.attrs["na_excitation"] = None
+            g2.attrs["na_detection"] = None
 
         # ###################################
         # datasets for camera # 2
         # ###################################
         # odt dataset
-        img_data.create_dataset("cam2/odt", shape=(npositions, ntimes, nz, nparams, 1, n_odt_patterns, ny_odt, nx_odt),
-                                chunks=(1, 1, 1, 1, 1, 1, ny_odt, nx_odt), dtype='uint16', compressor="none")
-        # only add "channel" so compatible shape with SIM for display
-        img_data.cam2.odt.attrs["dimensions"] = ["position", "time", "z", "parameters", "channel", "pattern", "y", "x"]
-        img_data.cam2.attrs["exposure_time_ms"] = exposure_tms_odt
-        img_data.cam2.odt.attrs["frame_time_ms"] = min_odt_frame_time_ms
-        img_data.cam2.odt.attrs["volume_time_ms"] = min_odt_frame_time_ms * n_odt_patterns # todo: correct this
+        g2.create_dataset("odt", shape=(nxy_positions, ntimes, nz, nparams, 1, n_odt_patterns, ny_cam2, nx_cam2),
+                                chunks=(1, 1, 1, 1, 1, 1, ny_cam2, nx_cam2), dtype='uint16', compressor="none")
 
-        try:
-            img_data.cam2.attrs["dx_um"] = self.configuration["camera_settings_2"]["dxy"]
-            img_data.cam2.attrs["dy_um"] = self.configuration["camera_settings_2"]["dxy"]
-            img_data.cam2.attrs["na_excitation"] = self.configuration["camera_settings_1"]["na_excitation"]
-            img_data.cam2.attrs["na_detection"] = self.configuration["camera_settings_1"]["na_detection"]
-        except (KeyError, TypeError) as e:
-            print(e)
-            img_data.cam2.attrs["dx_um"] = None
-            img_data.cam2.attrs["dy_um"] = None
-            img_data.cam2.attrs["na_excitation"] = None
-            img_data.cam2.attrs["na_detection"] = None
+        # only add "channel" so compatible shape with SIM for display
+        g2.odt.attrs["dimensions"] = axis_list
+        g2.odt.attrs["channels"] = [ch for ch in cam2_channels if ch == "odt"]
+        g2.odt.attrs["frame_time_ms"] = min_odt_frame_time_ms
+        g2.odt.attrs["volume_time_ms"] = min_odt_frame_time_ms * n_odt_patterns # todo: correct this
 
         # get odt pattern data
         if "odt" in channels:
@@ -765,17 +789,25 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             xoffsets, yoffsets = zip(*xyoffsets)
 
             # set odt dataset metadata
-            img_data.cam2.odt.attrs["camera_roi"] = odt_cam_roi
+            img_data.cam2.odt.attrs["camera_roi"] = cam2_roi
             img_data.cam2.odt.attrs["x_offsets"] = xoffsets
             img_data.cam2.odt.attrs["y_offsets"] = yoffsets
             img_data.cam2.odt.attrs["carrier_frq"] = list(dmd_pattern_data[odt_firmware_inds[0]]["frequency"])
             img_data.cam2.odt.attrs["angle"] = dmd_pattern_data[odt_firmware_inds[0]]["angle"]
             img_data.cam2.odt.attrs["radius"] = dmd_pattern_data[odt_firmware_inds[0]]["radius"]
 
+        # ###################################
+        # datasets for camera # 2
+        # ###################################
         # SIM data from other objective
-        img_data.create_dataset("cam2/sim", shape=(npositions, ntimes, nz, nparams, n_odt_sim_channels, n_sim_patterns_channel, ny_odt, nx_odt),
-                                chunks=(1, 1, 1, 1, 1, 1, ny_odt, nx_odt), dtype='uint16', compressor="none")
-        img_data.cam2.sim.attrs["dimensions"] = ["position", "time", "z", "parameters", "channel", "pattern", "y", "x"]
+        img_data.create_dataset("cam2/sim", shape=(nxy_positions, ntimes, nz, nparams, ncam2_sim_channels, n_sim_patterns_channel, ny_cam2, nx_cam2),
+                                chunks=(1, 1, 1, 1, 1, 1, ny_cam2, nx_cam2), dtype='uint16', compressor="none")
+        img_data.cam2.sim.attrs["dimensions"] = axis_list
+        img_data.cam2.sim.attrs["channels"] = [ch for ch in cam2_channels if ch != "odt"]
+
+        # ###################################
+        # DAQ data
+        # ###################################
 
         # daq program
         img_data.create_dataset("daq/digital_program", shape=digital_program.shape, dtype='int8', compressor="none")
@@ -796,329 +828,346 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         mmc1.setCircularBufferMemoryFootprint(sim_circ_buffer_mb)
         mmc2.setCircularBufferMemoryFootprint(odt_circ_buffer_mb)
 
-        # start timer
-        tstart_full_sequence = time.perf_counter()
+        def run():
+            # start timer
+            tstart_full_sequence = time.perf_counter()
 
-        if save_path is not None:
-            print(f"saving to {str(save_path):s}")
+            if save_path is not None:
+                print(f"saving to {str(save_path):s}")
 
-        print(daq_programming_info)
+            print(daq_programming_info)
 
-        # time estimate
-        position_time_s = dt * digital_program.shape[0] * ntimes * nz
-        timeout = 10 + position_time_s
+            # time estimate
+            position_time_s = dt * digital_program.shape[0] * ntimes * nz
+            timeout = 10 + position_time_s
 
-        pgm_time_s = position_time_s * npositions
-        pgm_time_mins = int(pgm_time_s // 60)
+            pgm_time_s = position_time_s * nxy_positions
+            pgm_time_mins = int(pgm_time_s // 60)
 
-        print(f"program expected time = {pgm_time_mins:02d}m:{(pgm_time_s - 60 * pgm_time_mins):.3f}s, timeout per position = {timeout:.1f}s")
+            print(f"program expected time = {pgm_time_mins:02d}m:{(pgm_time_s - 60 * pgm_time_mins):.3f}s, timeout per position = {timeout:.1f}s")
 
-        for pp in range(npositions):
-            # move to new position
-            if do_position_scan:
-                mmc1.setXYPosition(xy_positions[pp][0], xy_positions[pp][1])
+            for pp in range(nxy_positions):
+                # move to new position
+                if do_xy_scan:
+                    mmc1.setXYPosition(xy_positions[pp][0], xy_positions[pp][1])
 
-                xy_positions_real.append([float(self._mmc.getXPosition()), float(self._mmc.getYPosition())])
+                    xy_positions_real.append([float(self._mmc.getXPosition()), float(self._mmc.getYPosition())])
 
-            # ##################################
-            # set DAQ to initial state
-            # ##################################
+                # ##################################
+                # set DAQ to initial state
+                # ##################################
 
-            # make sure DMD advance/enable trigger lines are low before we program the DMD
-            self.daq.set_digital_lines_by_name(np.array([0, 0, 1, 1, 0, 0], dtype=np.uint8),
-                                               ["dmd_enable",
-                                                "dmd_advance",
-                                                "odt_laser",
-                                                "odt_shutter",
-                                                "odt_cam_sync",
-                                                "camera_trigger_monitor"])
+                # make sure DMD advance/enable trigger lines are low before we program the DMD
+                self.daq.set_digital_lines_by_name(np.array([0, 0, 1, 1, 0, 0], dtype=np.uint8),
+                                                   ["dmd_enable",
+                                                    "dmd_advance",
+                                                    "odt_laser",
+                                                    "odt_shutter",
+                                                    "odt_cam_sync",
+                                                    "camera_trigger_monitor"])
 
-            # ##################################
-            # program DMD
-            # ##################################
-            blank = [False if ch == "odt" else True for ch in channels]
-            dmd_modes = [chm if ch == "odt" else "default" for ch, chm in zip(channels, channels_pattern_mode)]
+                # ##################################
+                # program DMD
+                # ##################################
+                blank = [False if ch == "odt" or am == "average" else True for ch, am in zip(channels, acquisition_mode)]
+                noff_after = [1 if am == "average" else 0 for am in acquisition_mode]
+                dmd_modes = [chm if ch == "odt" else "default" for ch, chm in zip(channels, channels_pattern_mode)]
 
-            pic_inds, bit_inds = self.dmd.program_dmd_seq(dmd_modes, channels, nrepeats=1, ndarkframes=0, blank=blank,
-                                                          mode_pattern_indices=None, triggered=True, verbose=False)
-            dmd_data = np.vstack((pic_inds, bit_inds))
+                pic_inds, bit_inds = self.dmd.program_dmd_seq(dmd_modes, channels, nrepeats=1,
+                                                              noff_before=0, noff_after=noff_after,
+                                                              blank=blank, mode_pattern_indices=None,
+                                                              triggered=True, verbose=False)
+                dmd_data = np.vstack((pic_inds, bit_inds))
 
-            if pp == 0:
-                # store DMD information in zarr
-                img_data.create_dataset("dmd_data", shape=dmd_data.shape, dtype='int16', compressor='none')
-                img_data.dmd_data[:] = dmd_data
-                img_data.dmd_data.attrs["dimensions"] = ["pattern", "time"]
-                img_data.dmd_data.attrs["dmd_nx"] = self.dmd.width
-                img_data.dmd_data.attrs["dmd_ny"] = self.dmd.height
-                img_data.dmd_data.attrs["dmd_pitch_um"] = self.dmd.pitch
+                if pp == 0:
+                    # store DMD information in zarr
+                    img_data.create_dataset("dmd_data", shape=dmd_data.shape, dtype='int16', compressor='none')
+                    img_data.dmd_data[:] = dmd_data
+                    img_data.dmd_data.attrs["dimensions"] = ["pattern", "time"]
+                    img_data.dmd_data.attrs["dmd_nx"] = self.dmd.width
+                    img_data.dmd_data.attrs["dmd_ny"] = self.dmd.height
+                    img_data.dmd_data.attrs["dmd_pitch_um"] = self.dmd.pitch
 
-            # ##################################
-            # trigger camera twice, required for Phantom camera
-            # ##################################
-            # self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam"])
-            # time.sleep(0.1)
-            # self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam"])
-            # time.sleep(0.1)
-            # self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam"])
-            # time.sleep(0.1)
-            # self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam"])
-            # time.sleep(0.1)
+                    # todo: should I store the firmware pattern here too?
 
-            # total number of pictures for camera 1
-            nsim_pics = n_sim_patterns_channel * ncam1_channels * ntimes * nz
-            n_cam1_pics = nsim_pics
+                # ##################################
+                # trigger camera twice, required for Phantom camera
+                # ##################################
+                # self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam"])
+                # time.sleep(0.1)
+                # self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam"])
+                # time.sleep(0.1)
+                # self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam"])
+                # time.sleep(0.1)
+                # self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam"])
+                # time.sleep(0.1)
 
-            # total number of pictures for camera 2
-            nodt_pics = n_odt_patterns * ntimes * nz * (ncam2_channels - n_odt_sim_channels)
-            nodt_sim_pics = n_sim_patterns_channel * n_odt_sim_channels * ntimes * nz
-            n_cam2_pics = nodt_pics + nodt_sim_pics
+                # total number of pictures for camera 1
+                nsim_pics = n_sim_patterns_channel * ncam1_channels * ntimes * nz
+                n_cam1_pics = nsim_pics
 
-            # lock to use for printing
-            lock = threading.Lock()
+                # total number of pictures for camera 2
+                nodt_pics = n_odt_patterns * ntimes * nz * (ncam2_channels - ncam2_sim_channels)
+                nodt_sim_pics = n_sim_patterns_channel * ncam2_sim_channels * ntimes * nz
+                n_cam2_pics = nodt_pics + nodt_sim_pics
 
-            def read_cam1():
-                ii_sim_cam = 0
-                iz_sim = 0
-                ic_sim = 0
-                ip_sim = 0
-                it_sim = 0
-                for icount in range(n_cam1_pics):
-                    while mmc1.getRemainingImageCount() == 0:
-                        tnow = time.perf_counter() - tstart_acq
+                # lock to use for printing
+                lock = threading.Lock()
 
-                        if tnow > timeout:
-                            print("timeout reached......................")
+                def read_cam1():
+                    ii_sim_cam = 0
+                    iz_sim = 0
+                    ic_sim = 0
+                    ip_sim = 0
+                    it_sim = 0
+                    for icount in range(n_cam1_pics):
+                        while mmc1.getRemainingImageCount() == 0:
+                            tnow = time.perf_counter() - tstart_acq
+
+                            if tnow > timeout:
+                                print("timeout reached......................")
+                                break
+
+                        # if we timed out, break out of loop
+                        npics = mmc1.getRemainingImageCount()
+                        if npics == 0:
                             break
 
-                    # if we timed out, break out of loop
-                    npics = mmc1.getRemainingImageCount()
-                    if npics == 0:
-                        break
+                        img_data.cam1.sim[pp, it_sim, iz_sim, 0, ic_sim, ip_sim] = mmc1.popNextImage()
 
-                    img_data.cam1.sim[pp, it_sim, iz_sim, 0, ic_sim, ip_sim] = mmc1.popNextImage()
-
-                    # indexing logic. We acquire images (from slow to fast) time, z-position, channel, pattern
-                    ii_sim_cam += 1
-                    if ip_sim != (n_sim_patterns_channel - 1):
-                        # increment pattern everytime
-                        ip_sim += 1
-                    else:
-                        ip_sim = 0
-
-                        elapsed_time = time.perf_counter() - tstart_full_sequence
-                        elapsed_time_min = int(elapsed_time // 60)
-
-                        # print in threadsafe way
-                        with lock:
-                            print(
-                                f"Camera #1 position {pp + 1:d}/{npositions:d},"
-                                f" channels {ic_sim + 1:d}/{ncam1_channels:d},"
-                                f" z-step {iz_sim + 1:d}/{nz:d},"
-                                f" time {it_sim + 1:d}/{ntimes:d},"                                
-                                f" images left in buffer = {npics - 1:d},"
-                                f" elapsed time = {elapsed_time_min:02d}m:{elapsed_time - elapsed_time_min * 60:.1f}s")
-
-                        # increment channel after pattern
-                        if ic_sim != (ncam1_channels - 1):
-                            ic_sim += 1
+                        # indexing logic. We acquire images (from slow to fast) time, z-position, channel, pattern
+                        ii_sim_cam += 1
+                        if ip_sim != (n_sim_patterns_channel - 1):
+                            # increment pattern everytime
+                            ip_sim += 1
                         else:
-                            ic_sim = 0
+                            ip_sim = 0
 
-                            # increment z after channels
-                            if iz_sim != (nz - 1):
-                                iz_sim += 1
+                            elapsed_time = time.perf_counter() - tstart_full_sequence
+                            elapsed_time_min = int(elapsed_time // 60)
+
+                            # print in threadsafe way
+                            with lock:
+                                print(
+                                    f"Camera #1 position {pp + 1:d}/{nxy_positions:d},"
+                                    f" channels {ic_sim + 1:d}/{ncam1_channels:d},"
+                                    f" z-step {iz_sim + 1:d}/{nz:d},"
+                                    f" time {it_sim + 1:d}/{ntimes:d},"                                
+                                    f" images left in buffer = {npics - 1:d},"
+                                    f" elapsed time = {elapsed_time_min:02d}m:{elapsed_time - elapsed_time_min * 60:.1f}s")
+
+                            # increment channel after pattern
+                            if ic_sim != (ncam1_channels - 1):
+                                ic_sim += 1
                             else:
-                                iz_sim = 0
-                                if it_sim != (ntimes - 1):
-                                    it_sim += 1
+                                ic_sim = 0
 
-                return ii_sim_cam
+                                # increment z after channels
+                                if iz_sim != (nz - 1):
+                                    iz_sim += 1
+                                else:
+                                    iz_sim = 0
+                                    if it_sim != (ntimes - 1):
+                                        it_sim += 1
 
-            def read_cam2():
-                # cam #2 counters
-                ii_odt_cam = 0
-                iz_odt = 0
-                ic_odt = 0
-                ip_odt = 0
-                it_odt = 0
+                    return ii_sim_cam
 
-                for icount in range(n_cam2_pics):
-                    while mmc2.getRemainingImageCount() == 0:
-                        tnow = time.perf_counter() - tstart_acq
+                def read_cam2():
+                    # cam #2 counters
+                    ii_odt_cam = 0
+                    iz_odt = 0
+                    ic_odt = 0
+                    ip_odt = 0
+                    it_odt = 0
 
-                        if tnow > timeout:
-                            print("timeout reached......................")
+                    for icount in range(n_cam2_pics):
+                        while mmc2.getRemainingImageCount() == 0:
+                            tnow = time.perf_counter() - tstart_acq
+
+                            if tnow > timeout:
+                                print("timeout reached......................")
+                                break
+
+                        # if we timed out, break out of loop
+                        npics = mmc2.getRemainingImageCount()
+                        if npics == 0:
                             break
 
-                    # if we timed out, break out of loop
-                    npics = mmc2.getRemainingImageCount()
-                    if npics == 0:
-                        break
-
-                    if cam2_channels[ic_odt] == "odt":
-                        img_data.cam2.odt[pp, it_odt, iz_odt, 0, 0, ip_odt] = mmc2.popNextImage()
-                    else:
-                        ic_odt_sim_now = ic_odt - len([ch for ch in cam2_channels[:ic_odt] if ch == "odt"])
-                        img_data.cam2.sim[pp, it_odt, iz_odt, 0, ic_odt_sim_now, ip_odt] = mmc2.popNextImage()
-
-                    # indexing logic. We acquire images (from slow to fast) time, z-position, pattern
-                    ii_odt_cam += 1
-                    # if ip_odt != (n_odt_patterns - 1):
-                    if ip_odt != (npics_odt_cam_per_channels[ic_odt] - 1):
-                        # increment pattern everytime
-                        ip_odt += 1
-                    else:
-                        ip_odt = 0
-
-                        elapsed_time = time.perf_counter() - tstart_full_sequence
-                        elapsed_time_min = int(elapsed_time // 60)
-                        # thread safe print
-                        with lock:
-                            print(
-                                f"Camera #2 position {pp + 1:d}/{npositions:d},"
-                                f" channels {ic_odt + 1:d}/{ncam2_channels:d},"
-                                f" z-step {iz_odt + 1:d}/{nz:d},"
-                                f" time {it_odt + 1:d}/{ntimes:d},"                                
-                                f" images left in buffer = {npics - 1:d},"
-                                f" elapsed time = {elapsed_time_min:02d}m:{elapsed_time - elapsed_time_min * 60:.1f}s")
-
-                        # increment channel
-                        if ic_odt != (ncam2_channels - 1):
-                            ic_odt += 1
+                        if cam2_channels[ic_odt] == "odt":
+                            img_data.cam2.odt[pp, it_odt, iz_odt, 0, 0, ip_odt] = mmc2.popNextImage()
                         else:
-                            ic_odt = 0
+                            ic_odt_sim_now = ic_odt - len([ch for ch in cam2_channels[:ic_odt] if ch == "odt"])
+                            img_data.cam2.sim[pp, it_odt, iz_odt, 0, ic_odt_sim_now, ip_odt] = mmc2.popNextImage()
 
-                            # increment z after channels
-                            if iz_odt != (nz - 1):
-                                iz_odt += 1
+                        # indexing logic. We acquire images (from slow to fast) time, z-position, pattern
+                        ii_odt_cam += 1
+                        # if ip_odt != (n_odt_patterns - 1):
+                        if ip_odt != (npics_odt_cam_per_channels[ic_odt] - 1):
+                            # increment pattern everytime
+                            ip_odt += 1
+                        else:
+                            ip_odt = 0
+
+                            elapsed_time = time.perf_counter() - tstart_full_sequence
+                            elapsed_time_min = int(elapsed_time // 60)
+                            # thread safe print
+                            with lock:
+                                print(
+                                    f"Camera #2 position {pp + 1:d}/{nxy_positions:d},"
+                                    f" channels {ic_odt + 1:d}/{ncam2_channels:d},"
+                                    f" z-step {iz_odt + 1:d}/{nz:d},"
+                                    f" time {it_odt + 1:d}/{ntimes:d},"                                
+                                    f" images left in buffer = {npics - 1:d},"
+                                    f" elapsed time = {elapsed_time_min:02d}m:{elapsed_time - elapsed_time_min * 60:.1f}s")
+
+                            # increment channel
+                            if ic_odt != (ncam2_channels - 1):
+                                ic_odt += 1
                             else:
-                                iz_odt = 0
-                                if it_odt != (ntimes - 1):
-                                    it_odt += 1
+                                ic_odt = 0
 
-                return ii_odt_cam
+                                # increment z after channels
+                                if iz_odt != (nz - 1):
+                                    iz_odt += 1
+                                else:
+                                    iz_odt = 0
+                                    if it_odt != (ntimes - 1):
+                                        it_odt += 1
+
+                    return ii_odt_cam
+
+                # ##################################
+                # burst acquisition
+                # ##################################
+
+                # enable DMD, otherwise can have timing problems at the start
+                self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["dmd_enable"])
+
+                # let lasers and etc warmup
+                time.sleep(5)
+
+                # program DAQ
+                self.daq.set_sequence(digital_program, analog_program, 1/dt,
+                                      analog_clock_source="/Dev1/PFI2",
+                                      digital_input_source="/Dev1/PFI1",
+                                      di_export_line="/Dev1/PFI2",
+                                      continuous=True)
+
+                # start camera
+                mmc1.startSequenceAcquisition(n_cam1_pics, 0, True)
+                mmc2.startSequenceAcquisition(n_cam2_pics, 0, True)
+
+                # start daq
+                tstart_acq = time.perf_counter()
+                self.daq.start_sequence()
+                thread_save_cam1 = threading.Thread(target=read_cam1)
+                thread_save_cam2 = threading.Thread(target=read_cam2)
+
+                thread_save_cam1.start()
+                thread_save_cam2.start()
+
+                # wait until program is over, then stop daq
+                t_elapsed_now = time.perf_counter() - tstart_acq
+                time.sleep(position_time_s - (t_elapsed_now) + 0.1)
+
+                mmc1.stopSequenceAcquisition()
+                mmc2.stopSequenceAcquisition()
+
+                # reset DAQ
+                self.daq.stop_sequence()
+                self.daq.set_preset("off")
+                self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_enable"])
+
+                # wait for pictures to be stored to disk
+                thread_save_cam1.join()
+                thread_save_cam2.join()
+
+            # after all positions have run, set z-position back to start
+            self.daq.set_analog_lines_by_name([z_volts_start], ["z_stage"])
+
+            # store real xy-positions
+            img_data.attrs["xy_position_um_real"] = xy_positions_real
 
             # ##################################
-            # burst acquisition
+            # reset cameras to internal triggering...
             # ##################################
+            mmc1.setProperty(sim_cam, "TRIGGER SOURCE", "INTERNAL")
 
-            # enable DMD, otherwise can have timing problems at the start
-            self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["dmd_enable"])
+            mmc2.setProperty(odt_cam, "TriggerMode", "Internal Trigger")
+            mmc2.clearROI()
 
-            # let lasers and etc warmup
-            time.sleep(5)
+            print("finished!")
 
-            # program DAQ
-            self.daq.set_sequence(digital_program, analog_program, 1/dt,
-                                  analog_clock_source="/Dev1/PFI2",
-                                  digital_input_source="/Dev1/PFI1",
-                                  di_export_line="/Dev1/PFI2",
-                                  continuous=True)
+        thread_run = threading.Thread(target=run)
+        thread_run.start()
 
-            # start camera
-            mmc1.startSequenceAcquisition(n_cam1_pics, 0, True)
-            mmc2.startSequenceAcquisition(n_cam2_pics, 0, True)
-
-            # start daq
-            tstart_acq = time.perf_counter()
-            self.daq.start_sequence()
-            thread_save_cam1 = threading.Thread(target=read_cam1)
-            thread_save_cam2 = threading.Thread(target=read_cam2)
-
-            thread_save_cam1.start()
-            thread_save_cam2.start()
-
-            # wait until program is over, then stop daq
-            t_elapsed_now = time.perf_counter() - tstart_acq
-            time.sleep(position_time_s - (t_elapsed_now) + 0.1)
-
-            mmc1.stopSequenceAcquisition()
-            mmc2.stopSequenceAcquisition()
-
-            # reset DAQ
-            self.daq.stop_sequence()
-            self.daq.set_preset("off")
-            self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_enable"])
-
-            # wait for pictures to be stored to disk
-            thread_save_cam1.join()
-            thread_save_cam2.join()
-
-        # after all positions have run, set z-position back to start
-        self.daq.set_analog_lines_by_name([z_volts_start], ["z_stage"])
-
-        # store real xy-positions
-        img_data.attrs["xy_position_um_real"] = xy_positions_real
-
-        # ##################################
-        # reset cameras to internal triggering...
-        # ##################################
-        mmc1.setProperty(sim_cam, "TRIGGER SOURCE", "INTERNAL")
-
-        mmc2.setProperty(odt_cam, "TriggerMode", "Internal Trigger")
-        mmc2.clearROI()
-
-        # ##################################
-        # optionally create viewer layer...
-        # ##################################
-        # todo: if we were saving, then reload data with dask because datasets may be large
-
-        if self.show_dataset_checkBox.isChecked():
-
-            # show odt
-            if not np.any(np.array(img_data.cam2.odt.shape) == 0):
-                if subdir == "" or subdir is None:
-                    layer_name = "odt preview"
-                else:
-                    layer_name = subdir + " odt"
-
-                # odt_img_to_show = da.from_zarr()
-
-                try:
-                    preview_layer = self.viewer.layers[layer_name]
-                    preview_layer.data = img_data.cam2.odt
-                except KeyError:
-                    self.viewer.add_image(img_data.cam2.odt, name=layer_name, channel_axis=4)
-                self.viewer.dims.axis_labels = img_data.cam2.odt.attrs["dimensions"]
-
-            if not np.any(np.array(img_data.cam2.sim.shape) == 0):
-                if subdir == "" or subdir is None:
-                    layer_name = "sim cam2 preview"
-                else:
-                    layer_name = subdir + " sim cam2"
-
-                try:
-                    preview_layer = self.viewer.layers[layer_name]
-                    preview_layer.data = img_data.cam2.sim
-                except KeyError:
-                    self.viewer.add_image(img_data.cam2.sim, name=layer_name, channel_axis=4)
-                self.viewer.dims.axis_labels = img_data.cam2.sim.attrs["dimensions"]
-
-            # show SIM
-            if not np.any(np.array(img_data.cam1.sim.shape) == 0):
-                if subdir == "" or subdir is None:
-                    layer_name = "sim preview"
-                else:
-                    layer_name = subdir + " sim"
-
-                # todo: debug
-                # clims_low = [np.percentile(im, 1) for im in img_data.sim[0, 0, 0, 0, :, 0]]
-                # clims_high = [np.percentile(im, 99) for im in img_data.sim[0, 0, 0, 0, :, 0]]
-
-                # sim_img_to_show = da.from_array()
-
-                try:
-                    preview_layer = self.viewer.layers[layer_name]
-                    preview_layer.data = img_data.cam1.sim
-                    #preview_layer.contrast_limits = [clims_low, clims_high]
-                except KeyError:
-                    names = [layer_name + f" ({ch:s})" for ch in cam1_channels]
-                    cmap_dict = {"red": "magenta", "blue": "cyan", "green": "yellow"}
-                    cmaps = [cmap_dict[ch] for ch in cam1_channels]
-
-                    self.viewer.add_image(img_data.cam1.sim, name=names, channel_axis=4, colormap=cmaps) #, contrast_limits=[clims_low, clims_high])
-                self.viewer.dims.axis_labels = img_data.cam1.sim.attrs["dimensions"]
         return
+
+    def show_dataset(self):
+        """
+        display acquired dataset
+
+        img_data is a zarr object
+        """
+        img_data = self.img_data
+        suffix = ""
+
+        cmap_dict = {"red": "magenta", "blue": "cyan", "green": "yellow", "odt": "bone"}
+        channel_axis = 4
+
+        if img_data is not None:
+            groups = []
+            if hasattr(img_data, "cam1"):
+                groups.append(img_data["cam1"])
+            if hasattr(img_data, "cam2"):
+                groups.append(img_data["cam2"])
+
+            # loop over camera groups
+            for g1 in groups:
+
+                # loop over arrays
+                for name, arr in g1.arrays():
+
+                    # skip if array does not contain information
+                    if np.any(np.array(arr.shape) == 0):
+                        continue
+
+                    layer_name = f"{g1.name:s} {name:s} {suffix:s}"
+                    img_to_show = da.from_zarr(arr)
+                    nchannels = arr.shape[channel_axis]
+
+                    # try to update layer
+                    try:
+                        # workaround for dealing with single channels that were split to multiple colors with channel_axis keyword
+                        # todo: maybe better way?
+                        for ii in range(nchannels):
+                            if ii == 0:
+                                layer_name_channel = layer_name
+                            else:
+                                layer_name_channel = layer_name + f" [{ii:d}]"
+
+                            preview_layer = self.viewer.layers[layer_name_channel]
+
+                            slices = tuple([slice(None) for _ in range(channel_axis)] + [slice(ii, ii + 1)])
+                            preview_layer.data = img_to_show[slices].squeeze(axis=channel_axis)
+
+                    except KeyError:
+                        # if layer doesn't exist, add it
+
+                        # todo: debug
+                        # clims_low = [np.percentile(im, 1) for im in img_data.sim[0, 0, 0, 0, :, 0]]
+                        # clims_high = [np.percentile(im, 99) for im in img_data.sim[0, 0, 0, 0, :, 0]]
+
+                        # catch errors in case zarr attr does not exist yet
+                        try:
+                            cmaps = [cmap_dict[ch] for ch in arr.attrs["channels"]]
+                            self.viewer.add_image(img_to_show, name=layer_name, channel_axis=channel_axis, colormap=cmaps)
+                            self.viewer.dims.axis_labels = [s for s in img_data.cam2.odt.attrs["dimensions"] if s != "channel"]
+
+                        except Exception as e:
+                            print(e)
+
+
 
 
 if __name__ == "__main__":
