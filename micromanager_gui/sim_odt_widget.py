@@ -365,11 +365,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         mmc1.stopSequenceAcquisition()
         mmc2.stopSequenceAcquisition()
 
-        print("##############################################################")
-        print(f"starting acquisition for new dataset")
-
-        # todo: next thing is to allow different "channels" to have different numbers of pictures
-        # this would enable also doing things like widefield or etc...along with SIM
         saving = self.save_groupBox.isChecked()
 
         # saving
@@ -390,6 +385,12 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         else:
             save_path = None
             subdir = None
+
+        print("##############################################################")
+        start_str = f"starting acquisition"
+        if saving:
+            start_str += f", saving to {str(save_path):s}"
+        print(start_str)
 
         # ##############################
         # grab timing information from GUI
@@ -611,7 +612,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         print(f"cam2 acquisition modes = {cam2_acq_modes}")
 
         # set trigger width
-        n_trig_width = np.max([int(np.floor(min_odt_frame_time_ms * 1e-3 / 2 / dt)), 1])
+        # todo: calculate this based on modes ... need to account for average mode
+        # n_trig_width = np.max([int(np.floor(min_odt_frame_time_ms * 1e-3 / 2 / dt)), 1])
+        n_trig_width = 1
 
         # odt stabilize time
         if (len(acq_modes) == 1 or ntimes == 1) and acq_modes[0][0] == "odt" and nz == 1:
@@ -625,7 +628,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         pgm_channels = [am[0] for am in acq_modes]
         pgm_acq_modes = [am if am == "both" or am == "average" else "sim" for (dm, pm, am, _) in acq_modes]
-        pgm_npatterns = [am[3] for am in acq_modes]
+        pgm_npatterns = [nps if am != "average" else len(self.dmd.presets[dm][pm]["picture_indices"])
+                         for dm, pm, am, nps in acq_modes]
 
         digital_program, analog_program, daq_programming_info = \
             get_sim_odt_sequence(daq_do_map,
@@ -669,7 +673,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         img_data.attrs["z_position_um"] = list(z_real)
         img_data.attrs["dz_um"] = dz
         img_data.attrs["z_calibration_um_per_v"] = calibration_um_per_v
-        img_data.attrs["dt"] = dt
 
         # micromanager configuration
         img_data.attrs["micromanager_core1_state"] = mmc1.getSystemState().dict()
@@ -856,6 +859,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         img_data.daq.analog_program[:] = analog_program
         img_data.daq.analog_program.attrs["channel_map"] = daq_ao_map
 
+        img_data.daq.attrs["dt"] = dt
+
 
         # ##################################
         # loop over positions and collect data
@@ -867,9 +872,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         def run():
             # start timer
             tstart_full_sequence = time.perf_counter()
-
-            if save_path is not None:
-                print(f"saving to {str(save_path):s}")
 
             print(daq_programming_info)
 
@@ -1117,7 +1119,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         preview_layer.data = img_to_show
 
                     except KeyError:
-                        # todo: debug
                         # clims_low = [np.percentile(im, 1) for im in img_data.sim[0, 0, 0, 0, :, 0]]
                         # clims_high = [np.percentile(im, 99) for im in img_data.sim[0, 0, 0, 0, :, 0]]
 
