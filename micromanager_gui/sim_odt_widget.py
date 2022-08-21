@@ -534,12 +534,12 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # set external triggering
         mmc2.setProperty(cam2, "TriggerMode", "Edge Trigger")
 
-        # todo: move these properties to group
-        mmc2.setProperty(cam2, 'PP  1   ENABLED', 'No')
-        mmc2.setProperty(cam2, 'PP  2   ENABLED', 'No')
-        mmc2.setProperty(cam2, 'PP  3   ENABLED', 'No')
-        mmc2.setProperty(cam2, 'PP  4   ENABLED', 'No')
-        mmc2.setProperty(cam2, 'PP  5   ENABLED', 'No')
+        # these are now set by "System" group "Startup" preset
+        # mmc2.setProperty(cam2, 'PP  1   ENABLED', 'No')
+        # mmc2.setProperty(cam2, 'PP  2   ENABLED', 'No')
+        # mmc2.setProperty(cam2, 'PP  3   ENABLED', 'No')
+        # mmc2.setProperty(cam2, 'PP  4   ENABLED', 'No')
+        # mmc2.setProperty(cam2, 'PP  5   ENABLED', 'No')
 
         # set ROI
         # todo: add check in bounds...
