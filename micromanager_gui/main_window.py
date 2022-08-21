@@ -396,6 +396,11 @@ class MainWindow(QtW.QWidget, _MainUI):
         print("loading", self.cfg_LineEdit.text())
         self._mmc.loadSystemConfiguration(self.cfg_LineEdit.text())
 
+        # is this run already by loadSystemConfiguration()?
+        if "System" in self._mmcores[0].getAvailableConfigGroups():
+            if "Startup" in self._mmcores[0].getAvailableConfigs("System"):
+                self._mmcores[0].setConfig("System", "Startup")
+
         self._set_affine_ref()
 
     def browse_cfg2(self):
@@ -423,15 +428,10 @@ class MainWindow(QtW.QWidget, _MainUI):
         print("loading", self.cfg2_LineEdit.text())
         self._mmcores[1].loadSystemConfiguration(self.cfg2_LineEdit.text())
 
-        try:
-            # turn off prime BSI express speckle correction
-            cam = self._mmcores[1].getCameraDevice()
-            self._mmcores[1].setProperty(cam, 'PP  1   ENABLED', 'No')
-            self._mmcores[1].setProperty(cam, 'PP  2   ENABLED', 'No')
-            self._mmcores[1].setProperty(cam, 'PP  3   ENABLED', 'No')
-            self._mmcores[1].setProperty(cam, 'PP  4   ENABLED', 'No')
-        except:
-            print("error disabling photometrics camera despeckle correction")
+        # is this run already by loadSystemConfiguration()?
+        if "System" in self._mmcores[1].getAvailableConfigGroups():
+            if "Startup" in self._mmcores[1].getAvailableConfigs("System"):
+                self._mmcores[1].setConfig("System", "Startup")
 
     def browse_dmd_cfg(self):
         file_dir = QtW.QFileDialog.getOpenFileName(self, "", "⁩", "json(*.json)")
