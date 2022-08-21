@@ -925,15 +925,26 @@ class MainWindow(QtW.QWidget, _MainUI):
         frame_time_us = int(np.round(self.pattern_time_SpinBox.value() * 1000))
 
         # set dmd
-        self.dmd.program_dmd_seq(mode, channel, 1, 0, False, None, False, True, exp_time_us=frame_time_us)
+        self.dmd.program_dmd_seq(mode, channel,
+                                 nrepeats=1,
+                                 noff_before=0,
+                                 noff_after=0,
+                                 exp_time_us=frame_time_us,
+                                 triggered=False,
+                                 clear_pattern_after_trigger=False,
+                                 verbose=True)
 
     def _set_dmd_pattern_index(self):
         pic_ind = self.pic_index_spinBox.value()
         bit_ind = self.bit_index_spinBox.value()
         self.dmd.start_stop_sequence('stop')
 
-        self.dmd.set_pattern_sequence([pic_ind], [bit_ind], 105, 0, triggered=False,
-                                 clear_pattern_after_trigger=False, bit_depth=1, num_repeats=0, mode='pre-stored')
+        self.dmd.set_pattern_sequence([pic_ind], [bit_ind], 105, 0,
+                                      triggered=False,
+                                      clear_pattern_after_trigger=False,
+                                      bit_depth=1,
+                                      num_repeats=0,
+                                      mode='pre-stored')
 
         if self.dmd_snap_checkBox.isChecked():
             self.snap()
