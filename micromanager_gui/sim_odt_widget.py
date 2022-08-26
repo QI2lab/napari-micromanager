@@ -362,8 +362,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##############################
         # turn off live mode if on
         # ##############################
-        mmc1.stopSequenceAcquisition()
-        mmc2.stopSequenceAcquisition()
+        if mmc1.isSequenceRunning():
+            mmc1.stopSequenceAcquisition()
+
+        if mmc2.isSequenceRunning():
+            mmc2.stopSequenceAcquisition()
 
         saving = self.save_groupBox.isChecked()
 
@@ -529,32 +532,30 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##################################
         cam2 = mmc2.getCameraDevice()
 
-        # set camera properties
-        mmc2.setProperty(cam2, "Exposure", exposure_tms_odt)
-        # set external triggering
-        mmc2.setProperty(cam2, "TriggerMode", "Edge Trigger")
+        if cam2 != "":
+            # set camera properties
+            mmc2.setProperty(cam2, "Exposure", exposure_tms_odt)
+            # set external triggering
+            mmc2.setProperty(cam2, "TriggerMode", "Edge Trigger")
 
-        # these are now set by "System" group "Startup" preset
-        # mmc2.setProperty(cam2, 'PP  1   ENABLED', 'No')
-        # mmc2.setProperty(cam2, 'PP  2   ENABLED', 'No')
-        # mmc2.setProperty(cam2, 'PP  3   ENABLED', 'No')
-        # mmc2.setProperty(cam2, 'PP  4   ENABLED', 'No')
-        # mmc2.setProperty(cam2, 'PP  5   ENABLED', 'No')
+            # set ROI
+            # todo: add check in bounds...
+            cx = self.cx_spinBox.value()
+            sx = self.sx_spinBox.value()
+            cy = self.cy_spinBox.value()
+            sy = self.sy_spinBox.value()
 
-        # set ROI
-        # todo: add check in bounds...
-        cx = self.cx_spinBox.value()
-        sx = self.sx_spinBox.value()
-        cy = self.cy_spinBox.value()
-        sy = self.sy_spinBox.value()
+            cam2_roi = [cy - sy // 2, cy - sy // 2 + sy,
+                           cx - sx // 2, cx - sx // 2 + sx]
 
-        cam2_roi = [cy - sy // 2, cy - sy // 2 + sy,
-                       cx - sx // 2, cx - sx // 2 + sx]
+            mmc2.setROI(cx - sx // 2, cy - sy // 2, sx, sy)
 
-        mmc2.setROI(cx - sx // 2, cy - sy // 2, sx, sy)
-
-        nx_cam2 = mmc2.getImageWidth()
-        ny_cam2 = mmc2.getImageHeight()
+            nx_cam2 = mmc2.getImageWidth()
+            ny_cam2 = mmc2.getImageHeight()
+        else:
+            nx_cam2 = 1280
+            ny_cam2 = 960
+            cam2_roi = [0, ny_cam2, 0, nx_cam2]
 
         # ##################################
         # get SIM camera and set properties
@@ -1031,23 +1032,32 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
                 # start camera
                 mmc1.startSequenceAcquisition(n_cam1_pics, 0, True)
-                mmc2.startSequenceAcquisition(n_cam2_pics, 0, True)
+
+                if mmc2.getCameraDevice() != "":
+                    mmc2.startSequenceAcquisition(n_cam2_pics, 0, True)
 
                 # start daq
                 tstart_acq = time.perf_counter()
                 self.daq.start_sequence()
                 thread_save_cam1 = threading.Thread(target=read_cam, args=(mmc1, cam1_dsets, cam1_acq_modes, n_cam1_pics, "cam1"))
-                thread_save_cam2 = threading.Thread(target=read_cam, args=(mmc2, cam2_dsets, cam2_acq_modes, n_cam2_pics, "cam2"))
+
+                if mmc2.getCameraDevice() != "":
+                    thread_save_cam2 = threading.Thread(target=read_cam, args=(mmc2, cam2_dsets, cam2_acq_modes, n_cam2_pics, "cam2"))
 
                 thread_save_cam1.start()
-                thread_save_cam2.start()
+
+                if mmc2.getCameraDevice() != "":
+                    thread_save_cam2.start()
 
                 # wait until program is over, then stop daq
                 t_elapsed_now = time.perf_counter() - tstart_acq
                 time.sleep(position_time_s - (t_elapsed_now) + 0.1)
 
-                mmc1.stopSequenceAcquisition()
-                mmc2.stopSequenceAcquisition()
+                if mmc1.isSequenceRunning():
+                    mmc1.stopSequenceAcquisition()
+
+                if mmc2.isSequenceRunning():
+                    mmc2.stopSequenceAcquisition()
 
                 # reset DAQ
                 self.daq.stop_sequence()
@@ -1056,7 +1066,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
                 # wait for pictures to be stored to disk
                 thread_save_cam1.join()
-                thread_save_cam2.join()
+
+                if mmc2.getCameraDevice() != "":
+                    thread_save_cam2.join()
 
             # after all positions have run, set z-position back to start
             self.daq.set_analog_lines_by_name([z_volts_start], ["z_stage"])
@@ -1069,8 +1081,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             # ##################################
             mmc1.setProperty(cam1, "TRIGGER SOURCE", "INTERNAL")
 
-            mmc2.setProperty(cam2, "TriggerMode", "Internal Trigger")
-            mmc2.clearROI()
+            if mmc2.getCameraDevice() != "":
+                mmc2.setProperty(cam2, "TriggerMode", "Internal Trigger")
+                mmc2.clearROI()
 
             print("finished!")
 
