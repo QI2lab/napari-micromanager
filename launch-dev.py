@@ -26,15 +26,16 @@ main_window.microscope_cfg_lineEdit.setText(str(root_dir / "config.json"))
 
 # load default configurations
 main_window.load_cfg()
-main_window.load_cfg2()
+# main_window.load_cfg2()
 main_window.load_dmd_cfg()
 main_window.load_daq_cfg()
 main_window.load_microscope_cfg()
 
 # grab devices
-core = main_window._mmc
+mmc1, mmc2 = main_window._mmcores
 dmd = main_window.dmd
 daq = main_window.daq
+phcam = main_window.phcam
 
 
 napari.run()

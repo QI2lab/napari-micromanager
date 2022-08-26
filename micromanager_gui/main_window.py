@@ -35,10 +35,13 @@ if TYPE_CHECKING:
 # dmd and daq control
 import json
 import re
-from mcsim.expt_ctrl import dlp6500, daq
+from mcsim.expt_ctrl import dlp6500, daq, phantom_cam
 import mcsim.analysis.analysis_tools as mctools
+from mcsim.analysis.sim_reconstruction import fit_modulation_frq
+from localize_psf import fit
 from skimage.restoration import unwrap_phase
 from numpy import fft
+from scipy.ndimage import maximum_filter, minimum_filter
 
 
 ICONS = Path(__file__).parent / "icons"
@@ -91,10 +94,20 @@ class _MainUI:
     snap_channel_groupBox: QtW.QGroupBox
     snap_channel_comboBox: QtW.QComboBox
     exp_spinBox: QtW.QDoubleSpinBox
+
+    # image processing
     image_proc_mode_comboBox: QtW.QComboBox
     use_affine_xform_checkBox: QtW.QCheckBox
     fx_doubleSpinBox: QtW.QDoubleSpinBox
     fy_doubleSpinBox: QtW.QDoubleSpinBox
+    threshold_SpinBox: QtW.QDoubleSpinBox
+    guess_holo_frq_Button: QtW.QPushButton
+    fit_holo_frq_Button: QtW.QPushButton
+    fit_holo_curvature_Button: QtW.QPushButton
+    set_affine_ref_Button: QtW.QPushButton
+    track_affine_checkBox: QtW.QCheckBox
+
+    #
     snap_Button: QtW.QPushButton
     live_Button: QtW.QPushButton
     max_min_val_label: QtW.QLabel
@@ -111,8 +124,6 @@ class _MainUI:
     channel_comboBox: QtW.QComboBox
     mode_comboBox: QtW.QComboBox
     daq_shutter_checkBox: QtW.QCheckBox
-    set_affine_ref_Button: QtW.QPushButton
-    track_affine_checkBox: QtW.QCheckBox
 
     # dmd frame
     pattern_time_SpinBox: QtW.QDoubleSpinBox
@@ -169,6 +180,7 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         # placeholders for later
         # since these are passed through to the other widgets, they can be updated but not reassigned
+        self.phcam = phantom_cam.phantom_cam()
         self.dmd = dlp6500.dlp6500win(initialize=False)
         self.daq = daq.nidaq(initialize=False)
         self.cfg_data = {}
@@ -183,10 +195,10 @@ class MainWindow(QtW.QWidget, _MainUI):
         # mda events
         # sig.sequenceStarted.connect(self._on_mda_started)
         # sig.sequenceFinished.connect(self._on_mda_finished)
-        self._mmc.mda.events.frameReady.connect(self._on_mda_frame)
-        self._mmc.mda.events.sequenceStarted.connect(self._on_mda_started)
-        self._mmc.mda.events.sequenceFinished.connect(self._on_mda_finished)
-        self._mmc.events.mdaEngineRegistered.connect(self._update_mda_engine)
+        # self._mmc.mda.events.frameReady.connect(self._on_mda_frame)
+        # self._mmc.mda.events.sequenceStarted.connect(self._on_mda_started)
+        # self._mmc.mda.events.sequenceFinished.connect(self._on_mda_finished)
+        # self._mmc.events.mdaEngineRegistered.connect(self._update_mda_engine)
 
         sig.systemConfigurationLoaded.connect(self._refresh_options)
         sig.XYStagePositionChanged.connect(self._on_xy_stage_position_changed)
@@ -246,7 +258,11 @@ class MainWindow(QtW.QWidget, _MainUI):
         proc_modes = ["normal", "fft", "hologram", "hologram unwrapped"]
         self.image_proc_mode_comboBox.addItems(proc_modes)
         self.snap_channel_comboBox.setCurrentText(proc_modes[0])
+        self.guess_holo_frq_Button.clicked.connect(self.guess_holo_frq)
+        self.fit_holo_frq_Button.clicked.connect(self.fit_holo_frq)
+        self.fit_holo_curvature_Button.clicked.connect(self.fit_holo_curvature)
 
+        # DMD
         self.pattern_time_SpinBox.setValue(0.105)
 
         # connect spinboxes
@@ -309,67 +325,6 @@ class MainWindow(QtW.QWidget, _MainUI):
             self.exp_spinBox.setValue(exposure)
         if self.streaming_timer:
             self.streaming_timer.setInterval(int(exposure))
-
-    def _on_mda_started(self, sequence: useq.MDASequence):
-        """ "create temp folder and block gui when mda starts."""
-        self._set_enabled(False)
-
-    def _on_mda_frame(self, image: np.ndarray, event: useq.MDAEvent):
-        meta = self.mda.SEQUENCE_META.get(event.sequence) or SequenceMeta()
-
-        if meta.mode != "mda":
-            return
-
-        # pick layer name
-        file_name = meta.file_name if meta.should_save else "Exp"
-        channelstr = (
-            f"[{event.channel.config}_idx{event.index['c']}]_"
-            if meta.split_channels
-            else ""
-        )
-        layer_name = f"{file_name}_{channelstr}{event.sequence.uid}"
-
-        try:  # see if we already have a layer with this sequence
-            layer = self.viewer.layers[layer_name]
-
-            # get indices of new image
-            im_idx = tuple(
-                event.index[k]
-                for k in event_indices(event)
-                if not (meta.split_channels and k == "c")
-            )
-
-            # make sure array shape contains im_idx, or pad with zeros
-            new_array = extend_array_for_index(layer.data, im_idx)
-            # add the incoming index at the appropriate index
-            new_array[im_idx] = image
-            # set layer data
-            layer.data = new_array
-            for a, v in enumerate(im_idx):
-                self.viewer.dims.set_point(a, v)
-
-        except KeyError:  # add the new layer to the viewer
-            seq = event.sequence
-            _image = image[(np.newaxis,) * len(seq.shape)]
-            layer = self.viewer.add_image(_image, name=layer_name, blending="additive")
-
-            # dimensions labels
-            labels = [i for i in seq.axis_order if i in event.index] + ["y", "x"]
-            self.viewer.dims.axis_labels = labels
-
-            # add metadata to layer
-            layer.metadata["useq_sequence"] = seq
-            layer.metadata["uid"] = seq.uid
-            # storing event.index in addition to channel.config because it's
-            # possible to have two of the same channel in one sequence.
-            layer.metadata["ch_id"] = f'{event.channel.config}_idx{event.index["c"]}'
-
-    def _on_mda_finished(self, sequence: useq.MDASequence):
-        """Save layer and add increment to save name."""
-        meta = self.mda.SEQUENCE_META.pop(sequence, SequenceMeta())
-        save_sequence(sequence, self.viewer.layers, meta)
-        # reactivate gui when mda finishes.
-        self._set_enabled(True)
 
     def browse_cfg(self):
         self._mmc.unloadAllDevices()  # unload all devicies
@@ -516,22 +471,12 @@ class MainWindow(QtW.QWidget, _MainUI):
                     self._mmc.getCurrentConfig(channel_group)
                 )
 
-    # def _refresh_camera_list(self):
-    #     devs = self._mmc.getLoadedDevices()
-    #     if devs:
-    #         dtypes = [self._mmc.getDeviceType(d) for d in devs]
-    #
-    #         camera_list = [d for d, dt in zip(devs, dtypes) if dt == DeviceType.CameraDevice]
-    #
-    #         self.snap_camera_comboBox.clear()
-    #         self.snap_camera_comboBox.addItems(camera_list)
-    #         self.snap_camera_comboBox.setCurrentText(self._mmc.getCameraDevice())
-
     def _refresh_camera_list(self):
         ncores = len(self._mmcores)
 
         core_inds = list(range(ncores))
         core_inds = [str(ind) for ind in core_inds]
+        core_inds += ["phantom"]
 
         self.set_camera_comboBox.clear()
         self.set_camera_comboBox.addItems(core_inds)
@@ -582,7 +527,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         try:
             self._mmc_cam = self._mmcores[int(newCamera)]
         except ValueError:
-            pass
+            if newCamera == "phantom":
+                self._mmc_cam = self.phcam
 
     def _set_affine_ref(self):
         self.affine_ref = [self._mmc.getXPosition(), self._mmc.getYPosition()]
@@ -726,6 +672,8 @@ class MainWindow(QtW.QWidget, _MainUI):
                 # circular buffer empty
                 return
 
+        ny, nx = data.shape
+
         # get image processing mode
         mode = self.image_proc_mode_comboBox.currentText()
 
@@ -739,36 +687,47 @@ class MainWindow(QtW.QWidget, _MainUI):
         elif mode == "fft":
             data_ft = np.abs(fft.fftshift(fft.fft2(fft.ifftshift(data))))
         elif mode == "hologram" or mode == "hologram unwrapped":
-            ft = fft.fftshift(fft.fft2(fft.ifftshift(data)))
-            ny, nx = ft.shape
+            data_ft = fft.fftshift(fft.fft2(fft.ifftshift(data)))
+            # ny, nx = data_ft.shape
 
             # todo: grab these values from configuration file
             # todo: could display in some nicer way...but...
-            dxy = 6.5 / 60
+            # dxy = 6.5 / 60
+            dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
+            # fmax = 1 / 0.785
+            fmax = self.cfg_data["camera_settings_phantom"]["na_detection"] / 0.785
+
+            # get frequency coordinates
             fx = fft.fftshift(fft.fftfreq(nx, dxy))
             fy = fft.fftshift(fft.fftfreq(ny, dxy))
             fxfx, fyfy = np.meshgrid(fx, fy)
             ff = np.sqrt(fxfx**2 + fyfy**2)
             dfx = fx[1] - fx[0]
             dfy = fy[1] - fy[0]
-            fmax = 1 / 0.785
 
             # convert from pixels in image to real units
             holo_frq = np.array([dfx * (self.fx_doubleSpinBox.value() - nx // 2),
                                  dfy * (self.fy_doubleSpinBox.value() - ny // 2)])
 
-            ft_xlated = mctools.translate_ft(ft, -holo_frq, drs=(dxy, dxy), use_gpu=False)
+            # instead multiply by expected phase ramp
+            # ft_xlated = mctools.translate_ft(data_ft, -holo_frq[0], -holo_frq[1], drs=(dxy, dxy), use_gpu=False)
+            ft_xlated = mctools.translate_ft(data_ft, -holo_frq[0], -holo_frq[1], drs=(dxy, dxy), use_gpu=False)
             ft_xlated[ff > fmax] = 0
+            im_holo = fft.fftshift(fft.ifft2(fft.ifftshift(ft_xlated)))
 
-            im = fft.fftshift(fft.ifft2(fft.ifftshift(ft_xlated)))
+            # mask
+            threshold = self.threshold_SpinBox.value()
+            mask = np.abs(im_holo) > threshold
 
             # todo: could also display amplitude data...
+            holo_amp = np.abs(im_holo)
             if mode == "hologram":
-                data_ft = np.angle(im)
+                holo_angle = np.angle(im_holo)
+                holo_angle -= np.mean(holo_angle[mask])
             else:
-                data_ft = unwrap_phase(np.angle(im))
-                # add center back ...
-                data_ft -= np.mean(data_ft[ny//2 - 2: ny//2 + 2, nx//2 - 2: nx//2 + 2])
+                holo_angle = unwrap_phase(np.angle(im_holo))
+                # add center value back ...
+                # data_ft -= np.mean(data_ft[ny//2 - 2: ny//2 + 2, nx//2 - 2: nx//2 + 2])
 
         else:
             raise ValueError(f"mode must be 'normal', 'fft', 'hologram', or 'hologram unwrapped' but was '{mode:s}'")
@@ -812,20 +771,246 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         self.update_max_min()
 
-        # show processed mode next to real space image
+        # show FFT next to real space image
         # todo: update for affine transformation possibility
-        if mode == "fft":
-            layer_name_ft = f"{cam_name:s} {mode:s}"
+        if mode != "normal":
+            layer_name_ft = f"{cam_name:s} fft"
+            point_layer_name = f"{cam_name:s} fft holo reference"
 
             try:
                 preview_layer = self.viewer.layers[layer_name_ft]
-                preview_layer.data = data_ft
+                preview_layer.data = np.abs(data_ft)
             except KeyError:
-                preview_layer = self.viewer.add_image(data_ft, name=layer_name_ft, translate=[0, 2048])
+                preview_layer = self.viewer.add_image(np.abs(data_ft), name=layer_name_ft, translate=[0, nx],
+                                                      contrast_limits=[0, np.percentile(np.abs(data_ft), 99)], gamma=0.1)
 
-        # todo: why want to do this?
-        # if self.streaming_timer is None:
-        #     self.viewer.reset_view()
+            pts = np.array([[self.fy_doubleSpinBox.value(), self.fx_doubleSpinBox.value() + nx]])
+            try:
+                point_layer = self.viewer.layers[point_layer_name]
+                point_layer.data = pts
+            except KeyError:
+                point_layer = self.viewer.add_points(pts, name=point_layer_name,
+                                                     face_color=[0, 0, 0, 0], edge_color="red", size=10)
+
+
+
+        if mode == "hologram" or mode == "hologram unwrapped":
+            layer_name_holo_phase = f"{cam_name:s} {mode:s} phase"
+
+            try:
+                preview_layer = self.viewer.layers[layer_name_holo_phase]
+                preview_layer.data = holo_angle
+            except KeyError:
+                if mode == "hologram":
+                    lims = [-np.pi, np.pi]
+                else:
+                    lims = [-2*np.pi, 2*np.pi]
+
+                preview_layer = self.viewer.add_image(holo_angle, name=layer_name_holo_phase, translate=[ny, 0],
+                                                      colormap="twilight_shifted", contrast_limits=lims)
+
+
+            layer_name_holo_amp = f"{cam_name:s} {mode:s} amp"
+            try:
+                preview_layer = self.viewer.layers[layer_name_holo_amp]
+                preview_layer.data = holo_amp
+            except KeyError:
+                preview_layer = self.viewer.add_image(holo_amp, name=layer_name_holo_amp, translate=[ny, nx])
+
+    def guess_holo_frq(self):
+        """
+        guess offset-holography frequency from data
+        """
+        # find correct layer
+        is_fft_layer = [l.name[-3:] == "fft" for l in self.viewer.layers]
+
+        if np.sum(is_fft_layer) == 1:
+            ind = int(np.where(is_fft_layer)[0])
+            img_ft = self.viewer.layers[ind].data
+
+            ny, nx = img_ft.shape
+
+            dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
+            fmax_int = 2 * self.cfg_data["camera_settings_phantom"]["na_detection"] / 0.785
+
+            fxs = fft.fftshift(fft.fftfreq(nx, dxy))
+            dfx = fxs[1] - fxs[0]
+            fys = fft.fftshift(fft.fftfreq(ny, dxy))
+            dfy = fys[1] - fys[0]
+
+            fxfx, fyfy = np.meshgrid(fxs, fys)
+            ff_perp = np.sqrt(fxfx ** 2 + fyfy ** 2)
+
+            # exclude points along lines
+            guess_mask = np.logical_and.reduce((np.abs(fxfx) > dfx, # not along x=0
+                                               np.abs(fyfy) > dfy, # not along y=0
+                                               fyfy <= 0,
+                                               ff_perp > fmax_int))
+
+            guess_ind_1d = np.argmax(np.abs(img_ft) * guess_mask)
+            guess_ind = np.unravel_index(guess_ind_1d, img_ft.shape)
+
+            frq_guess = np.array([fxfx[guess_ind], fyfy[guess_ind]])
+
+            self.fx_doubleSpinBox.setValue(guess_ind[1])
+            self.fy_doubleSpinBox.setValue(guess_ind[0])
+    def fit_holo_frq(self):
+        """
+        fit offset-holography frequency from data
+        """
+        # find correct layer
+        is_fft_layer = [l.name[-3:] == "fft" for l in self.viewer.layers]
+
+        if np.sum(is_fft_layer) == 1:
+            ind = int(np.where(is_fft_layer)[0])
+            img_ft = self.viewer.layers[ind].data
+
+            ny, nx = img_ft.shape
+
+            dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
+            fmax_int = 2 * self.cfg_data["camera_settings_phantom"]["na_detection"] / 0.785
+
+            fxs = fft.fftshift(fft.fftfreq(nx, dxy))
+            dfx = fxs[1] - fxs[0]
+            fys = fft.fftshift(fft.fftfreq(ny, dxy))
+            dfy = fys[1] - fys[0]
+
+            fxfx, fyfy = np.meshgrid(fxs, fys)
+            ff_perp = np.sqrt(fxfx ** 2 + fyfy ** 2)
+
+            # exclude points along lines
+            guess_mask = np.logical_and.reduce((np.abs(fxfx) > dfx,  # not along x=0
+                                                np.abs(fyfy) > dfy,  # not along y=0
+                                                fyfy <= 0,
+                                                ff_perp > fmax_int))
+
+            frq_guess = np.array([dfx * (self.fx_doubleSpinBox.value() - nx // 2),
+                                  dfy * (self.fy_doubleSpinBox.value() - ny // 2)])
+
+            frq_fit, mask, _ = fit_modulation_frq(img_ft, img_ft, dxy, frq_guess=frq_guess, roi_pix_size=50)
+
+            indx_fit = frq_fit[0] / dfx + nx // 2
+            indy_fit = frq_fit[1] / dfy + ny // 2
+
+            self.fx_doubleSpinBox.setValue(indx_fit)
+            self.fy_doubleSpinBox.setValue(indy_fit)
+
+    def fit_holo_curvature(self):
+        """
+        fit hologram phase curvature
+        """
+
+        threshold = self.threshold_SpinBox.value()
+
+        # find correct layer
+        is_holo_amp = [l.name[-22:] == "hologram unwrapped amp" for l in self.viewer.layers]
+        is_holo_phase = [l.name[-24:] == "hologram unwrapped phase" for l in self.viewer.layers]
+
+        if np.sum(is_holo_phase) == 1 and np.sum(is_holo_amp) == 1:
+            ind = int(np.where(is_holo_phase)[0])
+            phase_unwrapped = self.viewer.layers[ind].data
+
+            ind_amp = int(np.where(is_holo_amp)[0])
+            holo_amp = self.viewer.layers[ind_amp].data
+
+            ny, nx = phase_unwrapped.shape
+
+            # get frequency data
+            dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
+            fmax_int = 2 * self.cfg_data["camera_settings_phantom"]["na_detection"] / 0.785
+            fxs = fft.fftshift(fft.fftfreq(nx, dxy))
+            dfx = fxs[1] - fxs[0]
+            fys = fft.fftshift(fft.fftfreq(ny, dxy))
+            dfy = fys[1] - fys[0]
+
+            k = 2 * np.pi / 0.785
+
+            # fit mask
+            # fit defocus
+            to_fit_pix = holo_amp > threshold
+            # dilate/erode to close holes
+            footprint = np.ones((10, 10), dtype=bool)
+            to_fit_pix = maximum_filter(to_fit_pix, footprint=footprint)
+            to_fit_pix = minimum_filter(to_fit_pix, footprint=footprint)
+
+            # exclude region around edges
+            edge_exclude_size = 20
+            to_fit_pix[:edge_exclude_size] = False
+            to_fit_pix[-edge_exclude_size:] = False
+            to_fit_pix[:, :edge_exclude_size] = False
+            to_fit_pix[:, -edge_exclude_size:] = False
+
+            # fit defocus phase
+            def defocus_phase_fn(p, x, y):
+                """
+                @param p: [k/Rx, k/Ry, cx, cy, offset, theta]
+                @param x:
+                @param y:
+                @return phase:
+                """
+                xrot = (x - p[2]) * np.cos(p[5]) + (y - p[3]) * np.sin(p[5])
+                yrot = -(x - p[2]) * np.sin(p[5]) + (y - p[3]) * np.cos(p[5])
+                phase = 0.5 * p[0] * xrot ** 2 + 0.5 * p[1] * yrot ** 2 + p[4]
+                return phase
+
+            def fit_fn(p): return defocus_phase_fn(p, xx[to_fit_pix], yy[to_fit_pix])
+
+            xx, yy = np.meshgrid(range(nx), range(ny))
+            xx = (xx - nx//2) * dxy
+            yy = (yy - ny//2) * dxy
+
+            init_params = [0, 0,
+                           np.sum(xx * to_fit_pix) / np.sum(to_fit_pix),
+                           np.sum(yy * to_fit_pix) / np.sum(to_fit_pix),
+                           np.mean(phase_unwrapped[to_fit_pix]),
+                           0]
+
+            lbs = [-np.inf, -np.inf, np.min(xx[to_fit_pix]), np.min(yy[to_fit_pix]), -np.inf, -np.inf]
+            ubs = [np.inf, np.inf, np.max(xx[to_fit_pix]), np.max(yy[to_fit_pix]), np.inf, np.inf]
+
+            fit_data = phase_unwrapped[to_fit_pix]
+            # fit_data = np.concatenate((phase_unwrapped[to_fit_pix], amp[to_fit_pix]))
+
+            results = fit.fit_model(fit_data,
+                                    fit_fn,
+                                    init_params=init_params,
+                                    bounds=(lbs, ubs))
+            fp = results["fit_params"]
+            # radius of curvature in um
+            rx = k / fp[0]
+            ry = k / fp[1]
+
+            phase_fit_plot = defocus_phase_fn(results["fit_params"], xx, yy)
+
+            layer_name_fit = f"phase fit"
+            try:
+                preview_layer = self.viewer.layers[layer_name_fit]
+                preview_layer.data = phase_fit_plot
+            except KeyError:
+                lims = [-2*np.pi, 2*np.pi]
+
+                preview_layer = self.viewer.add_image(phase_fit_plot, name=layer_name_fit, translate=[2*ny, 0],
+                                                      colormap="twilight_shifted", contrast_limits=lims)
+
+
+            layer_name_pts = f"phase fit center"
+
+            text = {'string': 'Rx={rad[0]:d}, Ry={rad[1]:d}mm',
+                    'size': 20,
+                    'color': 'white',
+                    'translation': np.array([-10, 0]),
+                    }
+
+            pts = np.array([[fp[3] / dxy + ny // 2 + 2*ny, fp[2] / dxy + nx // 2]])
+            try:
+                point_layer = self.viewer.layers[layer_name_pts]
+                point_layer.data = pts
+            except KeyError:
+                point_layer = self.viewer.add_points(pts, name=layer_name_pts,
+                                                     face_color=[0, 0, 0, 0], edge_color="red", size=10,
+                                                     text=text,
+                                                     features={"rad": [[rx, ry]]})
+
 
     def update_max_min(self, event=None):
 
@@ -856,11 +1041,12 @@ class MainWindow(QtW.QWidget, _MainUI):
             self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["sim_shutter"])
 
         self._mmc_cam.snapImage()
+        img = self._mmc_cam.getImage()
 
         if self.daq_shutter_checkBox.isChecked():
             self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["sim_shutter"])
 
-        self.update_viewer(self._mmc_cam.getImage())
+        self.update_viewer(img)
 
     def start_live(self):
 
@@ -886,15 +1072,6 @@ class MainWindow(QtW.QWidget, _MainUI):
             self.streaming_timer = None
         self.live_Button.setText("Live")
         self.live_Button.setIcon(CAM_ICON)
-
-    def _update_mda_engine(self, newEngine: PMDAEngine, oldEngine: PMDAEngine):
-        oldEngine.events.frameReady.connect(self._on_mda_frame)
-        oldEngine.events.sequenceStarted.disconnect(self._on_mda_started)
-        oldEngine.events.sequenceFinished.disconnect(self._on_mda_finished)
-
-        newEngine.events.frameReady.connect(self._on_mda_frame)
-        newEngine.events.sequenceStarted.connect(self._on_mda_started)
-        newEngine.events.sequenceFinished.connect(self._on_mda_finished)
 
     def toggle_live(self, event=None):
         if self.streaming_timer is None:

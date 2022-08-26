@@ -33,104 +33,7 @@
        <string>Snap/Live</string>
       </attribute>
       <layout class="QGridLayout" name="gridLayout_13">
-       <item row="0" column="1">
-        <widget class="QGroupBox" name="exp_groupBox">
-         <property name="enabled">
-          <bool>true</bool>
-         </property>
-         <property name="minimumSize">
-          <size>
-           <width>0</width>
-           <height>70</height>
-          </size>
-         </property>
-         <property name="maximumSize">
-          <size>
-           <width>16777215</width>
-           <height>70</height>
-          </size>
-         </property>
-         <property name="title">
-          <string>Exposure Time</string>
-         </property>
-         <layout class="QHBoxLayout" name="horizontalLayout_3">
-          <item>
-           <widget class="QDoubleSpinBox" name="exp_spinBox">
-            <property name="enabled">
-             <bool>true</bool>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-            <property name="minimum">
-             <double>0.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>100000.000000000000000</double>
-            </property>
-            <property name="value">
-             <double>100.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLabel" name="label_12">
-            <property name="minimumSize">
-             <size>
-              <width>30</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>30</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="text">
-             <string> ms</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item row="0" column="2">
-        <widget class="QGroupBox" name="groupBox_7">
-         <property name="minimumSize">
-          <size>
-           <width>0</width>
-           <height>70</height>
-          </size>
-         </property>
-         <property name="maximumSize">
-          <size>
-           <width>16777215</width>
-           <height>70</height>
-          </size>
-         </property>
-         <property name="autoFillBackground">
-          <bool>false</bool>
-         </property>
-         <property name="title">
-          <string>DAQ shutter</string>
-         </property>
-         <widget class="QCheckBox" name="daq_shutter_checkBox">
-          <property name="geometry">
-           <rect>
-            <x>30</x>
-            <y>30</y>
-            <width>20</width>
-            <height>20</height>
-           </rect>
-          </property>
-          <property name="text">
-           <string/>
-          </property>
-         </widget>
-        </widget>
-       </item>
-       <item row="4" column="0" colspan="3">
+       <item row="5" column="0" colspan="3">
         <widget class="QFrame" name="frame_4">
          <property name="frameShape">
           <enum>QFrame::StyledPanel</enum>
@@ -513,8 +416,43 @@
          <zorder>channel_groupBox</zorder>
         </widget>
        </item>
-       <item row="1" column="0">
-        <widget class="QGroupBox" name="groupBox_4">
+       <item row="0" column="2">
+        <widget class="QGroupBox" name="groupBox_7">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>70</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>70</height>
+          </size>
+         </property>
+         <property name="autoFillBackground">
+          <bool>false</bool>
+         </property>
+         <property name="title">
+          <string>DAQ shutter</string>
+         </property>
+         <widget class="QCheckBox" name="daq_shutter_checkBox">
+          <property name="geometry">
+           <rect>
+            <x>30</x>
+            <y>30</y>
+            <width>20</width>
+            <height>20</height>
+           </rect>
+          </property>
+          <property name="text">
+           <string/>
+          </property>
+         </widget>
+        </widget>
+       </item>
+       <item row="4" column="0" colspan="3">
+        <widget class="QFrame" name="frame_2">
          <property name="minimumSize">
           <size>
            <width>0</width>
@@ -527,19 +465,138 @@
            <height>50</height>
           </size>
          </property>
-         <property name="title">
-          <string>Select camera</string>
+         <property name="frameShape">
+          <enum>QFrame::StyledPanel</enum>
          </property>
-         <widget class="QComboBox" name="set_camera_comboBox">
-          <property name="geometry">
-           <rect>
-            <x>18</x>
-            <y>20</y>
-            <width>171</width>
-            <height>22</height>
-           </rect>
-          </property>
-         </widget>
+         <property name="frameShadow">
+          <enum>QFrame::Raised</enum>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_11">
+          <item row="2" column="3">
+           <widget class="QDoubleSpinBox" name="max_scale_doubleSpinBox">
+            <property name="minimumSize">
+             <size>
+              <width>70</width>
+              <height>20</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>50</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="decimals">
+             <number>3</number>
+            </property>
+            <property name="maximum">
+             <double>100.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="value">
+             <double>99.989999999999995</double>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="2">
+           <widget class="QDoubleSpinBox" name="min_scale_doubleSpinBox">
+            <property name="minimumSize">
+             <size>
+              <width>70</width>
+              <height>20</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>50</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="maximum">
+             <double>100.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.100000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="3">
+           <widget class="QLabel" name="label_10">
+            <property name="text">
+             <string>max %</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QLabel" name="label_5">
+            <property name="maximumSize">
+             <size>
+              <width>16777215</width>
+              <height>20</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>min %</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="label_18">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>70</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>(min, max)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="4">
+           <widget class="QPushButton" name="autoscale_Button">
+            <property name="minimumSize">
+             <size>
+              <width>60</width>
+              <height>20</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>60</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>autoscale</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QLabel" name="max_min_val_label">
+            <property name="maximumSize">
+             <size>
+              <width>100</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </widget>
        </item>
        <item row="0" column="0">
@@ -579,12 +636,168 @@
          </layout>
         </widget>
        </item>
-       <item row="1" column="1" colspan="2">
+       <item row="0" column="1">
+        <widget class="QGroupBox" name="exp_groupBox">
+         <property name="enabled">
+          <bool>true</bool>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>70</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>70</height>
+          </size>
+         </property>
+         <property name="title">
+          <string>Exposure Time</string>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayout_3">
+          <item>
+           <widget class="QDoubleSpinBox" name="exp_spinBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignCenter</set>
+            </property>
+            <property name="minimum">
+             <double>0.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>100000.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>100.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_12">
+            <property name="minimumSize">
+             <size>
+              <width>30</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>30</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string> ms</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item row="3" column="0" colspan="3">
+        <widget class="QFrame" name="frame">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>40</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>30</height>
+          </size>
+         </property>
+         <property name="frameShape">
+          <enum>QFrame::StyledPanel</enum>
+         </property>
+         <property name="frameShadow">
+          <enum>QFrame::Raised</enum>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_10">
+          <item row="0" column="1">
+           <widget class="QPushButton" name="live_Button">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>30</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>100</width>
+              <height>50</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Live</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QPushButton" name="snap_Button">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>30</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>100</width>
+              <height>100</height>
+             </size>
+            </property>
+            <property name="text">
+             <string> Snap</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="3">
+           <widget class="QCheckBox" name="track_affine_checkBox">
+            <property name="text">
+             <string>track affine</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QPushButton" name="set_affine_ref_Button">
+            <property name="text">
+             <string>set affine ref</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item row="2" column="0" colspan="3">
         <widget class="QGroupBox" name="groupBox_5">
          <property name="minimumSize">
           <size>
            <width>0</width>
-           <height>80</height>
+           <height>30</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>100</height>
           </size>
          </property>
          <property name="title">
@@ -695,10 +908,72 @@
            <string>affine</string>
           </property>
          </widget>
+         <widget class="QPushButton" name="guess_holo_frq_Button">
+          <property name="geometry">
+           <rect>
+            <x>310</x>
+            <y>60</y>
+            <width>91</width>
+            <height>24</height>
+           </rect>
+          </property>
+          <property name="text">
+           <string>guess holo frq</string>
+          </property>
+         </widget>
+         <widget class="QPushButton" name="fit_holo_frq_Button">
+          <property name="geometry">
+           <rect>
+            <x>410</x>
+            <y>60</y>
+            <width>91</width>
+            <height>24</height>
+           </rect>
+          </property>
+          <property name="text">
+           <string>fit holo frq</string>
+          </property>
+         </widget>
+         <widget class="QPushButton" name="fit_holo_curvature_Button">
+          <property name="geometry">
+           <rect>
+            <x>340</x>
+            <y>20</y>
+            <width>131</width>
+            <height>24</height>
+           </rect>
+          </property>
+          <property name="text">
+           <string>Fit holo curvature</string>
+          </property>
+         </widget>
+         <widget class="QDoubleSpinBox" name="threshold_SpinBox">
+          <property name="geometry">
+           <rect>
+            <x>140</x>
+            <y>80</y>
+            <width>100</width>
+            <height>22</height>
+           </rect>
+          </property>
+         </widget>
+         <widget class="QLabel" name="label_17">
+          <property name="geometry">
+           <rect>
+            <x>20</x>
+            <y>80</y>
+            <width>81</width>
+            <height>16</height>
+           </rect>
+          </property>
+          <property name="text">
+           <string>Threshold</string>
+          </property>
+         </widget>
         </widget>
        </item>
-       <item row="3" column="0" colspan="3">
-        <widget class="QFrame" name="frame_2">
+       <item row="1" column="0" colspan="2">
+        <widget class="QGroupBox" name="groupBox_4">
          <property name="minimumSize">
           <size>
            <width>0</width>
@@ -711,220 +986,19 @@
            <height>50</height>
           </size>
          </property>
-         <property name="frameShape">
-          <enum>QFrame::StyledPanel</enum>
+         <property name="title">
+          <string>Select camera</string>
          </property>
-         <property name="frameShadow">
-          <enum>QFrame::Raised</enum>
-         </property>
-         <layout class="QGridLayout" name="gridLayout_11">
-          <item row="2" column="3">
-           <widget class="QDoubleSpinBox" name="max_scale_doubleSpinBox">
-            <property name="minimumSize">
-             <size>
-              <width>70</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>50</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="decimals">
-             <number>3</number>
-            </property>
-            <property name="maximum">
-             <double>100.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.100000000000000</double>
-            </property>
-            <property name="value">
-             <double>99.989999999999995</double>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="2">
-           <widget class="QDoubleSpinBox" name="min_scale_doubleSpinBox">
-            <property name="minimumSize">
-             <size>
-              <width>70</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>50</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="maximum">
-             <double>100.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.100000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="3">
-           <widget class="QLabel" name="label_10">
-            <property name="text">
-             <string>max %</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="2">
-           <widget class="QLabel" name="label_5">
-            <property name="maximumSize">
-             <size>
-              <width>16777215</width>
-              <height>20</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>min %</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="label_18">
-            <property name="enabled">
-             <bool>true</bool>
-            </property>
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>70</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>(min, max)</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="4">
-           <widget class="QPushButton" name="autoscale_Button">
-            <property name="maximumSize">
-             <size>
-              <width>60</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>autoscale</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QLabel" name="max_min_val_label">
-            <property name="maximumSize">
-             <size>
-              <width>100</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item row="2" column="0" colspan="3">
-        <widget class="QFrame" name="frame">
-         <property name="minimumSize">
-          <size>
-           <width>0</width>
-           <height>40</height>
-          </size>
-         </property>
-         <property name="maximumSize">
-          <size>
-           <width>16777215</width>
-           <height>30</height>
-          </size>
-         </property>
-         <property name="frameShape">
-          <enum>QFrame::StyledPanel</enum>
-         </property>
-         <property name="frameShadow">
-          <enum>QFrame::Raised</enum>
-         </property>
-         <layout class="QGridLayout" name="gridLayout_10">
-          <item row="0" column="1">
-           <widget class="QPushButton" name="live_Button">
-            <property name="enabled">
-             <bool>true</bool>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>100</width>
-              <height>30</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>100</width>
-              <height>50</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Live</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QPushButton" name="snap_Button">
-            <property name="enabled">
-             <bool>true</bool>
-            </property>
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>100</width>
-              <height>30</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>100</width>
-              <height>100</height>
-             </size>
-            </property>
-            <property name="text">
-             <string> Snap</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="3">
-           <widget class="QCheckBox" name="track_affine_checkBox">
-            <property name="text">
-             <string>track affine</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="2">
-           <widget class="QPushButton" name="set_affine_ref_Button">
-            <property name="text">
-             <string>set affine ref</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
+         <widget class="QComboBox" name="set_camera_comboBox">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>20</y>
+            <width>171</width>
+            <height>22</height>
+           </rect>
+          </property>
+         </widget>
         </widget>
        </item>
       </layout>
@@ -944,7 +1018,7 @@
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>55</height>
+       <height>20</height>
       </size>
      </property>
      <property name="title">
@@ -959,7 +1033,7 @@
         <x>10</x>
         <y>20</y>
         <width>277</width>
-        <height>28</height>
+        <height>16</height>
        </rect>
       </property>
       <property name="text">
@@ -972,7 +1046,7 @@
         <x>300</x>
         <y>20</y>
         <width>75</width>
-        <height>24</height>
+        <height>16</height>
        </rect>
       </property>
       <property name="text">
@@ -985,7 +1059,7 @@
         <x>380</x>
         <y>20</y>
         <width>75</width>
-        <height>24</height>
+        <height>16</height>
        </rect>
       </property>
       <property name="text">
@@ -998,7 +1072,7 @@
         <x>460</x>
         <y>20</y>
         <width>75</width>
-        <height>24</height>
+        <height>16</height>
        </rect>
       </property>
       <property name="text">
@@ -1881,7 +1955,7 @@
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>55</height>
+       <height>20</height>
       </size>
      </property>
      <property name="title">
@@ -1893,7 +1967,7 @@
         <x>380</x>
         <y>20</y>
         <width>75</width>
-        <height>24</height>
+        <height>16</height>
        </rect>
       </property>
       <property name="text">
@@ -1906,7 +1980,7 @@
         <x>20</x>
         <y>20</y>
         <width>350</width>
-        <height>28</height>
+        <height>16</height>
        </rect>
       </property>
      </widget>
@@ -1916,7 +1990,7 @@
         <x>460</x>
         <y>20</y>
         <width>75</width>
-        <height>24</height>
+        <height>16</height>
        </rect>
       </property>
       <property name="text">
@@ -1930,7 +2004,7 @@
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>55</height>
+       <height>20</height>
       </size>
      </property>
      <property name="title">
@@ -1942,7 +2016,7 @@
         <x>380</x>
         <y>20</y>
         <width>75</width>
-        <height>24</height>
+        <height>16</height>
        </rect>
       </property>
       <property name="text">
@@ -1955,7 +2029,7 @@
         <x>20</x>
         <y>20</y>
         <width>350</width>
-        <height>28</height>
+        <height>21</height>
        </rect>
       </property>
      </widget>
@@ -1965,7 +2039,7 @@
         <x>460</x>
         <y>20</y>
         <width>75</width>
-        <height>24</height>
+        <height>16</height>
        </rect>
       </property>
       <property name="text">
@@ -1979,7 +2053,7 @@
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>50</height>
+       <height>20</height>
       </size>
      </property>
      <property name="title">
@@ -1991,7 +2065,7 @@
         <x>20</x>
         <y>20</y>
         <width>350</width>
-        <height>28</height>
+        <height>16</height>
        </rect>
       </property>
      </widget>
@@ -2001,7 +2075,7 @@
         <x>380</x>
         <y>20</y>
         <width>75</width>
-        <height>24</height>
+        <height>16</height>
        </rect>
       </property>
       <property name="text">
@@ -2014,7 +2088,7 @@
         <x>460</x>
         <y>20</y>
         <width>75</width>
-        <height>24</height>
+        <height>16</height>
        </rect>
       </property>
       <property name="text">
