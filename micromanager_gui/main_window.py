@@ -261,6 +261,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.guess_holo_frq_Button.clicked.connect(self.guess_holo_frq)
         self.fit_holo_frq_Button.clicked.connect(self.fit_holo_frq)
         self.fit_holo_curvature_Button.clicked.connect(self.fit_holo_curvature)
+        self.threshold_SpinBox.setValue(50.)
 
         # DMD
         self.pattern_time_SpinBox.setValue(0.105)
@@ -269,11 +270,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.exp_spinBox.valueChanged.connect(self._update_exp)
         self.exp_spinBox.setKeyboardTracking(False)
 
-        # self.fx_doubleSpinBox.setValue(2.212)
-        # self.fy_doubleSpinBox.setValue(1.445)
         self.fx_doubleSpinBox.setValue(1600.)
         self.fy_doubleSpinBox.setValue(1400.)
-        #self.daq_shutter_checkBox.setCheckState(True) # seems setting this delays the loading of the plugin in napari by ~5 seconds
 
         # refresh options in case a config is already loaded by another remote
         self._refresh_options()
@@ -283,8 +281,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.viewer.dims.events.current_step.connect(self.update_max_min)
 
         # tab widgets
-        # todo: right now no way to update the daq/dmd instances in these widgets ...
-        self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer, configuration=self.cfg_data)
+        self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer, self.phcam,
+                                        configuration=self.cfg_data)
         self.tabWidget.addTab(self.sim_odt_acq, "SIM/ODT Acquisition")
 
         self.dmd_widget = DmdWidget(self._mmcores, self.daq, self.dmd, self.viewer)

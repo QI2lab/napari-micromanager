@@ -122,13 +122,14 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
     SEQUENCE_META: dict[MDASequence, SequenceMeta] = {}
 
     def __init__(self, mmcores: list[RemoteMMCore], daq: mcsim.expt_ctrl.daq.daq, dmd: dlp6500,
-                 viewer, parent=None, configuration=None):
+                 viewer, phcam, parent=None, configuration=None):
 
         self._mmcores = mmcores
         self._mmc = self._mmcores[0]
 
         self.daq = daq
         self.dmd = dmd
+        self.phcam = phcam
         self.configuration = configuration
         self.img_data = None
         self.acquisition_modes = ["default", "both", "average"]
@@ -532,7 +533,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##################################
         cam2 = mmc2.getCameraDevice()
 
-        if cam2 != "":
+        cam_is_phantom = cam2 == ""
+
+        if not cam_is_phantom:
             # set camera properties
             mmc2.setProperty(cam2, "Exposure", exposure_tms_odt)
             # set external triggering
@@ -553,8 +556,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             nx_cam2 = mmc2.getImageWidth()
             ny_cam2 = mmc2.getImageHeight()
         else:
-            nx_cam2 = 1280
-            ny_cam2 = 960
+            cam2 = self.phcam
+
+            nx_cam2 = cam2.getImageWidth()
+            ny_cam2 = cam2.getImageHeight()
             cam2_roi = [0, ny_cam2, 0, nx_cam2]
 
         # ##################################
@@ -769,16 +774,21 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ###################################
         # group for camera #2
         # ###################################
+        if cam_is_phantom:
+            cam2_settings_name = "camera_settings_phantom"
+        else:
+            cam2_settings_name = "camera_settings_2"
+
         g2 = img_data.create_group("cam2")
         g2.attrs["channels"] = cam2_acq_modes
         g2.attrs["camera_roi"] = cam2_roi
         g2.attrs["exposure_time_ms"] = exposure_tms_odt
 
         try:
-            g2.attrs["dx_um"] = self.configuration["camera_settings_2"]["dxy"]
-            g2.attrs["dy_um"] = self.configuration["camera_settings_2"]["dxy"]
-            g2.attrs["na_excitation"] = self.configuration["camera_settings_1"]["na_excitation"]
-            g2.attrs["na_detection"] = self.configuration["camera_settings_1"]["na_detection"]
+            g2.attrs["dx_um"] = self.configuration[cam2_settings_name]["dxy"]
+            g2.attrs["dy_um"] = self.configuration[cam2_settings_name]["dxy"]
+            g2.attrs["na_excitation"] = self.configuration[cam2_settings_name]["na_excitation"]
+            g2.attrs["na_detection"] = self.configuration[cam2_settings_name]["na_detection"]
         except (KeyError, TypeError) as e:
             print(e)
             g2.attrs["dx_um"] = None
@@ -928,19 +938,20 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     ds.attrs["dmd_ny"] = self.dmd.height
                     ds.attrs["dmd_pitch_um"] = self.dmd.pitch
 
-                    # todo: should I store the firmware pattern here too?
+                    # todo: should I store the firmware patterns here too?
 
                 # ##################################
                 # trigger camera twice, required for Phantom camera
                 # ##################################
-                # self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam"])
-                # time.sleep(0.1)
-                # self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam"])
-                # time.sleep(0.1)
-                # self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam"])
-                # time.sleep(0.1)
-                # self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam"])
-                # time.sleep(0.1)
+                if cam_is_phantom:
+                    self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam_sync"])
+                    time.sleep(0.1)
+                    self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_sync"])
+                    time.sleep(0.1)
+                    self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam_sync"])
+                    time.sleep(0.1)
+                    self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_sync"])
+                    time.sleep(0.1)
 
                 # total number of pictures for cameras per position
                 n_cam1_pics = ntimes * nz * nparams * int(np.sum([num for _, _, _, num in cam1_acq_modes]))
@@ -1020,6 +1031,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 # enable DMD, otherwise can have timing problems at the start
                 self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["dmd_enable"])
 
+                if cam_is_phantom:
+                    # todo: testing this
+                    self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam_enable"])
+
                 # let lasers and etc. warmup
                 time.sleep(5)
 
@@ -1063,6 +1078,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 self.daq.stop_sequence()
                 self.daq.set_preset("off")
                 self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_enable"])
+                self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_sync"])
 
                 # wait for pictures to be stored to disk
                 thread_save_cam1.join()
