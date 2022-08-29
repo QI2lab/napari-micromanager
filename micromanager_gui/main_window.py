@@ -688,7 +688,6 @@ class MainWindow(QtW.QWidget, _MainUI):
             data_ft = np.abs(fft.fftshift(fft.fft2(fft.ifftshift(data))))
         elif mode == "hologram" or mode == "hologram unwrapped":
             data_ft = fft.fftshift(fft.fft2(fft.ifftshift(data)))
-            # ny, nx = data_ft.shape
 
             # todo: grab these values from configuration file
             # todo: could display in some nicer way...but...
@@ -723,11 +722,11 @@ class MainWindow(QtW.QWidget, _MainUI):
             holo_amp = np.abs(im_holo)
             if mode == "hologram":
                 holo_angle = np.angle(im_holo)
-                holo_angle -= np.mean(holo_angle[mask])
             else:
                 holo_angle = unwrap_phase(np.angle(im_holo))
-                # add center value back ...
-                # data_ft -= np.mean(data_ft[ny//2 - 2: ny//2 + 2, nx//2 - 2: nx//2 + 2])
+
+            # add center value back
+            holo_angle -= np.mean(holo_angle[mask])
 
         else:
             raise ValueError(f"mode must be 'normal', 'fft', 'hologram', or 'hologram unwrapped' but was '{mode:s}'")
@@ -782,7 +781,7 @@ class MainWindow(QtW.QWidget, _MainUI):
                 preview_layer.data = np.abs(data_ft)
             except KeyError:
                 preview_layer = self.viewer.add_image(np.abs(data_ft), name=layer_name_ft, translate=[0, nx],
-                                                      contrast_limits=[0, np.percentile(np.abs(data_ft), 99)], gamma=0.1)
+                                                      contrast_limits=[0, np.percentile(np.abs(data_ft), 99.9)], gamma=0.1)
 
             pts = np.array([[self.fy_doubleSpinBox.value(), self.fx_doubleSpinBox.value() + nx]])
             try:
@@ -856,7 +855,7 @@ class MainWindow(QtW.QWidget, _MainUI):
             self.fy_doubleSpinBox.setValue(guess_ind[0])
     def fit_holo_frq(self):
         """
-        fit offset-holography frequency from data
+        fit offset-holography frequency from data. Use current frequency value as guess value
         """
         # find correct layer
         is_fft_layer = [l.name[-3:] == "fft" for l in self.viewer.layers]
@@ -876,13 +875,6 @@ class MainWindow(QtW.QWidget, _MainUI):
             dfy = fys[1] - fys[0]
 
             fxfx, fyfy = np.meshgrid(fxs, fys)
-            ff_perp = np.sqrt(fxfx ** 2 + fyfy ** 2)
-
-            # exclude points along lines
-            guess_mask = np.logical_and.reduce((np.abs(fxfx) > dfx,  # not along x=0
-                                                np.abs(fyfy) > dfy,  # not along y=0
-                                                fyfy <= 0,
-                                                ff_perp > fmax_int))
 
             frq_guess = np.array([dfx * (self.fx_doubleSpinBox.value() - nx // 2),
                                   dfy * (self.fy_doubleSpinBox.value() - ny // 2)])
@@ -981,6 +973,7 @@ class MainWindow(QtW.QWidget, _MainUI):
             ry = k / fp[1]
 
             phase_fit_plot = defocus_phase_fn(results["fit_params"], xx, yy)
+            phase_fit_plot[np.logical_not(to_fit_pix)] = np.nan
 
             layer_name_fit = f"phase fit"
             try:
@@ -993,24 +986,44 @@ class MainWindow(QtW.QWidget, _MainUI):
                                                       colormap="twilight_shifted", contrast_limits=lims)
 
 
-            layer_name_pts = f"phase fit center"
+            pts_layer_name = f"phase fit center"
+            shapes_layer_name = f"shape fit center"
 
-            text = {'string': 'Rx={rad[0]:d}, Ry={rad[1]:d}mm',
+
+            # todo: text layer not working
+            text = {'string': 'Rx={rx:.1f}mm (red)\nRy={ry:.1f}mm (blue)', #, Ry={rx:.1f}mm',
                     'size': 20,
-                    'color': 'white',
-                    'translation': np.array([-10, 0]),
+                    'color': 'red',
+                    'translation': np.array([-10, -nx//2]),
                     }
 
-            pts = np.array([[fp[3] / dxy + ny // 2 + 2*ny, fp[2] / dxy + nx // 2]])
-            try:
-                point_layer = self.viewer.layers[layer_name_pts]
-                point_layer.data = pts
-            except KeyError:
-                point_layer = self.viewer.add_points(pts, name=layer_name_pts,
-                                                     face_color=[0, 0, 0, 0], edge_color="red", size=10,
-                                                     text=text,
-                                                     features={"rad": [[rx, ry]]})
+            pts = np.array([fp[3] / dxy + ny // 2 + 2*ny, fp[2] / dxy + nx // 2])
+            features = {"rx": np.array([rx / 1e3]), "ry": np.array([ry / 1e3])}
 
+            theta = fp[5]
+            length = nx//10
+            shapes = [np.array([[pts[0], pts[1]], [pts[0] + length * np.cos(theta), pts[1] + length * np.sin(theta)]]),
+                      np.array([[pts[0], pts[1]], [pts[0] - length * np.sin(theta), pts[1] + length * np.cos(theta)]])
+                      ]
+
+            try:
+                point_layer = self.viewer.layers[pts_layer_name]
+                point_layer.data = pts
+                point_layer.features = features
+            except KeyError:
+                point_layer = self.viewer.add_points(pts, name=pts_layer_name,
+                                                     features=features,
+                                                     text=text,
+                                                     symbol="disc", opacity=1, face_color=[0, 0, 0, 0], edge_color="red", size=10,
+                                                     )
+
+            try:
+                shape_layer = self.viewer.layers[shapes_layer_name]
+                shape_layer.data = shapes
+            except KeyError:
+                shape_layer = self.viewer.add_shapes(shapes, name=shapes_layer_name,
+                                                     shape_type="line", edge_width=10,
+                                                     edge_color=["red", "blue"])
 
     def update_max_min(self, event=None):
 
