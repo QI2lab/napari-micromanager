@@ -20,11 +20,14 @@ import time
 import datetime
 import zarr
 import dask.array as da
+from dask_image.imread import imread
+from dask.diagnostics import ProgressBar
 import threading
 # daq and dmd
 import mcsim.expt_ctrl.daq
 from mcsim.expt_ctrl.program_sim_odt import get_sim_odt_sequence
 from mcsim.expt_ctrl import dlp6500
+import mcsim.expt_ctrl.phantom_cam as phc
 
 
 ICONS = Path(__file__).parent / "icons"
@@ -556,7 +559,33 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             nx_cam2 = mmc2.getImageWidth()
             ny_cam2 = mmc2.getImageHeight()
         else:
+            # todo: actually probably want to set mmc2 = self.phcam
             cam2 = self.phcam
+
+            # set up cines, one for each position
+            # cam2.set_cines(nxy_positions)
+            cam2.set_cines(1)
+
+            # get current parameters
+            cine_no = 1 # cine indexing starts at 1
+            params = cam2.get_params(cine_no)
+
+            # set acquisition parameters
+            exposure_odt_ns = int(np.round(exposure_tms_odt * 1e6))
+            # need fps to be a little bit slower (how much?)
+            # frames_per_sec = 1 / (exposure_odt_ns + 10000) * 1e9
+            frames_per_sec = 50.
+
+            try:
+                params_out = cam2.setAcqParams(cine_no=cine_no,
+                                               Exposure=exposure_odt_ns, # in ns
+                                               dFrameRate=frames_per_sec,
+                                               SyncImaging=phc.SYNC_EXTERNAL,
+                                               PTFrames=params.ImCount # post-trigger frames
+                                               )
+            except Exception as e:
+                print(e)
+                return
 
             nx_cam2 = cam2.getImageWidth()
             ny_cam2 = cam2.getImageHeight()
@@ -796,6 +825,17 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             g2.attrs["na_excitation"] = None
             g2.attrs["na_detection"] = None
 
+        if cam_is_phantom:
+            params_save = phc.struct2dict(params_out)
+
+            # convert byte fields to string to serialize in zarr
+            for k, v in params_save.items():
+                if isinstance(v, bytes):
+                    params_save[k] = str(v, "ascii")
+
+            g2.attrs["phantom_cam_acquisition_properties"] = params_save
+            # todo: would love to add tagSETUP structure here too, but can't find a function in the SDK to populate this
+
         # ###################################
         # datasets for camera #2
         # ###################################
@@ -944,6 +984,13 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 # trigger camera twice, required for Phantom camera
                 # ##################################
                 if cam_is_phantom:
+                    if cam2_acq_modes != []:
+                        cam2.quiet_fan(True) # quiet fan to avoid vibrations
+
+                    # start recording, using different cine for each position (still waiting for trigger)
+                    # cam2.record_cine(pp + 1)
+                    cam2.record_cine(1)
+
                     self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam_sync"])
                     time.sleep(0.1)
                     self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_sync"])
@@ -959,6 +1006,26 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
                 # lock to use for printing
                 lock = threading.Lock()
+
+                # todo: think this works now ... should integrate it and make my life easier...
+                def single_index2multi(ii, npatterns_channel):
+                    # order from slowest to fastest
+                    # ['time', 'z', 'parameters', 'channel', 'pattern']
+                    npatterns_all_channels = np.sum(npatterns_channel)
+                    npatterns_cumsum = np.cumsum(npatterns_channel)
+
+                    # channel index
+                    cinds = np.arange(len(npatterns_channel))
+                    ic = cinds[ii % npatterns_all_channels < npatterns_cumsum][0]
+                    # pattern index
+                    ip = int((ii % npatterns_all_channels - np.sum(npatterns_channel[:ic])) % npatterns_channel[ic])
+                    # other indices are easy
+                    iparam = (ii // npatterns_all_channels) % nparams
+                    iz = (ii // (npatterns_all_channels * nparams)) % nz
+                    it = (ii // (npatterns_all_channels * nparams * nz)) % ntimes
+
+                    return (it, iz, iparam, ic, ip)
+
 
                 def read_cam(mmc, dsets, cam_acq_modes, ncam_pics, desc=""):
                     ncam_channels = len(cam_acq_modes)
@@ -1023,6 +1090,69 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
                     return ii_acquired
 
+                def read_phantom_cam(phcam, dsets, cam_acq_modes, ncam_pics, desc=""):
+                    ncam_channels = len(cam_acq_modes)
+
+                    ii_acquired = 0
+                    iz = 0
+                    ic = 0
+                    iparam = 0
+                    ip = 0
+                    it = 0
+                    for icount in range(ncam_pics):
+                        # while mmc.getRemainingImageCount() == 0:
+                        #     tnow = time.perf_counter() - tstart_acq
+                        #
+                        #     if tnow > timeout:
+                        #         print("timeout reached......................")
+                        #         break
+                        #
+                        # # if we timed out, break out of loop
+                        # npics = mmc.getRemainingImageCount()
+                        # if npics == 0:
+                        #     break
+
+                        # img_data.cam1.sim[pp, it, iz, 0, ic, ip] = mmc.popNextImage()
+                        # dsets[ic][pp, it, iz, iparam, ip] = mmc.popNextImage()
+                        dsets[ic][pp, it, iz, iparam, ip] = phcam.get_recorded_img(1, icount)[0]
+
+                        # indexing logic. We acquire images (from slow to fast) time, z-position, channel, pattern
+                        ii_acquired += 1
+
+                        if ip != (cam_acq_modes[ic][3] - 1):
+                            # increment pattern everytime
+                            ip += 1
+                        else:
+                            ip = 0
+
+                            elapsed_time = time.perf_counter() - tstart_full_sequence
+                            elapsed_time_min = int(elapsed_time // 60)
+
+                            # print in threadsafe way
+                            with lock:
+                                print(
+                                    f"{desc:s} position {pp + 1:d}/{nxy_positions:d},"
+                                    f" channels {ic + 1:d}/{ncam_channels:d},"
+                                    f" z-step {iz + 1:d}/{nz:d},"
+                                    f" time {it + 1:d}/{ntimes:d},"
+                                    # f" images left in buffer = {npics - 1:d},"
+                                    f" elapsed time = {elapsed_time_min:02d}m:{elapsed_time - elapsed_time_min * 60:.1f}s")
+
+                            # increment channel after pattern
+                            if ic != (ncam_channels - 1):
+                                ic += 1
+                            else:
+                                ic = 0
+
+                                # increment z after channels
+                                if iz != (nz - 1):
+                                    iz += 1
+                                else:
+                                    iz = 0
+                                    if it != (ntimes - 1):
+                                        it += 1
+
+                    return ii_acquired
 
                 # ##################################
                 # burst acquisition
@@ -1066,13 +1196,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
                 # wait until program is over, then stop daq
                 t_elapsed_now = time.perf_counter() - tstart_acq
-                time.sleep(position_time_s - (t_elapsed_now) + 0.1)
-
-                if mmc1.isSequenceRunning():
-                    mmc1.stopSequenceAcquisition()
-
-                if mmc2.isSequenceRunning():
-                    mmc2.stopSequenceAcquisition()
+                # time.sleep(position_time_s - (t_elapsed_now) + 0.1)
+                time.sleep(position_time_s - (t_elapsed_now))
 
                 # reset DAQ
                 self.daq.stop_sequence()
@@ -1080,11 +1205,63 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_enable"])
                 self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_sync"])
 
+                if mmc1.isSequenceRunning():
+                    mmc1.stopSequenceAcquisition()
+
+                if mmc2.isSequenceRunning():
+                    mmc2.stopSequenceAcquisition()
+
                 # wait for pictures to be stored to disk
                 thread_save_cam1.join()
 
-                if mmc2.getCameraDevice() != "":
+                if not cam_is_phantom:
                     thread_save_cam2.join()
+                else:
+                    cam2.stopSequenceAcquisition() # stop recording
+                    cam2.quiet_fan(False) # turn fan back on
+
+                    # todo: is it possible to grab pictures as they come in on the phantom?
+                    #  So far wait until done recording to grab them
+                    tstart_ph_save = time.perf_counter()
+
+                    # save images to disk directly # todo: will this be fast enough? I expect not...
+                    # read_phantom_cam(cam2, cam2_dsets, cam2_acq_modes, n_cam2_pics, desc="phantom cam")
+                    # print(f"saved position {pp:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
+
+                    # # alternatively can first save tifs and then save to zarr using dask similar to
+                    # # C:\Users\q2ilab\Documents\mcsim_private\misc_scripts\2022_08_29_update_zarrs.py
+
+                    # cam2.save_cine(pp + 1, save_path.parent / f"ph_cine={pp+1:d}_odt.tif", first_image=0, img_count=n_cam2_pics)
+                    print("saving cine to tif")
+                    cam2.save_cine(1, save_path.parent / f"ph_position={pp:d}_odt.tif", first_image=0, img_count=n_cam2_pics)
+                    print(f"saved position {pp:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
+                    #
+                    # # get images as dask array
+                    # npatterns_ch_2 = np.array([am[3] for am in cam2_acq_modes], dtype=int)
+                    # npatterns2_all = np.sum(npatterns_ch_2) # number of combined patterns for all channels
+                    # tif_pattern = f"ph_cine={pp+1:d}_odt*.tif"
+                    # imgs_tif = imread(save_path.parent / tif_pattern)[:n_cam2_pics].reshape([ntimes, nz, nparams, npatterns2_all, ny_cam2, nx_cam2])
+                    # imgs_tif_rechunk = imgs_tif.rechunk((1, 1, 1, 1, nx_cam2, nx_cam2))
+                    #
+                    #
+                    # # need to deal with multiple channels ...
+                    # for ic, ds in enumerate(cam2_dsets):
+                    #     istart = np.sum(npatterns_ch_2[:ic])
+                    #
+                    #     # todo: does this trigger loading all data
+                    #     # ds[pp] = imgs_tif_rechunk[..., istart:istart + npatterns_ch_2[ic], :, :]
+                    #
+                    #     da.to_zarr(imgs_tif_rechunk[..., istart:istart + npatterns_ch_2[ic], :, :], ds[pp])
+                    #
+                    # # delete tif files
+                    # fname_tifs = list(save_path.parent.glob(tif_pattern))
+                    # for f in fname_tifs:
+                    #     f.unlink()
+                    #
+                    # delete cine
+                    cam2.destroy_cine(1)
+
+                    # print(f"saved position {pp:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
 
             # after all positions have run, set z-position back to start
             self.daq.set_analog_lines_by_name([z_volts_start], ["z_stage"])
@@ -1092,14 +1269,45 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             # store real xy-positions
             img_data.attrs["xy_position_um_real"] = xy_positions_real
 
+            if cam_is_phantom:
+                # write images to zarr
+
+                npatterns_ch_2 = np.array([am[3] for am in cam2_acq_modes], dtype=int)
+                npatterns2_all = np.sum(npatterns_ch_2) # number of combined patterns for all channels
+
+                imgs_tif = []
+                for pp in range(nxy_positions):
+                    tif_pattern = f"ph_position={pp:d}_odt*.tif"
+                    imgs_tif.append(imread(save_path.parent / tif_pattern)[:n_cam2_pics].reshape([ntimes, nz, nparams, npatterns2_all, ny_cam2, nx_cam2]).rechunk((1, 1, 1, 1, nx_cam2, nx_cam2)))
+
+                ims = da.stack(imgs_tif, axis=0)
+
+                # deal with multiple channels
+                print("writing to zarr...")
+                for ic, ds in enumerate(cam2_dsets):
+                    istart = np.sum(npatterns_ch_2[:ic])
+
+                    with ProgressBar():
+                        da.to_zarr(ims[..., istart:istart + npatterns_ch_2[ic], :, :], ds)
+
+                # # delete tif files
+                fname_tifs = list(save_path.parent.glob("ph*.tif"))
+                for f in fname_tifs:
+                    f.unlink()
+
+
             # ##################################
-            # reset cameras to internal triggering...
+            # reset cameras to internal triggering
             # ##################################
             mmc1.setProperty(cam1, "TRIGGER SOURCE", "INTERNAL")
 
-            if mmc2.getCameraDevice() != "":
+            if not cam_is_phantom:
                 mmc2.setProperty(cam2, "TriggerMode", "Internal Trigger")
                 mmc2.clearROI()
+            else:
+                params_out = cam2.setAcqParams(cine_no=0,
+                                               SyncImaging=phc.SYNC_INTERNAL,
+                                               )
 
             print("finished!")
 
