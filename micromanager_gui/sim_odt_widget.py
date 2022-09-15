@@ -862,6 +862,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             ds.attrs["channels"] = [dm]
 
             if dm == "odt":
+                ds.attrs["wavelength_um"] = 0.785
                 ds.attrs["volume_time_ms"] = min_odt_frame_time_ms * np_now # todo: correct this
 
             if dm == "odt":
@@ -1220,48 +1221,49 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     cam2.stopSequenceAcquisition() # stop recording
                     cam2.quiet_fan(False) # turn fan back on
 
-                    # todo: is it possible to grab pictures as they come in on the phantom?
-                    #  So far wait until done recording to grab them
-                    tstart_ph_save = time.perf_counter()
+                    if cam2_acq_modes != []:
+                        # todo: is it possible to grab pictures as they come in on the phantom?
+                        #  So far wait until done recording to grab them
+                        tstart_ph_save = time.perf_counter()
 
-                    # save images to disk directly # todo: will this be fast enough? I expect not...
-                    # read_phantom_cam(cam2, cam2_dsets, cam2_acq_modes, n_cam2_pics, desc="phantom cam")
-                    # print(f"saved position {pp:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
+                        # save images to disk directly # todo: will this be fast enough? I expect not...
+                        # read_phantom_cam(cam2, cam2_dsets, cam2_acq_modes, n_cam2_pics, desc="phantom cam")
+                        # print(f"saved position {pp:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
 
-                    # # alternatively can first save tifs and then save to zarr using dask similar to
-                    # # C:\Users\q2ilab\Documents\mcsim_private\misc_scripts\2022_08_29_update_zarrs.py
+                        # # alternatively can first save tifs and then save to zarr using dask similar to
+                        # # C:\Users\q2ilab\Documents\mcsim_private\misc_scripts\2022_08_29_update_zarrs.py
 
-                    # cam2.save_cine(pp + 1, save_path.parent / f"ph_cine={pp+1:d}_odt.tif", first_image=0, img_count=n_cam2_pics)
-                    print("saving cine to tif")
-                    cam2.save_cine(1, save_path.parent / f"ph_position={pp:d}_odt.tif", first_image=0, img_count=n_cam2_pics)
-                    print(f"saved position {pp:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
-                    #
-                    # # get images as dask array
-                    # npatterns_ch_2 = np.array([am[3] for am in cam2_acq_modes], dtype=int)
-                    # npatterns2_all = np.sum(npatterns_ch_2) # number of combined patterns for all channels
-                    # tif_pattern = f"ph_cine={pp+1:d}_odt*.tif"
-                    # imgs_tif = imread(save_path.parent / tif_pattern)[:n_cam2_pics].reshape([ntimes, nz, nparams, npatterns2_all, ny_cam2, nx_cam2])
-                    # imgs_tif_rechunk = imgs_tif.rechunk((1, 1, 1, 1, nx_cam2, nx_cam2))
-                    #
-                    #
-                    # # need to deal with multiple channels ...
-                    # for ic, ds in enumerate(cam2_dsets):
-                    #     istart = np.sum(npatterns_ch_2[:ic])
-                    #
-                    #     # todo: does this trigger loading all data
-                    #     # ds[pp] = imgs_tif_rechunk[..., istart:istart + npatterns_ch_2[ic], :, :]
-                    #
-                    #     da.to_zarr(imgs_tif_rechunk[..., istart:istart + npatterns_ch_2[ic], :, :], ds[pp])
-                    #
-                    # # delete tif files
-                    # fname_tifs = list(save_path.parent.glob(tif_pattern))
-                    # for f in fname_tifs:
-                    #     f.unlink()
-                    #
-                    # delete cine
-                    cam2.destroy_cine(1)
+                        # cam2.save_cine(pp + 1, save_path.parent / f"ph_cine={pp+1:d}_odt.tif", first_image=0, img_count=n_cam2_pics)
+                        print("saving cine to tif")
+                        cam2.save_cine(1, save_path.parent / f"ph_position={pp:d}_odt.tif", first_image=0, img_count=n_cam2_pics)
+                        print(f"saved position {pp:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
+                        #
+                        # # get images as dask array
+                        # npatterns_ch_2 = np.array([am[3] for am in cam2_acq_modes], dtype=int)
+                        # npatterns2_all = np.sum(npatterns_ch_2) # number of combined patterns for all channels
+                        # tif_pattern = f"ph_cine={pp+1:d}_odt*.tif"
+                        # imgs_tif = imread(save_path.parent / tif_pattern)[:n_cam2_pics].reshape([ntimes, nz, nparams, npatterns2_all, ny_cam2, nx_cam2])
+                        # imgs_tif_rechunk = imgs_tif.rechunk((1, 1, 1, 1, nx_cam2, nx_cam2))
+                        #
+                        #
+                        # # need to deal with multiple channels ...
+                        # for ic, ds in enumerate(cam2_dsets):
+                        #     istart = np.sum(npatterns_ch_2[:ic])
+                        #
+                        #     # todo: does this trigger loading all data
+                        #     # ds[pp] = imgs_tif_rechunk[..., istart:istart + npatterns_ch_2[ic], :, :]
+                        #
+                        #     da.to_zarr(imgs_tif_rechunk[..., istart:istart + npatterns_ch_2[ic], :, :], ds[pp])
+                        #
+                        # # delete tif files
+                        # fname_tifs = list(save_path.parent.glob(tif_pattern))
+                        # for f in fname_tifs:
+                        #     f.unlink()
+                        #
+                        # delete cine
+                        cam2.destroy_cine(1)
 
-                    # print(f"saved position {pp:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
+                        # print(f"saved position {pp:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
 
             # after all positions have run, set z-position back to start
             self.daq.set_analog_lines_by_name([z_volts_start], ["z_stage"])
@@ -1269,7 +1271,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             # store real xy-positions
             img_data.attrs["xy_position_um_real"] = xy_positions_real
 
-            if cam_is_phantom:
+            if cam_is_phantom and cam2_acq_modes != []:
                 # write images to zarr
 
                 npatterns_ch_2 = np.array([am[3] for am in cam2_acq_modes], dtype=int)

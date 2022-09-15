@@ -678,7 +678,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         # different layers for different cameras and modes
         cam_name = self._mmc_cam.getCameraDevice()
 
-        use_affine = self.use_affine_xform_checkBox.isChecked() and mode == "normal" and cam_name == self._mmcores[1].getCameraDevice()
+        use_affine = self.use_affine_xform_checkBox.isChecked() and mode == "normal" and cam_name != self._mmcores[0].getCameraDevice()
 
         if mode == "normal":
             pass
