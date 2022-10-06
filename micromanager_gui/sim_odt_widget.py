@@ -14,7 +14,7 @@ from useq import MDASequence
 if TYPE_CHECKING:
     from pymmcore_plus import RemoteMMCore
 
-from localize_psf import affine
+import re
 import numpy as np
 import time
 import datetime
@@ -23,6 +23,8 @@ import dask.array as da
 from dask_image.imread import imread
 from dask.diagnostics import ProgressBar
 import threading
+# custom code
+from localize_psf import affine
 # daq and dmd
 import mcsim.expt_ctrl.daq
 from mcsim.expt_ctrl.program_sim_odt import get_sim_odt_sequence
@@ -379,19 +381,43 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             raise ValueError("Select a filename and a valid directory.")
 
         if saving:
-            subdir = self.fname_lineEdit.text()
-            save_path = Path(self.dir_lineEdit.text()) / subdir / "sim_odt.zarr"
+            # grab values form GUI
+            main_dir = Path(self.dir_lineEdit.text())
+            subdir = Path(self.fname_lineEdit.text())
 
-            # make sure save path is unique
+            # ##############################
+            # ensure subdirs are of the form and numbes are correctly ordered 000_...
+            # ##############################
+
+            # test other subdirs and get their numbers
+            path_exp = "(\d+)_.*"
+            other_nums = [int(re.match(path_exp, n.name).group(1)) for n in main_dir.glob("*") if re.match(path_exp, n.name)]
+
+            # number for new subdir should be larger than all old ones
+            if other_nums != []:
+                new_num = int(np.max(other_nums)) + 1
+            else:
+                new_num = 1
+
+            # test if subdir matches pattern ... if so trim the number off the beginning
+            m = re.match("(\d+_).*", subdir.name)
+
+            if m:
+                subdir_final = Path(f"{new_num:03d}_{subdir.name[len(m.group(1)):]}")
+            else:
+                subdir_final = Path(f"{new_num:03d}_{subdir.name}")
+
+            # reset the GUI with the correct name
+            self.fname_lineEdit.setText(subdir_final.name)
+
+            # ensure save path does not already exist
+            save_path = main_dir / subdir_final / "sim_odt.zarr"
+
             if save_path.exists():
-                ii = 1
-                while save_path.exists():
-                    save_path = Path(self.dir_lineEdit.text()) / Path(f"{subdir:s}_{ii:d}") / "sim_odt.zarr"
-                    ii += 1
+                raise ValueError(f"save path {str(save_path):s} already exists")
 
         else:
             save_path = None
-            subdir = None
 
         print("##############################################################")
         start_str = f"starting acquisition"
@@ -856,8 +882,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 icount += 1
 
             # create dataset and add attributes
-            ds = g2.create_dataset(name_final, shape=(nxy_positions, ntimes, nz, nparams, np_now, ny_cam2, nx_cam2),
-                                   chunks=(1, 1, 1, 1, 1, ny_cam2, nx_cam2), dtype="uint16", compressor="none")
+            ds = g2.create_dataset(name_final,
+                                   shape=(nxy_positions, ntimes, nz, nparams, np_now, ny_cam2, nx_cam2),
+                                   chunks=(1, 1, 1, 1, 1, ny_cam2, nx_cam2),
+                                   dtype="uint16",
+                                   compressor="none")
             ds.attrs["dimensions"] = axis_list
             ds.attrs["channels"] = [dm]
 
