@@ -391,8 +391,15 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.dmd_cfg_lineEdit.setText(str(file_dir[0]))
 
     def load_dmd_cfg(self):
-        fname_dmd_config = self.dmd_cfg_lineEdit.text()
-        self.dmd.initialize(debug=True, config_file=fname_dmd_config)
+        fname_dmd_config = Path(self.dmd_cfg_lineEdit.text())
+
+        fname_patterns = fname_dmd_config.parent / "dmd_firmware_patterns.zarr"
+        if fname_patterns.exists():
+            fware_patterns = np.array(zarr.open(fname_patterns, "r").dmd_patterns).astype(bool)
+        else:
+            fware_patterns = None
+
+        self.dmd.initialize(debug=True, config_file=fname_dmd_config, firmware_patterns=fware_patterns)
 
     def browse_daq_cfg(self):
         file_dir = QtW.QFileDialog.getOpenFileName(self, "", "⁩", "json(*.json)")
@@ -494,7 +501,7 @@ class MainWindow(QtW.QWidget, _MainUI):
             chan = self.channel_comboBox.currentText()
             modes = list(self.dmd.presets[chan].keys())
             self.mode_comboBox.addItems(modes)
-            self.mode_comboBox.setCurrentText(modes[0])
+            self.mode_comboBox.setCurrentText("default") # note: modes are required to have a mode named "default"
 
     def _refresh_options(self):
         self._refresh_camera_options()
