@@ -19,6 +19,7 @@ import numpy as np
 import time
 import datetime
 import zarr
+import numcodecs
 import dask.array as da
 from dask_image.imread import imread
 from dask.diagnostics import ProgressBar
@@ -390,7 +391,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             # ##############################
 
             # test other subdirs and get their numbers
-            path_exp = "(\d+)_.*"
+            path_exp = "(\d{3})_.*"
             other_nums = [int(re.match(path_exp, n.name).group(1)) for n in main_dir.glob("*") if re.match(path_exp, n.name)]
 
             # number for new subdir should be larger than all old ones
@@ -1001,14 +1002,24 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
                 if pp == 0:
                     # store DMD information in zarr
-                    ds = img_data.create_dataset("dmd_data", shape=dmd_data.shape, dtype='int16', compressor='none')
+                    g_dmd = img_data.create_group("dmd_data")
+                    g_dmd.attrs["dmd_nx"] = self.dmd.width
+                    g_dmd.attrs["dmd_ny"] = self.dmd.height
+                    g_dmd.attrs["dmd_pitch_um"] = self.dmd.pitch
+                    fware_info = self.dmd.get_firmware_type()
+                    g_dmd.attrs["dmd_type"] = fware_info["dmd type"]
+                    g_dmd.attrs["firmware_tag"] = fware_info["firmware tag"]
+
+                    ds = g_dmd.create_dataset("dmd_program", shape=dmd_data.shape, dtype='int16', compressor='none')
                     ds[:] = dmd_data
                     ds.attrs["dimensions"] = ["pattern", "time"]
-                    ds.attrs["dmd_nx"] = self.dmd.width
-                    ds.attrs["dmd_ny"] = self.dmd.height
-                    ds.attrs["dmd_pitch_um"] = self.dmd.pitch
 
-                    # todo: should I store the firmware patterns here too?
+                    if self.dmd.firmware_patterns is not None:
+                        ds = g_dmd.array("firmware_patterns", self.dmd.firmware_patterns.astype(bool),
+                                         compressor=numcodecs.packbits.PackBits(), dtype=bool,
+                                         chunks=(1, self.dmd.height, self.dmd.width))
+                        ds.attrs["picture_indices"] = self.dmd.picture_indices.tolist()
+                        ds.attrs["bit_indices"] = self.dmd.bit_indices.tolist()
 
                 # ##################################
                 # trigger camera twice, required for Phantom camera
@@ -1264,7 +1275,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
                         # cam2.save_cine(pp + 1, save_path.parent / f"ph_cine={pp+1:d}_odt.tif", first_image=0, img_count=n_cam2_pics)
                         print("saving cine to tif")
-                        cam2.save_cine(1, save_path.parent / f"ph_position={pp:d}_odt.tif", first_image=0, img_count=n_cam2_pics)
+                        try:
+                            cam2.save_cine(1, save_path.parent / f"ph_position={pp:d}_odt.tif", first_image=0, img_count=n_cam2_pics)
+                        except Exception as e:
+                            print(e)
+
                         print(f"saved position {pp:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
                         #
                         # # get images as dask array
@@ -1309,7 +1324,19 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 imgs_tif = []
                 for pp in range(nxy_positions):
                     tif_pattern = f"ph_position={pp:d}_odt*.tif"
-                    imgs_tif.append(imread(save_path.parent / tif_pattern)[:n_cam2_pics].reshape([ntimes, nz, nparams, npatterns2_all, ny_cam2, nx_cam2]).rechunk((1, 1, 1, 1, nx_cam2, nx_cam2)))
+                    temp = imread(save_path.parent / tif_pattern)
+                    if len(temp) > n_cam2_pics:
+                        # in case extra pictures bc DAQ didn't stop immediately (it is stopped in software so this can happen)
+                        temp2 = temp[:n_cam2_pics]
+                    elif len(temp) < n_cam2_pics:
+                        # this should not happen, but want to debug it if it does
+                        temp2 = da.concatenate((temp,
+                                                da.zeros((n_cam2_pics - len(temp), temp.shape[1], temp.shape[2]))),
+                                               axis=0)
+                    else:
+                        temp2 = temp
+
+                    imgs_tif.append(temp2.reshape([ntimes, nz, nparams, npatterns2_all, ny_cam2, nx_cam2]).rechunk((1, 1, 1, 1, nx_cam2, nx_cam2)))
 
                 ims = da.stack(imgs_tif, axis=0)
 
