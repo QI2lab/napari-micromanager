@@ -601,6 +601,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             exposure_odt_ns = int(np.round(exposure_tms_odt * 1e6))
             # need fps to be a little bit slower (how much?)
             # frames_per_sec = 1 / (exposure_odt_ns + 10000) * 1e9
+            # todo: turns out doesn't matter ... can set to 50
             frames_per_sec = 50.
 
             try:
@@ -614,9 +615,18 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 print(e)
                 return
 
+            # 1280 x 960 is full chip size
+            # todo: get full chip size programmatically...
             nx_cam2 = cam2.getImageWidth()
             ny_cam2 = cam2.getImageHeight()
-            cam2_roi = [0, ny_cam2, 0, nx_cam2]
+
+            nx_start = (1280 - nx_cam2) // 2
+            nx_end = 1280 - (1280 - nx_cam2) // 2
+
+            ny_start = (960 - ny_cam2) // 2
+            ny_end = 960 - (960 - ny_cam2) // 2
+
+            cam2_roi = [ny_start, ny_end, nx_start, nx_end]
 
         # ##################################
         # get SIM camera and set properties
@@ -1210,7 +1220,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 time.sleep(5)
 
                 # program DAQ
-                self.daq.set_sequence(digital_program, analog_program, 1/dt,
+                self.daq.set_sequence(digital_program,
+                                      analog_program,
+                                      1/dt,
                                       analog_clock_source="/Dev1/PFI2",
                                       digital_input_source="/Dev1/PFI1",
                                       di_export_line="/Dev1/PFI2",
@@ -1237,8 +1249,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
                 # wait until program is over, then stop daq
                 t_elapsed_now = time.perf_counter() - tstart_acq
-                # time.sleep(position_time_s - (t_elapsed_now) + 0.1)
-                time.sleep(position_time_s - (t_elapsed_now))
+                time.sleep(position_time_s - (t_elapsed_now) + 0.1) # need extra margin or lose frames at fast frame rates
 
                 # reset DAQ
                 self.daq.stop_sequence()

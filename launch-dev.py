@@ -17,6 +17,7 @@ v = napari.Viewer()
 dw, main_window = v.window.add_plugin_dock_widget("micromanager")
 
 # set default configurations
+# todo: make only one LineEdit with a dropdown menu to configure what it's used for
 root_dir = Path(r"C:/Users/q2ilab/Documents/mcsim_private/mcSIM/mcsim/expt_ctrl")
 main_window.cfg_LineEdit.setText(str(root_dir / "sim_odt_nidaq_c1.cfg"))
 main_window.cfg2_LineEdit.setText(str(root_dir / "sim_odt_nidaq_c2.cfg"))
@@ -39,3 +40,5 @@ phcam = main_window.phcam
 
 
 napari.run()
+
+# self = main_window.sim_odt_acq
