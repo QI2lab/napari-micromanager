@@ -392,14 +392,7 @@ class MainWindow(QtW.QWidget, _MainUI):
 
     def load_dmd_cfg(self):
         fname_dmd_config = Path(self.dmd_cfg_lineEdit.text())
-
-        fname_patterns = fname_dmd_config.parent / "dmd_firmware_patterns.zarr"
-        if fname_patterns.exists():
-            fware_patterns = np.array(zarr.open(fname_patterns, "r").dmd_patterns).astype(bool)
-        else:
-            fware_patterns = None
-
-        self.dmd.initialize(debug=True, config_file=fname_dmd_config, firmware_patterns=fware_patterns)
+        self.dmd.initialize(debug=True, config_file=fname_dmd_config)
 
     def browse_daq_cfg(self):
         file_dir = QtW.QFileDialog.getOpenFileName(self, "", "⁩", "json(*.json)")
