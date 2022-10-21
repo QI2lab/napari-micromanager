@@ -250,35 +250,47 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             self.channel_tableWidget.insertRow(idx)
 
             # create a combo_box for channels in the table
-            self.channel_comboBox = QtW.QComboBox(self)
-            self.mode_comboBox = QtW.QComboBox(self)
-            self.camera_select_comboBox = QtW.QComboBox(self)
+            channel_comboBox = QtW.QComboBox(self)
+            mode_comboBox = QtW.QComboBox(self)
+            camera_select_comboBox = QtW.QComboBox(self)
 
             # populate channel options
             pks = list(presets.keys())
-            self.channel_comboBox.addItems(pks)
+            channel_comboBox.addItems(pks)
 
-            # populate camera options
-            self.camera_select_comboBox.addItems(self.acquisition_modes)
+            # populate mode options handled in _on_channel_changes
 
-            self.channel_tableWidget.setCellWidget(idx, 0, self.channel_comboBox)
-            self.channel_tableWidget.setCellWidget(idx, 1, self.mode_comboBox)
-            self.channel_tableWidget.setCellWidget(idx, 2, self.camera_select_comboBox)
 
-            self.channel_comboBox.currentTextChanged.connect(self._on_channel_changed)
 
-    def _on_channel_changed(self):
-        dmd_cmap = self.dmd.presets
+            # create combo_boxes in table
+            self.channel_tableWidget.setCellWidget(idx, 0, channel_comboBox)
+            self.channel_tableWidget.setCellWidget(idx, 1, mode_comboBox)
+            self.channel_tableWidget.setCellWidget(idx, 2, camera_select_comboBox)
 
+            # connect to on channel changes
+            channel_comboBox.currentTextChanged.connect(lambda: self._on_channel_changed(channel_comboBox))
+
+            # call once to ensure all boxes populated
+            self._on_channel_changed(channel_comboBox)
+
+    def _on_channel_changed(self, channel_comboBox):
+        # loop over rows until find the right one
         for ii in range(self.channel_tableWidget.rowCount()):
-            ch = self.channel_tableWidget.cellWidget(ii, 0).currentText()
+            if channel_comboBox == self.channel_tableWidget.cellWidget(ii, 0):
+                # get current channel name
+                ch = self.channel_tableWidget.cellWidget(ii, 0).currentText()
 
-            # clear old modes
-            self.channel_tableWidget.cellWidget(ii, 1).clear()
+                # clear old patterns
+                self.channel_tableWidget.cellWidget(ii, 1).clear()
 
-            # add new modes
-            modes = list(dmd_cmap[ch].keys())
-            self.channel_tableWidget.cellWidget(ii, 1).addItems(modes)
+                # add new patterns and set to "default"
+                modes = list(self.dmd.presets[ch].keys())
+                self.channel_tableWidget.cellWidget(ii, 1).addItems(modes)
+                self.channel_tableWidget.cellWidget(ii, 1).setCurrentText("default")
+
+                # populate mode options and set to "default"
+                self.channel_tableWidget.cellWidget(ii, 2).addItems(self.acquisition_modes)
+                self.channel_tableWidget.cellWidget(ii, 2).setCurrentText("default")
 
     def remove_channel(self):
         # remove selected position
@@ -486,8 +498,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             # get focus device info
             focus_dev = mmc1.getFocusDevice()
-            focus_dev_props = mmc1.getDeviceProperties(focus_dev)
-            guess_calibration_um_per_v = (float(focus_dev_props["Upper Limit"]) - float(focus_dev_props["Lower Limit"])) / 10
+            # focus_dev_props = mmc1.getDeviceProperties(focus_dev)
+            # guess_calibration_um_per_v = (float(focus_dev_props["Upper Limit"]) - float(focus_dev_props["Lower Limit"])) / 10
+            ul = float(mmc1.getProperty(focus_dev, "Upper Limit"))
+            ll = float(mmc1.getProperty(focus_dev, "Lower Limit"))
+            guess_calibration_um_per_v = (ul - ll) / 10
 
             # guess voltages to reach desired positions
             dzs = zpositions - z_now
@@ -805,6 +820,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         cam1_dsets = []
         for mode in cam1_acq_modes:
             dm, pm, am, np_now = mode
+
+            name = f"{dm:s}"
 
             if pm == "default":
                 name = f"sim_{dm:s}"
