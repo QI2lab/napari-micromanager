@@ -21,7 +21,7 @@ dw, main_window = v.window.add_plugin_dock_widget("micromanager")
 root_dir = Path(r"C:/Users/q2ilab/Documents/mcsim_private/mcSIM/mcsim/expt_ctrl")
 main_window.cfg_LineEdit.setText(str(root_dir / "sim_odt_nidaq_c1.cfg"))
 main_window.cfg2_LineEdit.setText(str(root_dir / "sim_odt_nidaq_c2.cfg"))
-main_window.dmd_cfg_lineEdit.setText(str(root_dir / "dmd_config.json"))
+main_window.dmd_cfg_lineEdit.setText(str(root_dir / "dmd_config.zarr"))
 main_window.daq_cfg_lineEdit.setText(str(root_dir / "daq_config.json"))
 main_window.microscope_cfg_lineEdit.setText(str(root_dir / "config.json"))
 
