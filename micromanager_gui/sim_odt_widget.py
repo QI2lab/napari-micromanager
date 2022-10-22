@@ -258,10 +258,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             pks = list(presets.keys())
             channel_comboBox.addItems(pks)
 
-            # populate mode options handled in _on_channel_changes
-
-
-
             # create combo_boxes in table
             self.channel_tableWidget.setCellWidget(idx, 0, channel_comboBox)
             self.channel_tableWidget.setCellWidget(idx, 1, mode_comboBox)
@@ -270,7 +266,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             # connect to on channel changes
             channel_comboBox.currentTextChanged.connect(lambda: self._on_channel_changed(channel_comboBox))
 
-            # call once to ensure all boxes populated
+            # call once to ensure all channel/mode options populated
             self._on_channel_changed(channel_comboBox)
 
     def _on_channel_changed(self, channel_comboBox):
@@ -604,9 +600,13 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             # todo: actually probably want to set mmc2 = self.phcam
             cam2 = self.phcam
 
-            # set up cines, one for each position
-            # cam2.set_cines(nxy_positions)
+            # set up cine: only need one
             cam2.set_cines(1)
+            # this also seems to clear CSR, so do CSR
+            try:
+                cam2.set_black_reference()
+            except Exception as e:
+                print(e)
 
             # get current parameters
             cine_no = 1 # cine indexing starts at 1
