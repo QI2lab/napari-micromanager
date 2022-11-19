@@ -707,8 +707,7 @@ class MainWindow(QtW.QWidget, _MainUI):
                                  dfy * (self.fy_doubleSpinBox.value() - ny // 2)])
 
             # instead multiply by expected phase ramp
-            # ft_xlated = mctools.translate_ft(data_ft, -holo_frq[0], -holo_frq[1], drs=(dxy, dxy), use_gpu=False)
-            ft_xlated = mctools.translate_ft(data_ft, -holo_frq[0], -holo_frq[1], drs=(dxy, dxy), use_gpu=False)
+            ft_xlated = mctools.translate_ft(data_ft, -holo_frq[0], -holo_frq[1], drs=(dxy, dxy))
             ft_xlated[ff > fmax] = 0
             im_holo = fft.fftshift(fft.ifft2(fft.ifftshift(ft_xlated)))
 
