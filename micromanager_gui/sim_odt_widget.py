@@ -787,32 +787,34 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # group for camera # 1
         # ###################################
         g1 = img_data.create_group("cam1")
-        g1.attrs["channels"] = cam1_acq_modes
+        g1.attrs["channels"] = [c[0] for c in cam1_acq_modes]
+        g1.attrs["acquisition_modes"] = cam1_acq_modes
         g1.attrs["exposure_time_ms"] = exposure_tms_sim
         g1.attrs["camera_roi"] = [0, ny_cam1, 0, nx_cam1]
+        g1.attrs["na_detection"] = self.configuration["camera_settings_1"]["na_detection"]
 
         try:
             g1.attrs["dx_um"] = self.configuration["camera_settings_1"]["dxy"]
             g1.attrs["dy_um"] = self.configuration["camera_settings_1"]["dxy"]
-            g1.attrs["na_detection"] = self.configuration["camera_settings_1"]["na_detection"]
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
+            print(e)
             g1.attrs["dx_um"] = None
             g1.attrs["dy_um"] = None
-            g1.attrs["na_detection"] = None
 
         # OTF
         try:
             g1.attrs["otf_model_parameters"] = self.configuration["camera_settings_1"]["otf_calibration"]["fit_params"]
         except (KeyError, TypeError) as e:
             print(e)
-            g1.attrs["affine_transformations"] = [[]] * len(cam1_acq_modes)
+            g1.attrs["otf_model_parameters"] = None
 
         # affine transformation information for specific channels we are using
         try:
-            g1.attrs["affine_transformations"] = [self.configuration["camera_settings_1"]["dmd_affine_transforms"][ch] for ch in range(len(cam1_acq_modes))]
+            dmd_affine_transforms = self.configuration["camera_settings_1"]["dmd_affine_transforms"]
+            g1.attrs["affine_transformations"] = [dmd_affine_transforms[m[0]] for m in cam1_acq_modes]
         except (KeyError, TypeError) as e:
             print(e)
-            g1.attrs["otf_model_parameters"] = None
+            g1.attrs["affine_transformations"] = [[]] * len(cam1_acq_modes)
 
         # ###################################
         # create datasets for camera #1
