@@ -39,10 +39,16 @@ from mcsim.expt_ctrl import dlp6500, daq, phantom_cam
 import mcsim.analysis.analysis_tools as mctools
 from mcsim.analysis.sim_reconstruction import fit_modulation_frq
 from localize_psf import fit
-from skimage.restoration import unwrap_phase
 from numpy import fft
 from scipy.ndimage import maximum_filter, minimum_filter
+from skimage.restoration import unwrap_phase
 
+_cupy_available = True
+try:
+    import cupy as cp
+except ImportError:
+    cp = np
+    _cupy_available = False
 
 ICONS = Path(__file__).parent / "icons"
 CAM_ICON = QIcon(str(ICONS / "vcam.svg"))
@@ -255,7 +261,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.set_camera_comboBox.currentTextChanged.connect(self._camera_changed)
 
         # set up processing modes combo box
-        proc_modes = ["normal", "fft", "hologram", "hologram unwrapped"]
+        proc_modes = ["normal", "fft", "hologram"]
         self.image_proc_mode_comboBox.addItems(proc_modes)
         self.snap_channel_comboBox.setCurrentText(proc_modes[0])
         self.guess_holo_frq_Button.clicked.connect(self.guess_holo_frq)
@@ -683,9 +689,18 @@ class MainWindow(QtW.QWidget, _MainUI):
         if mode == "normal":
             pass
         elif mode == "fft":
-            data_ft = np.abs(fft.fftshift(fft.fft2(fft.ifftshift(data))))
-        elif mode == "hologram" or mode == "hologram unwrapped":
-            data_ft = fft.fftshift(fft.fft2(fft.ifftshift(data)))
+            if _cupy_available:
+                data_ft = cp.abs(cp.fft.fftshift(cp.fft.fft2(cp.fft.ifftshift(cp.array(data))))).get()
+            else:
+                data_ft = np.abs(fft.fftshift(fft.fft2(fft.ifftshift(data))))
+
+        elif mode == "hologram":
+            if _cupy_available:
+                ft = cp.fft.fftshift(cp.fft.fft2(cp.fft.ifftshift(cp.array(data)))).get()
+            else:
+                ft = fft.fftshift(fft.fft2(fft.ifftshift(data)))
+
+            data_ft = np.abs(ft)
 
             # todo: grab these values from configuration file
             # todo: could display in some nicer way...but...
@@ -707,7 +722,7 @@ class MainWindow(QtW.QWidget, _MainUI):
                                  dfy * (self.fy_doubleSpinBox.value() - ny // 2)])
 
             # instead multiply by expected phase ramp
-            ft_xlated = mctools.translate_ft(data_ft, -holo_frq[0], -holo_frq[1], drs=(dxy, dxy))
+            ft_xlated = mctools.translate_ft(ft, -holo_frq[0], -holo_frq[1], drs=[dxy, dxy])
             ft_xlated[ff > fmax] = 0
             im_holo = fft.fftshift(fft.ifft2(fft.ifftshift(ft_xlated)))
 
@@ -717,16 +732,14 @@ class MainWindow(QtW.QWidget, _MainUI):
 
             # todo: could also display amplitude data...
             holo_amp = np.abs(im_holo)
-            if mode == "hologram":
-                holo_angle = np.angle(im_holo)
-            else:
-                holo_angle = unwrap_phase(np.angle(im_holo))
+            # holo_angle = np.angle(im_holo)
+            holo_angle = unwrap_phase(np.angle(im_holo))
 
             # add center value back
             holo_angle -= np.mean(holo_angle[mask])
 
         else:
-            raise ValueError(f"mode must be 'normal', 'fft', 'hologram', or 'hologram unwrapped' but was '{mode:s}'")
+            raise ValueError(f"mode must be 'normal', 'fft', or 'hologram' but was '{mode:s}'")
 
         # display image
         layer_name = f"{cam_name:s}"
@@ -788,19 +801,14 @@ class MainWindow(QtW.QWidget, _MainUI):
                 point_layer = self.viewer.add_points(pts, name=point_layer_name,
                                                      face_color=[0, 0, 0, 0], edge_color="red", size=10)
 
-
-
-        if mode == "hologram" or mode == "hologram unwrapped":
+        if mode == "hologram":
             layer_name_holo_phase = f"{cam_name:s} {mode:s} phase"
 
             try:
                 preview_layer = self.viewer.layers[layer_name_holo_phase]
                 preview_layer.data = holo_angle
             except KeyError:
-                if mode == "hologram":
-                    lims = [-np.pi, np.pi]
-                else:
-                    lims = [-2*np.pi, 2*np.pi]
+                lims = [-2*np.pi, 2*np.pi]
 
                 preview_layer = self.viewer.add_image(holo_angle, name=layer_name_holo_phase, translate=[ny, 0],
                                                       colormap="twilight_shifted", contrast_limits=lims)
@@ -871,12 +879,13 @@ class MainWindow(QtW.QWidget, _MainUI):
             fys = fft.fftshift(fft.fftfreq(ny, dxy))
             dfy = fys[1] - fys[0]
 
-            fxfx, fyfy = np.meshgrid(fxs, fys)
+            # fxfx, fyfy = np.meshgrid(fxs, fys)
 
             frq_guess = np.array([dfx * (self.fx_doubleSpinBox.value() - nx // 2),
                                   dfy * (self.fy_doubleSpinBox.value() - ny // 2)])
 
-            frq_fit, mask, _ = fit_modulation_frq(img_ft, img_ft, dxy, frq_guess=frq_guess, roi_pix_size=50)
+            frq_fit, mask, _ = fit_modulation_frq(img_ft, img_ft, dxy, frq_guess=frq_guess,
+                                                  max_frq_shift=10 * dfy)
 
             indx_fit = frq_fit[0] / dfx + nx // 2
             indy_fit = frq_fit[1] / dfy + ny // 2
@@ -892,8 +901,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         threshold = self.threshold_SpinBox.value()
 
         # find correct layer
-        is_holo_amp = [l.name[-22:] == "hologram unwrapped amp" for l in self.viewer.layers]
-        is_holo_phase = [l.name[-24:] == "hologram unwrapped phase" for l in self.viewer.layers]
+        is_holo_amp = [l.name[-22:] == "hologram amp" for l in self.viewer.layers]
+        is_holo_phase = [l.name[-24:] == "hologram phase" for l in self.viewer.layers]
 
         if np.sum(is_holo_phase) == 1 and np.sum(is_holo_amp) == 1:
             ind = int(np.where(is_holo_phase)[0])
