@@ -922,26 +922,33 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             if dm == "odt":
                 ds.attrs["wavelength_um"] = 0.785
-                ds.attrs["volume_time_ms"] = min_odt_frame_time_ms * np_now # todo: correct this
+                ds.attrs["volume_time_ms"] = min_odt_frame_time_ms * np_now  # todo: correct this
 
-            if dm == "odt":
                 odt_firmware_data = self.dmd.presets[dm][pm]
                 odt_pic_inds = odt_firmware_data["picture_indices"]
                 odt_bit_inds = odt_firmware_data["bit_indices"]
                 odt_firmware_inds = dlp6500.pic_bit_ind_2firmware_ind(odt_pic_inds, odt_bit_inds)
                 dmd_pattern_data = self.dmd.firmware_pattern_info
 
-                xyoffsets = [(dmd_pattern_data[ii]["xoffset"],
-                              dmd_pattern_data[ii]["yoffset"])
-                             for ii in odt_firmware_inds]
-                xoffsets, yoffsets = zip(*xyoffsets)
+                # xyoffsets = [(dmd_pattern_data[ii]["xoffset"],
+                #               dmd_pattern_data[ii]["yoffset"])
+                #              for ii in odt_firmware_inds]
+                # xoffsets, yoffsets = zip(*xyoffsets)
+                #
+                # # set odt dataset metadata
+                # ds.attrs["x_offsets"] = xoffsets
+                # ds.attrs["y_offsets"] = yoffsets
+                # ds.attrs["carrier_frq"] = list(dmd_pattern_data[odt_firmware_inds[0]]["frequency"])
+                # ds.attrs["angle"] = dmd_pattern_data[odt_firmware_inds[0]]["angle"]
+                # ds.attrs["radius"] = dmd_pattern_data[odt_firmware_inds[0]]["radius"]
 
                 # set odt dataset metadata
-                ds.attrs["x_offsets"] = xoffsets
-                ds.attrs["y_offsets"] = yoffsets
-                ds.attrs["carrier_frq"] = list(dmd_pattern_data[odt_firmware_inds[0]]["frequency"])
-                ds.attrs["angle"] = dmd_pattern_data[odt_firmware_inds[0]]["angle"]
+                ds.attrs["offsets"] = [np.array(dmd_pattern_data[ii]["offsets"]).tolist() for ii in odt_firmware_inds]
+                ds.attrs["drs_out"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["drs_out"]).tolist()
+                ds.attrs["spot_frqs_mirrors"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["spot_frqs_mirrors"]).tolist()
+                ds.attrs["carrier_frq"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["carrier frequency"]).tolist()
                 ds.attrs["radius"] = dmd_pattern_data[odt_firmware_inds[0]]["radius"]
+
             else:
                 # sim pattern information for specific channels we are using
                 sim_pattern_dat = dlp6500.get_preset_info(self.dmd.presets[dm][pm], self.dmd.firmware_pattern_info)[0]
