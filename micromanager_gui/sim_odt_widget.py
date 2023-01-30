@@ -930,21 +930,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 odt_firmware_inds = dlp6500.pic_bit_ind_2firmware_ind(odt_pic_inds, odt_bit_inds)
                 dmd_pattern_data = self.dmd.firmware_pattern_info
 
-                # xyoffsets = [(dmd_pattern_data[ii]["xoffset"],
-                #               dmd_pattern_data[ii]["yoffset"])
-                #              for ii in odt_firmware_inds]
-                # xoffsets, yoffsets = zip(*xyoffsets)
-                #
-                # # set odt dataset metadata
-                # ds.attrs["x_offsets"] = xoffsets
-                # ds.attrs["y_offsets"] = yoffsets
-                # ds.attrs["carrier_frq"] = list(dmd_pattern_data[odt_firmware_inds[0]]["frequency"])
-                # ds.attrs["angle"] = dmd_pattern_data[odt_firmware_inds[0]]["angle"]
-                # ds.attrs["radius"] = dmd_pattern_data[odt_firmware_inds[0]]["radius"]
-
                 # set odt dataset metadata
                 ds.attrs["offsets"] = [np.array(dmd_pattern_data[ii]["offsets"]).tolist() for ii in odt_firmware_inds]
-                ds.attrs["drs_out"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["drs_out"]).tolist()
+                ds.attrs["drs"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["drs"]).tolist()
                 ds.attrs["spot_frqs_mirrors"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["spot_frqs_mirrors"]).tolist()
                 ds.attrs["carrier_frq"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["carrier frequency"]).tolist()
                 ds.attrs["radius"] = dmd_pattern_data[odt_firmware_inds[0]]["radius"]
@@ -1445,10 +1433,19 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     layer_name = f"{g.name:s} {name:s} {suffix:s}"
                     img_to_show = da.from_zarr(arr)
 
+                    dxy = g.attrs["dx_um"]
+                    dz = self.img_data.attrs["dz_um"]
+                    if dz != 0:
+                        z_scale = dz / dxy
+                    else:
+                        z_scale = 1.
+
                     # try to update layer. If it doesn't exist, add it
                     try:
                         preview_layer = self.viewer.layers[layer_name]
                         preview_layer.data = img_to_show
+                        preview_layer.scale[-5] = z_scale
+
 
                     except KeyError:
                         # clims_low = [np.percentile(im, 1) for im in img_data.sim[0, 0, 0, 0, :, 0]]
@@ -1457,7 +1454,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         # catch errors in case zarr attr does not exist yet
                         try:
                             cmap = cmap_dict[arr.attrs["channels"][0]]
-                            self.viewer.add_image(img_to_show, name=layer_name, colormap=cmap)
+                            self.viewer.add_image(img_to_show, name=layer_name, colormap=cmap,
+                                                  scale=(1., 1., z_scale, 1., 1., 1., 1.))
                             self.viewer.dims.axis_labels = arr.attrs["dimensions"]
 
                         except Exception as e:
