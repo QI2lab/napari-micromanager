@@ -760,6 +760,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         img_data.attrs["z_position_um"] = list(z_real)
         img_data.attrs["dz_um"] = dz
         img_data.attrs["z_calibration_um_per_v"] = calibration_um_per_v
+        img_data.attrs["interval_ms"] = interval_ms
 
         # micromanager configuration
         img_data.attrs["micromanager_core1_state"] = mmc1.getSystemState().dict()
@@ -964,6 +965,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         img_data.daq.analog_program.attrs["dimensions"] = ["time", "channel"]
         img_data.daq.analog_program[:] = analog_program
         img_data.daq.analog_program.attrs["channel_map"] = daq_ao_map
+
+        img_data.create_dataset("daq/analog_input", shape=(nxy_positions, digital_program.shape[0] * ntimes * nz, self.daq.n_analog_inputs), dtype="float", compressor="none")
+        img_data.daq.analog_input.attrs["dimensions"] = ["position", "time/z", "analog channel"]
 
         img_data.daq.attrs["dt"] = dt
 
@@ -1240,7 +1244,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                       analog_clock_source="/Dev1/PFI2",
                                       digital_input_source="/Dev1/PFI1",
                                       di_export_line="/Dev1/PFI2",
-                                      continuous=True)
+                                      continuous=True,
+                                      nrepeats=ntimes * nz)
 
                 # start camera
                 mmc1.startSequenceAcquisition(n_cam1_pics, 0, True)
@@ -1270,6 +1275,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 self.daq.set_preset("off")
                 self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_enable"])
                 self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_sync"])
+
+                try:
+                    img_data.daq.analog_input[pp] = self.daq.read_ai(img_data.daq.analog_input.shape[1])
+                except Exception as e:
+                    print(e)
 
                 if mmc1.isSequenceRunning():
                     mmc1.stopSequenceAcquisition()
@@ -1330,7 +1340,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         #     f.unlink()
                         #
                         # delete cine
-                        cam2.destroy_cine(1)
+                        try:
+                            cam2.destroy_cine(1)
+                        except Exception as e:
+                            print(e)
 
                         # print(f"saved position {pp:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
 
