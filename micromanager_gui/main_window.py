@@ -735,8 +735,10 @@ class MainWindow(QtW.QWidget, _MainUI):
             # holo_angle = np.angle(im_holo)
             holo_angle = unwrap_phase(np.angle(im_holo))
 
+            # don't show masked parts
             # add center value back
             holo_angle -= np.mean(holo_angle[mask])
+            holo_angle[holo_amp < threshold] = np.nan
 
         else:
             raise ValueError(f"mode must be 'normal', 'fft', or 'hologram' but was '{mode:s}'")
@@ -901,8 +903,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         threshold = self.threshold_SpinBox.value()
 
         # find correct layer
-        is_holo_amp = [l.name[-22:] == "hologram amp" for l in self.viewer.layers]
-        is_holo_phase = [l.name[-24:] == "hologram phase" for l in self.viewer.layers]
+        is_holo_amp = [re.match(".*hologram amp", l.name) is not None for l in self.viewer.layers]
+        is_holo_phase = [re.match(".*hologram phase", l.name) is not None for l in self.viewer.layers]
 
         if np.sum(is_holo_phase) == 1 and np.sum(is_holo_amp) == 1:
             ind = int(np.where(is_holo_phase)[0])
@@ -917,17 +919,14 @@ class MainWindow(QtW.QWidget, _MainUI):
             dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
             fmax_int = 2 * self.cfg_data["camera_settings_phantom"]["na_detection"] / 0.785
             fxs = fft.fftshift(fft.fftfreq(nx, dxy))
-            dfx = fxs[1] - fxs[0]
             fys = fft.fftshift(fft.fftfreq(ny, dxy))
-            dfy = fys[1] - fys[0]
-
             k = 2 * np.pi / 0.785
 
             # fit mask
             # fit defocus
             to_fit_pix = holo_amp > threshold
             # dilate/erode to close holes
-            footprint = np.ones((10, 10), dtype=bool)
+            footprint = np.ones((15, 15), dtype=bool)
             to_fit_pix = maximum_filter(to_fit_pix, footprint=footprint)
             to_fit_pix = minimum_filter(to_fit_pix, footprint=footprint)
 
@@ -941,30 +940,68 @@ class MainWindow(QtW.QWidget, _MainUI):
             # fit defocus phase
             def defocus_phase_fn(p, x, y):
                 """
-                @param p: [k/Rx, k/Ry, cx, cy, offset, theta]
+                @param p: [k/Rx, k/Ry, cx, cy, offset, theta, xrot grad, yrot grad]
                 @param x:
                 @param y:
                 @return phase:
                 """
                 xrot = (x - p[2]) * np.cos(p[5]) + (y - p[3]) * np.sin(p[5])
                 yrot = -(x - p[2]) * np.sin(p[5]) + (y - p[3]) * np.cos(p[5])
-                phase = 0.5 * p[0] * xrot ** 2 + 0.5 * p[1] * yrot ** 2 + p[4]
+                phase = 0.5 * p[0] * xrot ** 2 + 0.5 * p[1] * yrot ** 2 + p[4] + p[6] * xrot + p[7] * yrot
                 return phase
 
+            def defocus_jac(p, x, y):
+                xrot = (x - p[2]) * np.cos(p[5]) + (y - p[3]) * np.sin(p[5])
+                yrot = -(x - p[2]) * np.sin(p[5]) + (y - p[3]) * np.cos(p[5])
+
+                dxrot_dp2 = -np.cos(p[5])
+                dxrot_dp3 = -np.sin(p[5])
+                dxrot_dp5 = (x - p[2]) * (- np.sin(p[5])) + (y - p[3]) * np.cos(p[5])
+                dyrot_dp2 = np.sin(p[5])
+                dyrot_dp3 = -np.cos(p[5])
+                dyrot_dp5 = -(x - p[2]) * np.cos(p[5]) + (y - p[3]) * (-np.sin(p[5]))
+
+
+                j = [0.5 * xrot ** 2,
+                     0.5 * yrot ** 2,
+                     0.5 * p[0] * (xrot * 2 * dxrot_dp2) + 0.5 * p[1] * (yrot * 2 * dyrot_dp2) + p[6] * dxrot_dp2 + p[7] * dyrot_dp2,
+                     0.5 * p[0] * (xrot * 2 * dxrot_dp3) + 0.5 * p[1] * (yrot * 2 * dyrot_dp3) + p[6] * dxrot_dp3 + p[7] * dyrot_dp3,
+                     np.ones(xrot.shape),
+                     0.5 * p[0] * (xrot * 2 * dxrot_dp5) + 0.5 * p[1] * (yrot * 2 * dyrot_dp5) + p[6] * dxrot_dp5 + p[7] * dxrot_dp5,
+                     xrot,
+                     yrot
+                     ]
+
+                return j
+
             def fit_fn(p): return defocus_phase_fn(p, xx[to_fit_pix], yy[to_fit_pix])
+            def jac_fn(p): return defocus_jac(p, xx[to_fit_pix], yy[to_fit_pix])
 
             xx, yy = np.meshgrid(range(nx), range(ny))
             xx = (xx - nx//2) * dxy
             yy = (yy - ny//2) * dxy
 
-            init_params = [0, 0,
+            init_params = [0,
+                           0,
                            np.sum(xx * to_fit_pix) / np.sum(to_fit_pix),
                            np.sum(yy * to_fit_pix) / np.sum(to_fit_pix),
-                           np.mean(phase_unwrapped[to_fit_pix]),
+                           np.nanmean(phase_unwrapped[to_fit_pix]),
+                           0,
+                           0,
                            0]
 
-            lbs = [-np.inf, -np.inf, np.min(xx[to_fit_pix]), np.min(yy[to_fit_pix]), -np.inf, -np.inf]
-            ubs = [np.inf, np.inf, np.max(xx[to_fit_pix]), np.max(yy[to_fit_pix]), np.inf, np.inf]
+            xy_max_dev_pix = 10
+            # xlb = np.min(xx[to_fit_pix])
+            # ylb = np.min(yy[to_fit_pix])
+            # xub = np.max(xx[to_fit_pix])
+            # yub = np.max(yy[to_fit_pix])
+            xlb = init_params[2] - xy_max_dev_pix * dxy
+            xub = init_params[2] + xy_max_dev_pix * dxy
+            ylb = init_params[3] - xy_max_dev_pix * dxy
+            yub = init_params[3] + xy_max_dev_pix * dxy
+
+            lbs = [-np.inf, -np.inf, xlb, ylb, -np.inf, -np.inf, -np.inf, -np.inf]
+            ubs = [np.inf, np.inf, xub, yub, np.inf, np.inf, np.inf, np.inf]
 
             fit_data = phase_unwrapped[to_fit_pix]
             # fit_data = np.concatenate((phase_unwrapped[to_fit_pix], amp[to_fit_pix]))
@@ -972,7 +1009,8 @@ class MainWindow(QtW.QWidget, _MainUI):
             results = fit.fit_model(fit_data,
                                     fit_fn,
                                     init_params=init_params,
-                                    bounds=(lbs, ubs))
+                                    bounds=(lbs, ubs),
+                                    model_jacobian=jac_fn)
             fp = results["fit_params"]
             # radius of curvature in um
             rx = k / fp[0]
@@ -982,29 +1020,36 @@ class MainWindow(QtW.QWidget, _MainUI):
             phase_fit_plot[np.logical_not(to_fit_pix)] = np.nan
 
             layer_name_fit = f"phase fit"
+            # translate = np.array([2*ny, 0])
+            translate = np.array([ny, -nx])
             try:
                 preview_layer = self.viewer.layers[layer_name_fit]
                 preview_layer.data = phase_fit_plot
             except KeyError:
                 lims = [-2*np.pi, 2*np.pi]
 
-                preview_layer = self.viewer.add_image(phase_fit_plot, name=layer_name_fit, translate=[2*ny, 0],
-                                                      colormap="twilight_shifted", contrast_limits=lims)
+                preview_layer = self.viewer.add_image(phase_fit_plot,
+                                                      name=layer_name_fit,
+                                                      translate=translate,
+                                                      colormap="twilight_shifted",
+                                                      contrast_limits=lims)
 
 
             pts_layer_name = f"phase fit center"
             shapes_layer_name = f"shape fit center"
 
-
-            # todo: text layer not working
-            text = {'string': 'Rx={rx:.1f}mm (red)\nRy={ry:.1f}mm (blue)', #, Ry={rx:.1f}mm',
+            text = {'string': 'Rx={rx:.1f}mm (red)\nRy={ry:.1f}mm (blue)\nGx={gx:.1f}rad/mm\nGy={gy:.1f}rad/mm',
                     'size': 20,
                     'color': 'red',
                     'translation': np.array([-10, -nx//2]),
                     }
 
-            pts = np.array([fp[3] / dxy + ny // 2 + 2*ny, fp[2] / dxy + nx // 2])
-            features = {"rx": np.array([rx / 1e3]), "ry": np.array([ry / 1e3])}
+            pts = np.array([fp[3] / dxy + ny // 2 + translate[0], fp[2] / dxy + nx // 2 + translate[1]])
+            features = {"rx": np.array([rx / 1e3]),
+                        "ry": np.array([ry / 1e3]),
+                        "gx": np.array([fp[6] / 1e3]),
+                        "gy": np.array([fp[7] / 1e3])
+                        }
 
             theta = fp[5]
             length = nx//10
@@ -1017,18 +1062,25 @@ class MainWindow(QtW.QWidget, _MainUI):
                 point_layer.data = pts
                 point_layer.features = features
             except KeyError:
-                point_layer = self.viewer.add_points(pts, name=pts_layer_name,
+                point_layer = self.viewer.add_points(pts,
+                                                     name=pts_layer_name,
                                                      features=features,
                                                      text=text,
-                                                     symbol="disc", opacity=1, face_color=[0, 0, 0, 0], edge_color="red", size=10,
+                                                     symbol="disc",
+                                                     opacity=1,
+                                                     face_color=[0, 0, 0, 0],
+                                                     edge_color="red",
+                                                     size=10,
                                                      )
 
             try:
                 shape_layer = self.viewer.layers[shapes_layer_name]
                 shape_layer.data = shapes
             except KeyError:
-                shape_layer = self.viewer.add_shapes(shapes, name=shapes_layer_name,
-                                                     shape_type="line", edge_width=10,
+                shape_layer = self.viewer.add_shapes(shapes,
+                                                     name=shapes_layer_name,
+                                                     shape_type="line",
+                                                     edge_width=10,
                                                      edge_color=["red", "blue"])
 
     def update_max_min(self, event=None):
