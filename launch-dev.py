@@ -17,20 +17,12 @@ v = napari.Viewer()
 dw, main_window = v.window.add_plugin_dock_widget("micromanager")
 
 # set default configurations
-# todo: make only one LineEdit with a dropdown menu to configure what it's used for
 root_dir = Path(r"C:/Users/q2ilab/Documents/mcsim_private/mcSIM/mcsim/expt_ctrl")
-main_window.cfg_LineEdit.setText(str(root_dir / "sim_odt_nidaq_c1.cfg"))
-main_window.cfg2_LineEdit.setText(str(root_dir / "sim_odt_nidaq_c2.cfg"))
-main_window.dmd_cfg_lineEdit.setText(str(root_dir / "dmd_config.zarr"))
-main_window.daq_cfg_lineEdit.setText(str(root_dir / "daq_config.json"))
-main_window.microscope_cfg_lineEdit.setText(str(root_dir / "config.json"))
-
-# load default configurations
-main_window.load_cfg()
-# main_window.load_cfg2()
-main_window.load_dmd_cfg()
-main_window.load_daq_cfg()
-main_window.load_microscope_cfg()
+main_window.load_cfg("MM config", str(root_dir / "sim_odt_nidaq_c1.cfg"))
+# main_window.load_cfg("Cam 2", str(root_dir / "sim_odt_nidaq_c2.cfg"))
+main_window.load_cfg("DMD", str(root_dir / "dmd_config.zarr"))
+main_window.load_cfg("DAQ", str(root_dir / "daq_config.json"))
+main_window.load_cfg("microscope", str(root_dir / "config.json"))
 
 # grab devices
 mmc1, mmc2 = main_window._mmcores
@@ -38,7 +30,4 @@ dmd = main_window.dmd
 daq = main_window.daq
 phcam = main_window.phcam
 
-
 napari.run()
-
-# self = main_window.sim_odt_acq

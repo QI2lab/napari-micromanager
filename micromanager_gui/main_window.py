@@ -60,22 +60,9 @@ class _MainUI:
 
     # The UI_FILE above contains these objects:
     cfg_LineEdit: QtW.QLineEdit
+    configuration_selector_comboBox: QtW.QComboBox
     browse_cfg_Button: QtW.QPushButton
     load_cfg_Button: QtW.QPushButton
-    cfg2_LineEdit: QtW.QLineEdit
-    browse_cfg2_Button: QtW.QPushButton
-    load_cfg2_Button: QtW.QPushButton
-    dmd_cfg_lineEdit: QtW.QLineEdit
-    dmd_load_cfg_Button: QtW.QPushButton
-    browse_dmd_cfg_Button: QtW.QPushButton
-    daq_cfg_lineEdit: QtW.QLineEdit
-    daq_load_cfg_Button: QtW.QPushButton
-    browse_daq_cfg_Button: QtW.QPushButton
-    microscope_cfg_lineEdit: QtW.QLineEdit
-    browse_microscope_cfg_Button: QtW.QPushButton
-    microscope_load_cfg_Button: QtW.QPushButton
-    objective_groupBox: QtW.QGroupBox
-    objective_comboBox: QtW.QComboBox
     camera_groupBox: QtW.QGroupBox
     bin_comboBox: QtW.QComboBox
     bit_comboBox: QtW.QComboBox
@@ -116,13 +103,14 @@ class _MainUI:
     #
     snap_Button: QtW.QPushButton
     live_Button: QtW.QPushButton
-    max_min_val_label: QtW.QLabel
+    # max_min_val_label: QtW.QLabel
+    max_label: QtW.QLabel
+    min_label: QtW.QLabel
     max_scale_doubleSpinBox: QtW.QDoubleSpinBox
     min_scale_doubleSpinBox: QtW.QDoubleSpinBox
     autoscale_Button: QtW.QPushButton
     px_size_doubleSpinBox: QtW.QDoubleSpinBox
     properties_Button: QtW.QPushButton
-    illumination_Button: QtW.QPushButton
     snap_on_click_xy_checkBox: QtW.QCheckBox
     snap_on_click_z_checkBox: QtW.QCheckBox
     set_camera_comboBox: QtW.QComboBox
@@ -213,17 +201,16 @@ class MainWindow(QtW.QWidget, _MainUI):
         sig.channelGroupChanged.connect(self._refresh_channel_list)
         sig.configSet.connect(self._on_config_set)
 
+        self.configuration_selector_comboBox.addItems(["MM config",
+                                                       "Cam 2",
+                                                       "DMD",
+                                                       "DAQ",
+                                                       "microscope"
+                                                       ])
+
         # connect buttons
-        self.load_cfg_Button.clicked.connect(self.load_cfg)
+        self.load_cfg_Button.clicked.connect(self.load_cfg_pressed)
         self.browse_cfg_Button.clicked.connect(self.browse_cfg)
-        self.load_cfg2_Button.clicked.connect(self.load_cfg2)
-        self.browse_cfg2_Button.clicked.connect(self.browse_cfg2)
-        self.browse_dmd_cfg_Button.clicked.connect(self.browse_dmd_cfg)
-        self.dmd_load_cfg_Button.clicked.connect(self.load_dmd_cfg)
-        self.browse_daq_cfg_Button.clicked.connect(self.browse_daq_cfg)
-        self.daq_load_cfg_Button.clicked.connect(self.load_daq_cfg)
-        self.browse_microscope_cfg_Button.clicked.connect(self.browse_microscope_cfg)
-        self.microscope_load_cfg_Button.clicked.connect(self.load_microscope_cfg)
         self.left_Button.clicked.connect(self.stage_x_left)
         self.right_Button.clicked.connect(self.stage_x_right)
         self.y_up_Button.clicked.connect(self.stage_y_up)
@@ -233,7 +220,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.autoscale_Button.clicked.connect(self.autoscale_active_layer)
         self.snap_Button.clicked.connect(self.snap)
         self.live_Button.clicked.connect(self.toggle_live)
-        self.illumination_Button.clicked.connect(self.illumination)
+        # self.illumination_Button.clicked.connect(self.illumination)
         self.properties_Button.clicked.connect(self._show_prop_browser)
         self.set_dmd_pattern_index_pushButton.clicked.connect(self._set_dmd_pattern_index)
         self.set_affine_ref_Button.clicked.connect(self._set_affine_ref)
@@ -254,7 +241,6 @@ class MainWindow(QtW.QWidget, _MainUI):
 
 
         # connect comboBox
-        self.objective_comboBox.currentIndexChanged.connect(self.change_objective)
         self.bit_comboBox.currentIndexChanged.connect(self.bit_changed)
         self.bin_comboBox.currentIndexChanged.connect(self.bin_changed)
         self.snap_channel_comboBox.currentTextChanged.connect(self._channel_changed)
@@ -295,11 +281,6 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.tabWidget.addTab(self.dmd_widget, "DMD")
 
 
-    def illumination(self):
-        if not hasattr(self, "_illumination"):
-            self._illumination = IlluminationDialog(self._mmc, self)
-        self._illumination.show()
-
     def _show_prop_browser(self):
         pb = PropBrowser(self._mmc, self)
         pb.exec()
@@ -310,7 +291,6 @@ class MainWindow(QtW.QWidget, _MainUI):
                 self.snap_channel_comboBox.setCurrentText(configName)
 
     def _set_enabled(self, enabled):
-        self.objective_groupBox.setEnabled(enabled)
         self.camera_groupBox.setEnabled(enabled)
         self.XY_groupBox.setEnabled(enabled)
         self.Z_groupBox.setEnabled(enabled)
@@ -331,105 +311,98 @@ class MainWindow(QtW.QWidget, _MainUI):
             self.streaming_timer.setInterval(int(exposure))
 
     def browse_cfg(self):
-        self._mmc.unloadAllDevices()  # unload all devicies
-        print(f"Loaded Devices: {self._mmc.getLoadedDevices()}")
 
-        # clear spinbox/combobox without accidently setting properties
-        boxes = [
-            self.objective_comboBox,
-            self.bin_comboBox,
-            self.bit_comboBox,
-            self.snap_channel_comboBox,
-        ]
-        with blockSignals(boxes):
-            for box in boxes:
-                box.clear()
+        mode = self.configuration_selector_comboBox.currentText()
+        if mode == "MM config":
+            self._mmc.unloadAllDevices()  # unload all devicies
+            print(f"Loaded Devices: {self._mmc.getLoadedDevices()}")
 
-        file_dir = QtW.QFileDialog.getOpenFileName(self, "", "⁩", "cfg(*.cfg)")
-        self.cfg_LineEdit.setText(str(file_dir[0]))
-        self.max_min_val_label.setText("None")
+            # clear spinbox/combobox without accidently setting properties
+            boxes = [
+                self.bin_comboBox,
+                self.bit_comboBox,
+                self.snap_channel_comboBox,
+            ]
+            with blockSignals(boxes):
+                for box in boxes:
+                    box.clear()
+
+            file_dir = str(QtW.QFileDialog.getOpenFileName(self, "", "⁩", "cfg(*.cfg)")[0])
+            # self.max_min_val_label.setText("None")
+        elif mode == "Cam 2":
+            self._mmcores[1].unloadAllDevices()  # unload all devicies
+            print(f"Loaded Devices: {self._mmcores[1].getLoadedDevices()}")
+            file_dir = str(QtW.QFileDialog.getOpenFileName(self, "", "⁩", "cfg(*.cfg)")[0])
+            # self.max_min_val_label.setText("None")
+        elif mode == "DMD":
+            file_dir = str(QtW.QFileDialog.getExistingDirectory(self, "", "select DMD config"))
+        elif mode == "DAQ":
+            file_dir = str(QtW.QFileDialog.getOpenFileName(self, "", "select DAQ config", "json(*.json)")[0])
+        elif mode == "microscope":
+            file_dir = str(QtW.QFileDialog.getOpenFileName(self, "", "select microscope config", "json(*.json)")[0])
+        else:
+            raise ValueError(f"mode {mode:s} is not supported")
+
         self.load_cfg_Button.setEnabled(True)
+        self.cfg_LineEdit.setText(file_dir)
 
-    def load_cfg(self):
-        #self.load_cfg_Button.setEnabled(False)
-        print("loading", self.cfg_LineEdit.text())
-        self._mmc.loadSystemConfiguration(self.cfg_LineEdit.text())
+    def load_cfg_pressed(self):
+        path = self.cfg_LineEdit.text()
+        mode = self.configuration_selector_comboBox.currentText()
+        return self.load_cfg(mode, path)
 
-        # is this run already by loadSystemConfiguration()?
-        if "System" in self._mmcores[0].getAvailableConfigGroups():
-            if "Startup" in self._mmcores[0].getAvailableConfigs("System"):
-                self._mmcores[0].setConfig("System", "Startup")
+    def load_cfg(self, mode, path):
+        print("loading", path)
 
-        self._set_affine_ref()
+        try:
+            if mode == "MM config":
+                self._mmc.loadSystemConfiguration(path)
 
-    def browse_cfg2(self):
-        self._mmcores[1].unloadAllDevices()  # unload all devicies
-        print(f"Loaded Devices: {self._mmcores[1].getLoadedDevices()}")
+                # is this run already by loadSystemConfiguration()?
+                if "System" in self._mmcores[0].getAvailableConfigGroups():
+                    if "Startup" in self._mmcores[0].getAvailableConfigs("System"):
+                        self._mmcores[0].setConfig("System", "Startup")
 
-        # clear spinbox/combobox without accidently setting properties
-        # boxes = [
-        #     self.objective_comboBox,
-        #     self.bin_comboBox,
-        #     self.bit_comboBox,
-        #     self.snap_channel_comboBox,
-        # ]
-        # with blockSignals(boxes):
-        #     for box in boxes:
-        #         box.clear()
+                self._set_affine_ref()
 
-        file_dir = QtW.QFileDialog.getOpenFileName(self, "", "⁩", "cfg(*.cfg)")
-        self.cfg2_LineEdit.setText(str(file_dir[0]))
-        self.max_min_val_label.setText("None")
-        self.load_cfg2_Button.setEnabled(True)
+            elif mode == "Cam 2":
+                self._mmcores[1].loadSystemConfiguration(path)
 
-    def load_cfg2(self):
-        #self.load_cfg2_Button.setEnabled(False)
-        print("loading", self.cfg2_LineEdit.text())
-        self._mmcores[1].loadSystemConfiguration(self.cfg2_LineEdit.text())
+                # is this run already by loadSystemConfiguration()?
+                if "System" in self._mmcores[1].getAvailableConfigGroups():
+                    if "Startup" in self._mmcores[1].getAvailableConfigs("System"):
+                        self._mmcores[1].setConfig("System", "Startup")
 
-        # is this run already by loadSystemConfiguration()?
-        if "System" in self._mmcores[1].getAvailableConfigGroups():
-            if "Startup" in self._mmcores[1].getAvailableConfigs("System"):
-                self._mmcores[1].setConfig("System", "Startup")
+            elif mode == "DMD":
+                fname_dmd_config = Path(path)
+                self.dmd.initialize(debug=True, config_file=fname_dmd_config)
 
-    def browse_dmd_cfg(self):
-        file_dir = QtW.QFileDialog.getOpenFileName(self, "", "⁩", "json(*.json)")
-        self.dmd_cfg_lineEdit.setText(str(file_dir[0]))
+            elif mode == "DAQ":
+                self.daq.initialize(dev_name="Dev1",
+                                    digital_lines="port0/line0:15",
+                                    analog_lines=["ao0", "ao1", "ao2", "ao3"],
+                                    config_file=path)
 
-    def load_dmd_cfg(self):
-        fname_dmd_config = Path(self.dmd_cfg_lineEdit.text())
-        self.dmd.initialize(debug=True, config_file=fname_dmd_config)
+                # populate channel combo box
+                self.channel_comboBox.clear()
+                self.channel_comboBox.addItems(list(self.daq.presets.keys()))
 
-    def browse_daq_cfg(self):
-        file_dir = QtW.QFileDialog.getOpenFileName(self, "", "⁩", "json(*.json)")
-        self.daq_cfg_lineEdit.setText(str(file_dir[0]))
+            elif mode == "microscope":
+                with open(path, "r") as f:
+                    self.cfg_data.update(json.load(f))
 
-    def browse_microscope_cfg(self):
-        file_dir = QtW.QFileDialog.getOpenFileName(self, "", "⁩", "json(*.json)")
-        self.microscope_cfg_lineEdit.setText(str(file_dir[0]))
+                self.sim_odt_acq.set_cfg()
 
-    def load_microscope_cfg(self):
-        fname_microscope_config = self.microscope_cfg_lineEdit.text()
-        with open(fname_microscope_config, "r") as f:
-            self.cfg_data.update(json.load(f))
+                # load affine transformation
+                swap_xy = np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]])
+                cam_affine_xform_cam1_to_cam2 = np.array(self.cfg_data["camera_affine_transforms"]["xform"])
+                cam_affine_xform_napari_cam1_to_cam2 = swap_xy.dot(cam_affine_xform_cam1_to_cam2.dot(swap_xy))
+                self.cam_affine_xform_napari_cam2_to_cam1 = np.linalg.inv(cam_affine_xform_napari_cam1_to_cam2)
 
-        self.sim_odt_acq.set_cfg()
-
-        # load affine transformation
-        swap_xy = np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]])
-        cam_affine_xform_cam1_to_cam2 = np.array(self.cfg_data["camera_affine_transforms"]["xform"])
-        cam_affine_xform_napari_cam1_to_cam2 = swap_xy.dot(cam_affine_xform_cam1_to_cam2.dot(swap_xy))
-        self.cam_affine_xform_napari_cam2_to_cam1 = np.linalg.inv(cam_affine_xform_napari_cam1_to_cam2)
-
-    def load_daq_cfg(self):
-        fname_daq_config = self.daq_cfg_lineEdit.text()
-        self.daq.initialize(dev_name="Dev1", digital_lines="port0/line0:15",
-                            analog_lines=["ao0", "ao1", "ao2", "ao3"],
-                            config_file=fname_daq_config)
-
-        # populate channel combo box
-        self.channel_comboBox.clear()
-        self.channel_comboBox.addItems(list(self.daq.presets.keys()))
+            else:
+                raise ValueError(f"mode {mode:s} is not supported")
+        except OSError as err:
+            print(err)
 
     def _refresh_camera_options(self):
         cam_device = self._mmc_cam.getCameraDevice()
@@ -452,15 +425,6 @@ class MainWindow(QtW.QWidget, _MainUI):
                 self.bit_comboBox.addItems(px_t)
                 self.bit_comboBox.setCurrentText(
                     self._mmc_cam.getProperty(cam_device, "PixelType")
-                )
-
-    def _refresh_objective_options(self):
-        if "Objective" in self._mmc.getLoadedDevices():
-            with blockSignals(self.objective_comboBox):
-                self.objective_comboBox.clear()
-                self.objective_comboBox.addItems(self._mmc.getStateLabels("Objective"))
-                self.objective_comboBox.setCurrentText(
-                    self._mmc.getStateLabel("Objective")
                 )
 
     def _refresh_channel_list(self, channel_group: str = None):
@@ -504,7 +468,6 @@ class MainWindow(QtW.QWidget, _MainUI):
 
     def _refresh_options(self):
         self._refresh_camera_options()
-        self._refresh_objective_options()
         self._refresh_channel_list()
         self._refresh_positions()
         self._refresh_camera_list()
@@ -632,43 +595,8 @@ class MainWindow(QtW.QWidget, _MainUI):
 
                 break
 
-
-    def change_objective(self):
-        if self.objective_comboBox.count() <= 0:
-            return
-
-        zdev = self._mmc.getFocusDevice()
-
-        currentZ = self._mmc.getZPosition()
-        self._mmc.setPosition(zdev, 0)
-        self._mmc.waitForDevice(zdev)
-        self._mmc.setProperty(
-            "Objective", "Label", self.objective_comboBox.currentText()
-        )
-        self._mmc.waitForDevice("Objective")
-        self._mmc.setPosition(zdev, currentZ)
-        self._mmc.waitForDevice(zdev)
-
-        # define and set pixel size Config
-        self._mmc.deletePixelSizeConfig(self._mmc.getCurrentPixelSizeConfig())
-        curr_obj_name = self._mmc.getProperty("Objective", "Label")
-        self._mmc.definePixelSizeConfig(curr_obj_name)
-        self._mmc.setPixelSizeConfig(curr_obj_name)
-
-        # get magnification info from the objective name
-        # and set image pixel sixe (x,y) for the current pixel size Config
-        match = re.search(r"(\d{1,3})[xX]", curr_obj_name)
-        if match:
-            mag = int(match.groups()[0])
-            self.image_pixel_size = self.px_size_doubleSpinBox.value() / mag
-            self._mmc.setPixelSizeUm(
-                self._mmc.getCurrentPixelSizeConfig(), self.image_pixel_size
-            )
-
     def update_viewer(self, data=None):
-        # TODO: - fix the fact that when you change the objective
-        #         the image translation is wrong
-        #       - are max and min_val_lineEdit updating in live mode?
+
         if data is None:
             try:
                 data = self._mmc_cam.getLastImage()
@@ -704,9 +632,7 @@ class MainWindow(QtW.QWidget, _MainUI):
 
             # todo: grab these values from configuration file
             # todo: could display in some nicer way...but...
-            # dxy = 6.5 / 60
             dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
-            # fmax = 1 / 0.785
             fmax = self.cfg_data["camera_settings_phantom"]["na_detection"] / 0.785
 
             # get frequency coordinates
@@ -1103,7 +1029,10 @@ class MainWindow(QtW.QWidget, _MainUI):
                 min_max_show = tuple(layer._calc_data_range(mode="slice"))
                 min_max_txt += f'<font color="{col}">{min_max_show}</font>'
 
-        self.max_min_val_label.setText(min_max_txt)
+        # self.max_min_val_label.setText(min_max_txt)
+        # todo:
+        self.min_label.setText("")
+        self.max_label.setText("")
 
     def snap(self):
         self.stop_live()
