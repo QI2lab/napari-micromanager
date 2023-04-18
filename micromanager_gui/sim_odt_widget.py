@@ -115,11 +115,6 @@ class _MultiDUI:
 
     def setup_ui(self):
         uic.loadUi(self.UI_FILE, self)  # load QtDesigner .ui file
-        self.pause_Button.hide()
-        self.cancel_Button.hide()
-        # button icon
-        self.run_Button.setIcon(QIcon(str(ICONS / "play-button_1.svg")))
-        self.run_Button.setIconSize(QSize(20, 0))
 
 
 class SimOdtWidget(QtW.QWidget, _MultiDUI):
@@ -718,27 +713,30 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         pgm_npatterns = [nps if am != "average" else len(self.dmd.presets[dm][pm]["picture_indices"])
                          for dm, pm, am, nps in acq_modes]
 
-        digital_program, analog_program, daq_programming_info = \
-            get_sim_odt_sequence(daq_do_map,
-                                 daq_ao_map,
-                                 daq_presets,
-                                 pgm_channels,
-                                 exposure_tms_odt * 1e-3,
-                                 exposure_tms_sim * 1e-3,
-                                 pgm_npatterns,
-                                 dt=dt,
-                                 interval=interval_ms * 1e-3,
-                                 n_odt_per_sim=1,
-                                 n_trig_width=n_trig_width,
-                                 odt_stabilize_t=odt_warmup_time_ms * 1e-3,
-                                 min_odt_frame_time=min_odt_frame_time_ms * 1e-3,
-                                 sim_stabilize_t=sim_warmup_time_ms * 1e-3,
-                                 shutter_delay_time=shutter_delay_time_ms * 1e-3,
-                                 z_voltages=z_volts,
-                                 use_dmd_as_odt_shutter=False,
-                                 n_digital_ch=self.daq.n_digital_lines,
-                                 n_analog_ch=self.daq.n_analog_lines,
-                                 acquisition_mode=pgm_acq_modes)
+        try:
+            digital_program, analog_program, daq_programming_info = \
+                get_sim_odt_sequence(daq_do_map,
+                                     daq_ao_map,
+                                     daq_presets,
+                                     pgm_channels,
+                                     exposure_tms_odt * 1e-3,
+                                     exposure_tms_sim * 1e-3,
+                                     pgm_npatterns,
+                                     dt=dt,
+                                     interval=interval_ms * 1e-3,
+                                     n_odt_per_sim=1,
+                                     n_trig_width=n_trig_width,
+                                     odt_stabilize_t=odt_warmup_time_ms * 1e-3,
+                                     min_odt_frame_time=min_odt_frame_time_ms * 1e-3,
+                                     sim_stabilize_t=sim_warmup_time_ms * 1e-3,
+                                     shutter_delay_time=shutter_delay_time_ms * 1e-3,
+                                     z_voltages=z_volts,
+                                     use_dmd_as_odt_shutter=False,
+                                     n_digital_ch=self.daq.n_digital_lines,
+                                     n_analog_ch=self.daq.n_analog_lines,
+                                     acquisition_mode=pgm_acq_modes)
+        except NotImplementedError:
+            return
 
         # ##################################
         # create zarr

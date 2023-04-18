@@ -19,6 +19,7 @@ from ._saving import save_sequence
 from ._util import blockSignals, event_indices, extend_array_for_index
 from .explore_sample import ExploreSample
 from .sim_odt_widget import SimOdtWidget
+from .peak_tracker_widget import PeakTrackerWidget
 from .dmd_widget import DmdWidget
 from .multid_widget import MultiDWidget, SequenceMeta
 from .prop_browser import PropBrowser
@@ -100,9 +101,10 @@ class _MainUI:
     set_affine_ref_Button: QtW.QPushButton
     track_affine_checkBox: QtW.QCheckBox
 
-    #
+    # image preview
     snap_Button: QtW.QPushButton
     live_Button: QtW.QPushButton
+    calibrate_Button: QtW.QPushButton
     # max_min_val_label: QtW.QLabel
     max_label: QtW.QLabel
     min_label: QtW.QLabel
@@ -183,17 +185,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         # connect mmcore signals
         sig: QCoreSignaler = self._mmc.events
 
-        # note: don't use lambdas with closures on `self`, since the connection
-        # to core may outlive the lifetime of this particular widget.
-
         # mda events
-        # sig.sequenceStarted.connect(self._on_mda_started)
-        # sig.sequenceFinished.connect(self._on_mda_finished)
-        # self._mmc.mda.events.frameReady.connect(self._on_mda_frame)
-        # self._mmc.mda.events.sequenceStarted.connect(self._on_mda_started)
-        # self._mmc.mda.events.sequenceFinished.connect(self._on_mda_finished)
-        # self._mmc.events.mdaEngineRegistered.connect(self._update_mda_engine)
-
         sig.systemConfigurationLoaded.connect(self._refresh_options)
         sig.XYStagePositionChanged.connect(self._on_xy_stage_position_changed)
         sig.stagePositionChanged.connect(self._on_stage_position_changed)
@@ -220,33 +212,27 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.autoscale_Button.clicked.connect(self.autoscale_active_layer)
         self.snap_Button.clicked.connect(self.snap)
         self.live_Button.clicked.connect(self.toggle_live)
-        # self.illumination_Button.clicked.connect(self.illumination)
+        self.calibrate_Button.clicked.connect(self.calibrate_camera)
         self.properties_Button.clicked.connect(self._show_prop_browser)
         self.set_dmd_pattern_index_pushButton.clicked.connect(self._set_dmd_pattern_index)
         self.set_affine_ref_Button.clicked.connect(self._set_affine_ref)
-
-        # connect buttons
         self.add_ch_Button.clicked.connect(self.add_channel)
         self.remove_ch_Button.clicked.connect(self.remove_channel)
         self.clear_ch_Button.clicked.connect(self.clear_channel)
         self.daq_update_pushButton.clicked.connect(self._on_daq_setting_change)
         self.daq_update_immediately_checkBox.clicked.connect(self._on_channel_changed)
-
-
-        # update mode combo box when channel combo box is changed
-        self.channel_comboBox.currentTextChanged.connect(self._refresh_mode_options)
-
         # set channel/mode combination
         self.set_channel_Button.clicked.connect(self.set_channel_and_mode)
 
-
+        # update mode combo box when channel combo box is changed
+        self.channel_comboBox.currentTextChanged.connect(self._refresh_mode_options)
         # connect comboBox
         self.bit_comboBox.currentIndexChanged.connect(self.bit_changed)
         self.bin_comboBox.currentIndexChanged.connect(self.bin_changed)
         self.snap_channel_comboBox.currentTextChanged.connect(self._channel_changed)
         self.set_camera_comboBox.currentTextChanged.connect(self._camera_changed)
 
-        # set up processing modes combo box
+        # set up image processing
         proc_modes = ["normal", "fft", "hologram"]
         self.image_proc_mode_comboBox.addItems(proc_modes)
         self.snap_channel_comboBox.setCurrentText(proc_modes[0])
@@ -254,16 +240,14 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.fit_holo_frq_Button.clicked.connect(self.fit_holo_frq)
         self.fit_holo_curvature_Button.clicked.connect(self.fit_holo_curvature)
         self.threshold_SpinBox.setValue(50.)
-
-        # DMD
-        self.pattern_time_SpinBox.setValue(0.105)
-
         # connect spinboxes
         self.exp_spinBox.valueChanged.connect(self._update_exp)
         self.exp_spinBox.setKeyboardTracking(False)
-
         self.fx_doubleSpinBox.setValue(1600.)
         self.fy_doubleSpinBox.setValue(1400.)
+
+        # DMD
+        self.pattern_time_SpinBox.setValue(0.105)
 
         # refresh options in case a config is already loaded by another remote
         self._refresh_options()
@@ -273,12 +257,29 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.viewer.dims.events.current_step.connect(self.update_max_min)
 
         # tab widgets
-        self.sim_odt_acq = SimOdtWidget(self._mmcores, self.daq, self.dmd, self.viewer, self.phcam,
+        self.sim_odt_acq = SimOdtWidget(self._mmcores,
+                                        self.daq,
+                                        self.dmd,
+                                        self.viewer,
+                                        self.phcam,
                                         configuration=self.cfg_data)
         self.tabWidget.addTab(self.sim_odt_acq, "SIM/ODT Acquisition")
 
-        self.dmd_widget = DmdWidget(self._mmcores, self.daq, self.dmd, self.viewer)
+        # DMD widget
+        self.dmd_widget = DmdWidget(self._mmcores,
+                                    self.daq,
+                                    self.dmd,
+                                    self.viewer)
         self.tabWidget.addTab(self.dmd_widget, "DMD")
+
+        # peak tracker
+        self.peak_tracker_widget = PeakTrackerWidget(self._mmcores,
+                                                     self.daq,
+                                                     self.dmd,
+                                                     self.viewer,
+                                                     self.phcam,
+                                                     configuration=self.cfg_data)
+        self.tabWidget.addTab(self.peak_tracker_widget, "Peak Tracker")
 
 
     def _show_prop_browser(self):
@@ -496,6 +497,11 @@ class MainWindow(QtW.QWidget, _MainUI):
         except ValueError:
             if newCamera == "phantom":
                 self._mmc_cam = self.phcam
+
+        exposure_ms = self._mmc_cam.getExposure()
+
+        self._on_exp_change("", exposure_ms)
+
 
     def _set_affine_ref(self):
         self.affine_ref = [self._mmc.getXPosition(), self._mmc.getYPosition()]
@@ -1085,6 +1091,13 @@ class MainWindow(QtW.QWidget, _MainUI):
         else:
             self.stop_live()
             self.live_Button.setIcon(CAM_ICON)
+
+    def calibrate_camera(self):
+        # if self._mmc_cam == self.phcam:
+        try:
+            self.phcam.set_black_reference()
+        except Exception as e:
+            print(e)
 
     def set_channel_and_mode(self):
         # get info from boxes

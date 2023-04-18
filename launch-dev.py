@@ -29,5 +29,6 @@ mmc1, mmc2 = main_window._mmcores
 dmd = main_window.dmd
 daq = main_window.daq
 phcam = main_window.phcam
+pk_track = main_window.peak_tracker_widget
 
 napari.run()

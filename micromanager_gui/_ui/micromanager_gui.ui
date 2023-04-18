@@ -678,65 +678,6 @@
              <number>0</number>
             </property>
             <layout class="QGridLayout" name="gridLayout_6">
-             <item row="0" column="2">
-              <widget class="QLabel" name="label_20">
-               <property name="text">
-                <string>exposure (ms)</string>
-               </property>
-              </widget>
-             </item>
-             <item row="2" column="2" colspan="2">
-              <layout class="QGridLayout" name="gridLayout_3">
-               <item row="0" column="0">
-                <widget class="QLabel" name="label_2">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-                   <horstretch>0</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
-                 <property name="text">
-                  <string>ROI:</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="0" column="1">
-                <widget class="QComboBox" name="cam_roi_comboBox">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                   <horstretch>0</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
-                 <property name="minimumSize">
-                  <size>
-                   <width>75</width>
-                   <height>0</height>
-                  </size>
-                 </property>
-                </widget>
-               </item>
-               <item row="0" column="2">
-                <widget class="QPushButton" name="crop_Button">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                   <horstretch>0</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
-                 <property name="maximumSize">
-                  <size>
-                   <width>40</width>
-                   <height>16777215</height>
-                  </size>
-                 </property>
-                 <property name="text">
-                  <string>Crop</string>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </item>
              <item row="0" column="3">
               <widget class="QDoubleSpinBox" name="exp_spinBox">
                <property name="enabled">
@@ -778,24 +719,27 @@
                </property>
               </widget>
              </item>
-             <item row="2" column="0">
-              <widget class="QLabel" name="label_6">
+             <item row="1" column="1">
+              <widget class="QComboBox" name="bin_comboBox">
+               <property name="enabled">
+                <bool>true</bool>
+               </property>
                <property name="sizePolicy">
-                <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
                  <horstretch>0</horstretch>
                  <verstretch>0</verstretch>
                 </sizepolicy>
                </property>
                <property name="maximumSize">
                 <size>
-                 <width>65</width>
+                 <width>75</width>
                  <height>16777215</height>
                 </size>
                </property>
-               <property name="text">
-                <string>Bit Depth:</string>
-               </property>
               </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QComboBox" name="set_camera_comboBox"/>
              </item>
              <item row="1" column="0">
               <widget class="QLabel" name="label_22">
@@ -835,22 +779,72 @@
                </property>
               </widget>
              </item>
-             <item row="1" column="1">
-              <widget class="QComboBox" name="bin_comboBox">
-               <property name="enabled">
-                <bool>true</bool>
-               </property>
+             <item row="4" column="3">
+              <widget class="QPushButton" name="crop_Button">
                <property name="sizePolicy">
-                <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                  <horstretch>0</horstretch>
                  <verstretch>0</verstretch>
                 </sizepolicy>
                </property>
                <property name="maximumSize">
                 <size>
-                 <width>75</width>
+                 <width>16777215</width>
                  <height>16777215</height>
                 </size>
+               </property>
+               <property name="text">
+                <string>Crop</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="0">
+              <widget class="QLabel" name="label_21">
+               <property name="text">
+                <string>Camera:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="2">
+              <widget class="QLabel" name="label_20">
+               <property name="text">
+                <string>exposure (ms)</string>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="0">
+              <widget class="QCheckBox" name="daq_shutter_checkBox">
+               <property name="text">
+                <string>DAQ shutter</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="3">
+              <widget class="QComboBox" name="cam_roi_comboBox">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimumSize">
+                <size>
+                 <width>75</width>
+                 <height>0</height>
+                </size>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="2">
+              <widget class="QLabel" name="label_2">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="text">
+                <string>ROI:</string>
                </property>
               </widget>
              </item>
@@ -873,20 +867,22 @@
                </property>
               </widget>
              </item>
-             <item row="3" column="0">
-              <widget class="QCheckBox" name="daq_shutter_checkBox">
-               <property name="text">
-                <string>DAQ shutter</string>
+             <item row="2" column="0">
+              <widget class="QLabel" name="label_6">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
                </property>
-              </widget>
-             </item>
-             <item row="0" column="1">
-              <widget class="QComboBox" name="set_camera_comboBox"/>
-             </item>
-             <item row="0" column="0">
-              <widget class="QLabel" name="label_21">
+               <property name="maximumSize">
+                <size>
+                 <width>65</width>
+                 <height>16777215</height>
+                </size>
+               </property>
                <property name="text">
-                <string>Camera:</string>
+                <string>Bit Depth:</string>
                </property>
               </widget>
              </item>
@@ -910,7 +906,7 @@
             <property name="title">
              <string>Image preview</string>
             </property>
-            <layout class="QGridLayout" name="gridLayout_10" rowminimumheight="0,0,0,0,0" columnminimumwidth="0,0,0,0,0,0">
+            <layout class="QGridLayout" name="gridLayout_10" rowminimumheight="0,0,0,0,0" columnminimumwidth="0,0,0,0,0">
              <item row="4" column="1">
               <widget class="QLabel" name="max_label">
                <property name="text">
@@ -941,13 +937,6 @@
               <widget class="QLabel" name="min_label">
                <property name="text">
                 <string/>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="2">
-              <widget class="QPushButton" name="set_affine_ref_Button">
-               <property name="text">
-                <string>set affine ref</string>
                </property>
               </widget>
              </item>
@@ -1065,13 +1054,6 @@
                </property>
               </widget>
              </item>
-             <item row="0" column="3">
-              <widget class="QCheckBox" name="track_affine_checkBox">
-               <property name="text">
-                <string>track affine</string>
-               </property>
-              </widget>
-             </item>
              <item row="3" column="1">
               <widget class="QLabel" name="label_19">
                <property name="text">
@@ -1104,6 +1086,27 @@
                </property>
                <property name="text">
                 <string> Snap</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="4">
+              <widget class="QCheckBox" name="track_affine_checkBox">
+               <property name="text">
+                <string>track affine</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="3">
+              <widget class="QPushButton" name="set_affine_ref_Button">
+               <property name="text">
+                <string>set affine ref</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="2">
+              <widget class="QPushButton" name="calibrate_Button">
+               <property name="text">
+                <string>Calibrate</string>
                </property>
               </widget>
              </item>
@@ -1181,13 +1184,6 @@
                </property>
               </widget>
              </item>
-             <item row="5" column="2" colspan="3">
-              <widget class="QDoubleSpinBox" name="threshold_SpinBox">
-               <property name="maximum">
-                <double>100000.000000000000000</double>
-               </property>
-              </widget>
-             </item>
              <item row="0" column="0" colspan="5">
               <widget class="QComboBox" name="image_proc_mode_comboBox">
                <property name="minimumSize">
@@ -1229,6 +1225,13 @@
               <widget class="QPushButton" name="fit_holo_curvature_Button">
                <property name="text">
                 <string>Fit holo curvature</string>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="3">
+              <widget class="QDoubleSpinBox" name="threshold_SpinBox">
+               <property name="maximum">
+                <double>100000.000000000000000</double>
                </property>
               </widget>
              </item>
@@ -1563,6 +1566,71 @@
    </item>
   </layout>
  </widget>
+ <tabstops>
+  <tabstop>cfg_LineEdit</tabstop>
+  <tabstop>configuration_selector_comboBox</tabstop>
+  <tabstop>browse_cfg_Button</tabstop>
+  <tabstop>load_cfg_Button</tabstop>
+  <tabstop>properties_Button</tabstop>
+  <tabstop>x_lineEdit</tabstop>
+  <tabstop>y_lineEdit</tabstop>
+  <tabstop>z_lineEdit</tabstop>
+  <tabstop>y_up_Button</tabstop>
+  <tabstop>left_Button</tabstop>
+  <tabstop>xy_step_size_SpinBox</tabstop>
+  <tabstop>right_Button</tabstop>
+  <tabstop>y_down_Button</tabstop>
+  <tabstop>snap_on_click_xy_checkBox</tabstop>
+  <tabstop>up_Button</tabstop>
+  <tabstop>z_step_size_doubleSpinBox</tabstop>
+  <tabstop>down_Button</tabstop>
+  <tabstop>snap_on_click_z_checkBox</tabstop>
+  <tabstop>offset_up_Button</tabstop>
+  <tabstop>offset_z_step_size_doubleSpinBox</tabstop>
+  <tabstop>offset_down_Button</tabstop>
+  <tabstop>offset_snap_on_click_z_checkBox</tabstop>
+  <tabstop>tabWidget</tabstop>
+  <tabstop>set_camera_comboBox</tabstop>
+  <tabstop>exp_spinBox</tabstop>
+  <tabstop>bin_comboBox</tabstop>
+  <tabstop>px_size_doubleSpinBox</tabstop>
+  <tabstop>bit_comboBox</tabstop>
+  <tabstop>cam_roi_comboBox</tabstop>
+  <tabstop>daq_shutter_checkBox</tabstop>
+  <tabstop>crop_Button</tabstop>
+  <tabstop>snap_Button</tabstop>
+  <tabstop>live_Button</tabstop>
+  <tabstop>calibrate_Button</tabstop>
+  <tabstop>set_affine_ref_Button</tabstop>
+  <tabstop>track_affine_checkBox</tabstop>
+  <tabstop>min_scale_doubleSpinBox</tabstop>
+  <tabstop>max_scale_doubleSpinBox</tabstop>
+  <tabstop>autoscale_Button</tabstop>
+  <tabstop>image_proc_mode_comboBox</tabstop>
+  <tabstop>use_affine_xform_checkBox</tabstop>
+  <tabstop>fx_doubleSpinBox</tabstop>
+  <tabstop>guess_holo_frq_Button</tabstop>
+  <tabstop>fy_doubleSpinBox</tabstop>
+  <tabstop>fit_holo_frq_Button</tabstop>
+  <tabstop>threshold_SpinBox</tabstop>
+  <tabstop>fit_holo_curvature_Button</tabstop>
+  <tabstop>snap_channel_comboBox</tabstop>
+  <tabstop>channel_comboBox</tabstop>
+  <tabstop>set_channel_Button</tabstop>
+  <tabstop>mode_comboBox</tabstop>
+  <tabstop>pattern_time_SpinBox</tabstop>
+  <tabstop>set_dmd_pattern_index_pushButton</tabstop>
+  <tabstop>pic_index_spinBox</tabstop>
+  <tabstop>bit_index_spinBox</tabstop>
+  <tabstop>dmd_snap_checkBox</tabstop>
+  <tabstop>daq_channel_tableWidget</tabstop>
+  <tabstop>add_ch_Button</tabstop>
+  <tabstop>remove_ch_Button</tabstop>
+  <tabstop>clear_ch_Button</tabstop>
+  <tabstop>daq_snap_checkBox</tabstop>
+  <tabstop>daq_update_immediately_checkBox</tabstop>
+  <tabstop>daq_update_pushButton</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>
