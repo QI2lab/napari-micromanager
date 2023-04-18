@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -105,13 +106,23 @@ class _MultiDUI:
     shutter_delay_doubleSpinBox: QtW.QDoubleSpinBox
     odt_warmup_doubleSpinBox: QtW.QDoubleSpinBox
     sim_warmup_doubleSpinBox: QtW.QDoubleSpinBox
+    sim_readout_doubleSpinBox: QtW.QDoubleSpinBox
 
-    #
+    # stage group
     stage_groupBox: QtW.QGroupBox
     stage_tableWidget: QtW.QTableWidget
     add_pos_Button: QtW.QPushButton
     remove_pos_Button: QtW.QPushButton
     clear_pos_Button: QtW.QPushButton
+
+    # parameter group
+    parameter_groupBox: QtW.QGroupBox
+    scan_together_checkBox: QtW.QCheckBox
+    parameter_tableWidget: QtW.QGroupBox
+    add_parameter_pushButton: QtW.QPushButton
+    remove_parameter_pushButton: QtW.QPushButton
+    clear_parameter_pushButton: QtW.QPushButton
+
 
     def setup_ui(self):
         uic.loadUi(self.UI_FILE, self)  # load QtDesigner .ui file
@@ -139,33 +150,27 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         super().__init__(parent)
         self.setup_ui()
 
-        #self.pause_Button.released.connect(self._mmc.toggle_pause)
-        # self.cancel_Button.released.connect(self._mmc.cancel)
-
         self.odt_circbuff_SpinBox.setValue(3.)
         self.sim_circbuf_doubleSpinBox.setValue(3.)
 
-        # connect buttons
-        self.add_pos_Button.clicked.connect(self.add_position)
-        self.remove_pos_Button.clicked.connect(self.remove_position)
-        self.clear_pos_Button.clicked.connect(self.clear_positions)
+        # save dialog
+        self.browse_save_Button.clicked.connect(self._set_save_dir)
+
+        # channel widget
         self.add_ch_Button.clicked.connect(self.add_channel)
         self.remove_ch_Button.clicked.connect(self.remove_channel)
         self.clear_ch_Button.clicked.connect(self.clear_channel)
 
-        self.browse_save_Button.clicked.connect(self.set_multi_d_acq_dir)
+        # run/show
         self.run_Button.clicked.connect(self._on_run_clicked)
         self.show_Button.clicked.connect(self.show_dataset)
-        # self.run_Button.clicked.connect(self.on_run_clicked)
 
-        # connect for z stack
+        # z-stack widget
         self.set_top_Button.clicked.connect(self._set_top)
         self.set_bottom_Button.clicked.connect(self._set_bottom)
         self.z_top_doubleSpinBox.valueChanged.connect(self._update_topbottom_range)
         self.z_bottom_doubleSpinBox.valueChanged.connect(self._update_topbottom_range)
-
         self.zrange_spinBox.valueChanged.connect(self._update_rangearound_label)
-
         self.above_doubleSpinBox.valueChanged.connect(self._update_abovebelow_range)
         self.below_doubleSpinBox.valueChanged.connect(self._update_abovebelow_range)
 
@@ -176,13 +181,20 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         self.z_tabWidget.currentChanged.connect(self._update_n_images)
         self.stack_groupBox.toggled.connect(self._update_n_images)
 
-        # events
-        # mmcore.events.sequenceStarted.connect(self._on_mda_started)
-        # mmcore.events.sequenceFinished.connect(self._on_mda_finished)
-        # mmcore.events.sequencePauseToggled.connect(self._on_mda_paused)
+        # stage widget
+        self.add_pos_Button.clicked.connect(self.add_position)
+        self.remove_pos_Button.clicked.connect(self.remove_position)
+        self.clear_pos_Button.clicked.connect(self.clear_positions)
+
+        # parameter widget
+        parameter_tableWidget: QtW.QGroupBox
+        self.add_parameter_pushButton.clicked.connect(self._add_parameter)
+        self.remove_parameter_pushButton.clicked.connect(self._remove_parameter)
+        self.clear_parameter_pushButton.clicked.connect(self._clear_parameter)
 
     def set_cfg(self):
         defaults = self.configuration["sim_odt_program_defaults"]
+
         # initial value for ROI
         self.sx_spinBox.setValue(int(defaults["sx"]))
         self.cx_spinBox.setValue(int(defaults["cx"]))
@@ -197,6 +209,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         self.sim_warmup_doubleSpinBox.setValue(float(defaults["sim_warmup_time_ms"]))
         self.odt_warmup_doubleSpinBox.setValue(float(defaults["odt_warmup_time_ms"]))
         self.shutter_delay_doubleSpinBox.setValue(float(defaults["shutter_delay_ms"]))
+        self.sim_readout_doubleSpinBox.setValue(float(defaults["sim_readout_time_ms"]))
 
     def _set_enabled(self, enabled: bool):
         self.save_groupBox.setEnabled(enabled)
@@ -271,15 +284,13 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 # get current channel name
                 ch = self.channel_tableWidget.cellWidget(ii, 0).currentText()
 
-                # clear old patterns
+                # populate pattern options and set to "default"
                 self.channel_tableWidget.cellWidget(ii, 1).clear()
-
-                # add new patterns and set to "default"
-                modes = list(self.dmd.presets[ch].keys())
-                self.channel_tableWidget.cellWidget(ii, 1).addItems(modes)
+                self.channel_tableWidget.cellWidget(ii, 1).addItems(list(self.dmd.presets[ch].keys()))
                 self.channel_tableWidget.cellWidget(ii, 1).setCurrentText("default")
 
                 # populate mode options and set to "default"
+                self.channel_tableWidget.cellWidget(ii, 2).clear()
                 self.channel_tableWidget.cellWidget(ii, 2).addItems(self.acquisition_modes)
                 self.channel_tableWidget.cellWidget(ii, 2).setCurrentText("default")
 
@@ -294,7 +305,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         self.channel_tableWidget.clearContents()
         self.channel_tableWidget.setRowCount(0)
 
-    def set_multi_d_acq_dir(self):
+    def _set_save_dir(self):
         # set the directory
         self.dir = QtW.QFileDialog(self)
         self.dir.setFileMode(QtW.QFileDialog.DirectoryOnly)
@@ -324,6 +335,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 top = znow + above
                 bottom = znow - below
 
+            else:
+                raise NotImplementedError()
+
         nz = (top - bottom) // step
         zpos = bottom + np.arange(nz) * step
 
@@ -347,7 +361,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             self.stage_tableWidget.setItem(idx, 0, QtW.QTableWidgetItem(x_txt))
             self.stage_tableWidget.setItem(idx, 1, QtW.QTableWidgetItem(y_txt))
 
-
     def remove_position(self):
         # remove selected position
         rows = {r.row() for r in self.stage_tableWidget.selectedIndexes()}
@@ -359,15 +372,57 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         self.stage_tableWidget.clearContents()
         self.stage_tableWidget.setRowCount(0)
 
+    def _add_parameter(self):
+        analog_lines = list(self.daq.analog_line_names.keys())
+
+        idx = self.parameter_tableWidget.rowCount()
+        self.parameter_tableWidget.insertRow(idx)
+
+        channel_comboBox = QtW.QComboBox(self)
+        channel_comboBox.addItems(analog_lines)
+        self.parameter_tableWidget.setCellWidget(idx, 0, channel_comboBox)
+
+        start_SpinBox = QtW.QDoubleSpinBox(self)
+        start_SpinBox.setDecimals(3)
+        start_SpinBox.setSingleStep(0.01)
+        start_SpinBox.setMinimum(-10.)
+        start_SpinBox.setMaximum(10.)
+        self.parameter_tableWidget.setCellWidget(idx, 1, start_SpinBox)
+
+        stop_SpinBox = QtW.QDoubleSpinBox(self)
+        stop_SpinBox.setDecimals(3)
+        stop_SpinBox.setSingleStep(0.01)
+        stop_SpinBox.setMinimum(-10.)
+        stop_SpinBox.setMaximum(10.)
+        self.parameter_tableWidget.setCellWidget(idx, 2, stop_SpinBox)
+
+        step_SpinBox = QtW.QDoubleSpinBox(self)
+        step_SpinBox.setDecimals(3)
+        step_SpinBox.setSingleStep(0.01)
+        step_SpinBox.setMinimum(-10.)
+        step_SpinBox.setMaximum(10.)
+        self.parameter_tableWidget.setCellWidget(idx, 3, step_SpinBox)
+
+    def _remove_parameter(self):
+        # remove selected position
+        rows = {r.row() for r in self.parameter_tableWidget.selectedIndexes()}
+        for idx in sorted(rows, reverse=True):
+            self.parameter_tableWidget.removeRow(idx)
+
+    def _clear_parameter(self):
+        self.parameter_tableWidget.clearContents()
+        self.parameter_tableWidget.setRowCount(0)
 
     def _on_run_clicked(self):
+        """
+        Run hardware triggered SIM/DMD sequence
+        """
 
         mmc1 = self._mmcores[0]
         mmc2 = self._mmcores[1]
 
         if len(self._mmc.getLoadedDevices()) < 2:
             raise ValueError("Load a cfg file first.")
-
 
         # ##############################
         # turn off live mode if on
@@ -442,6 +497,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         sim_warmup_time_ms = self.sim_warmup_doubleSpinBox.value()
         odt_warmup_time_ms = self.odt_warmup_doubleSpinBox.value()
         shutter_delay_time_ms = self.shutter_delay_doubleSpinBox.value()
+        sim_readout_time_ms = self.sim_readout_doubleSpinBox.value()
 
         # ##############################
         # time lapse
@@ -457,7 +513,40 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##############################
         # parameter scan
         # ##############################
-        nparams = 1
+        do_param_scan = self.parameter_groupBox.isChecked()
+        if do_param_scan:
+            scan_params = []
+            scan_param_vals = []
+            for rr in range(self.parameter_tableWidget.rowCount()):
+                scan_params.append(self.parameter_tableWidget.cellWidget(rr, 0).currentText())
+
+                start = self.parameter_tableWidget.cellWidget(rr, 1).value()
+                stop = self.parameter_tableWidget.cellWidget(rr, 2).value()
+                step = self.parameter_tableWidget.cellWidget(rr, 3).value()
+                scan_param_vals.append(np.arange(start, stop, step))
+
+            n_per_param = np.array([len(v) for v in scan_param_vals])
+
+            # set scanning mode
+            if self.scan_together_checkBox.isChecked():
+                # dot product like
+                if not np.all(n_per_param == n_per_param[0]):
+                    raise ValueError(f"when scan together is selected all parameter scans must have the same length, but they had lengths {n_per_param}")
+
+                param_dict = dict(zip(scan_params, scan_param_vals))
+                nparams = len(scan_param_vals[0])
+
+            else:
+                # outer product like
+                scan_param_vals_full = np.array(list(itertools.product(*scan_param_vals))).transpose()
+                param_dict = dict(zip(scan_params, scan_param_vals_full))
+                nparams = scan_param_vals_full.shape[1]
+
+        else:
+            nparams = 1
+
+        if nparams != 1:
+            raise NotImplementedError("Patterns scans not yet implemented")
 
         # ##############################
         # xy-positions
@@ -469,10 +558,12 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         if do_xy_scan:
             for r in range(self.stage_tableWidget.rowCount()):
                 xy_positions.append([float(self.stage_tableWidget.item(r, 0).text()),
-                                  float(self.stage_tableWidget.item(r, 1).text())])
+                                     float(self.stage_tableWidget.item(r, 1).text())
+                                     ])
         else:
             xy_positions.append([float(mmc1.getXPosition()),
-                              float(mmc1.getYPosition())])
+                                 float(mmc1.getYPosition())
+                                 ])
         nxy_positions = len(xy_positions)
 
         # ##############################
@@ -489,8 +580,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             # get focus device info
             focus_dev = mmc1.getFocusDevice()
-            # focus_dev_props = mmc1.getDeviceProperties(focus_dev)
-            # guess_calibration_um_per_v = (float(focus_dev_props["Upper Limit"]) - float(focus_dev_props["Lower Limit"])) / 10
             ul = float(mmc1.getProperty(focus_dev, "Upper Limit"))
             ll = float(mmc1.getProperty(focus_dev, "Lower Limit"))
             guess_calibration_um_per_v = (ul - ll) / 10
@@ -499,10 +588,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             dzs = zpositions - z_now
             z_volts_guesses = z_volts_start + dzs / guess_calibration_um_per_v
 
-            print("z-start position was %0.3fV" % z_volts_start)
-            print("z guess calibration = %0.3fum/V" % guess_calibration_um_per_v)
-            print("z volts guesses= ", end="")
-            print(z_volts_guesses)
+            print(f"z-start position was {z_volts_start:.3f}V")
+            print(f"z guess calibration = {guess_calibration_um_per_v:.3f}um/V")
+            print(f"z volts guesses = {z_volts_guesses}")
 
             if np.any(z_volts_guesses < -5) or np.any(z_volts_guesses > 5):
                 print("z_volts_guesses were outside allowed range")
@@ -519,11 +607,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             calibration_um_per_v = np.mean((z_check[1:] - z_check[:-1]) / (z_volts_guesses[1:] - z_volts_guesses[:-1]))
             z_volts = z_volts_start + dzs / calibration_um_per_v
 
-            print("z-positions= ", end="")
-            print(z_check)
-            print("z-calibration was %0.3f um/V" % calibration_um_per_v)
-            print("new z-volts= ", end="")
-            print(z_volts)
+            print(f"z-positions= {z_check}")
+            print(f"z-calibration was {calibration_um_per_v:.3f}f um/V")
+            print(f"new z-volts = {z_volts}")
 
             if np.any(z_volts < -5) or np.any(z_volts > 5):
                 print("z_volts were outside allowed range")
@@ -537,11 +623,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             dz = np.mean(z_real[1:] - z_real[:-1])
 
-            print("real z values= ", end="")
-            print(z_real)
-            print("voltages= ", end="")
-            print(z_volts)
-            print("dz = %0.3fum" % dz)
+            print(f"real z values = {z_real}")
+            print(f"voltages = {z_volts}")
+            print(f"dz = {dz:.3f}um")
         else:
             calibration_um_per_v = 0
             zpositions = [0]
@@ -554,6 +638,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # grab channel information from GUI
         # ##############################
         nrows = self.channel_tableWidget.rowCount()
+
+        if nrows == 0:
+            print("no channels/modes selected")
+            return
 
         # (dmd channel, pattern mode, acquisition mode, number of patterns)
         acq_modes = list(zip([self.channel_tableWidget.cellWidget(c, 0).currentText() for c in range(nrows)],
@@ -584,10 +672,12 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             cy = self.cy_spinBox.value()
             sy = self.sy_spinBox.value()
 
-            cam2_roi = [cy - sy // 2, cy - sy // 2 + sy,
-                           cx - sx // 2, cx - sx // 2 + sx]
+            cam2_roi = [cy - sy//2,
+                        cy - sy//2 + sy,
+                        cx - sx//2,
+                        cx - sx//2 + sx]
 
-            mmc2.setROI(cx - sx // 2, cy - sy // 2, sx, sy)
+            mmc2.setROI(cx - sx//2, cy - sy//2, sx, sy)
 
             nx_cam2 = mmc2.getImageWidth()
             ny_cam2 = mmc2.getImageHeight()
@@ -609,9 +699,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             # set acquisition parameters
             exposure_odt_ns = int(np.round(exposure_tms_odt * 1e6))
-            # need fps to be a little bit slower (how much?)
-            # frames_per_sec = 1 / (exposure_odt_ns + 10000) * 1e9
-            # todo: turns out doesn't matter ... can set to 50
+            # need fps to be a little bit slower ... can set to 50
             frames_per_sec = 50.
 
             try:
@@ -730,6 +818,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                      min_odt_frame_time=min_odt_frame_time_ms * 1e-3,
                                      sim_stabilize_t=sim_warmup_time_ms * 1e-3,
                                      shutter_delay_time=shutter_delay_time_ms * 1e-3,
+                                     sim_readout_time=sim_readout_time_ms * 1e-3,
                                      z_voltages=z_volts,
                                      use_dmd_as_odt_shutter=False,
                                      n_digital_ch=self.daq.n_digital_lines,
@@ -1020,10 +1109,15 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 dmd_modes = [chm if ch == "odt" else "default" for ch, chm, _, _ in acq_modes]
                 dmd_channels = [ch for ch, _, _, _, in acq_modes]
 
-                pic_inds, bit_inds = self.dmd.program_dmd_seq(dmd_modes, dmd_channels, nrepeats=1,
-                                                              noff_before=0, noff_after=noff_after,
-                                                              blank=blank, mode_pattern_indices=None,
-                                                              triggered=True, verbose=False)
+                pic_inds, bit_inds = self.dmd.program_dmd_seq(dmd_modes,
+                                                              dmd_channels,
+                                                              nrepeats=1,
+                                                              noff_before=0,
+                                                              noff_after=noff_after,
+                                                              blank=blank,
+                                                              mode_pattern_indices=None,
+                                                              triggered=True,
+                                                              verbose=False)
                 dmd_data = np.vstack((pic_inds, bit_inds))
 
                 if pp == 0:

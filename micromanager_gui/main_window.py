@@ -223,12 +223,13 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.daq_update_immediately_checkBox.clicked.connect(self._on_channel_changed)
         # set channel/mode combination
         self.set_channel_Button.clicked.connect(self.set_channel_and_mode)
+        self.set_channel_Button.clicked.connect(self._on_channel_changed) # update daq display also
 
         # update mode combo box when channel combo box is changed
         self.channel_comboBox.currentTextChanged.connect(self._refresh_mode_options)
         # connect comboBox
-        self.bit_comboBox.currentIndexChanged.connect(self.bit_changed)
-        self.bin_comboBox.currentIndexChanged.connect(self.bin_changed)
+        self.bit_comboBox.currentIndexChanged.connect(self._bit_changed)
+        self.bin_comboBox.currentIndexChanged.connect(self._bin_changed)
         self.snap_channel_comboBox.currentTextChanged.connect(self._channel_changed)
         self.set_camera_comboBox.currentTextChanged.connect(self._camera_changed)
 
@@ -283,8 +284,13 @@ class MainWindow(QtW.QWidget, _MainUI):
 
 
     def _show_prop_browser(self):
-        pb = PropBrowser(self._mmc, self)
-        pb.exec()
+        mode = self.configuration_selector_comboBox.currentText()
+        if mode == "MM config":
+            pb = PropBrowser(self._mmc, self)
+            pb.exec()
+        elif mode == "microscope":
+            # todo: json browser
+            pass
 
     def _on_config_set(self, groupName: str, configName: str):
         if groupName == self._mmc.getOrGuessChannelGroup():
@@ -463,9 +469,13 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         if self.dmd.initialized:
             chan = self.channel_comboBox.currentText()
-            modes = list(self.dmd.presets[chan].keys())
-            self.mode_comboBox.addItems(modes)
-            self.mode_comboBox.setCurrentText("default") # note: modes are required to have a mode named "default"
+
+            try:
+                modes = list(self.dmd.presets[chan].keys())
+                self.mode_comboBox.addItems(modes)
+                self.mode_comboBox.setCurrentText("default") # note: modes are required to have a mode named "default"
+            except KeyError:
+                pass
 
     def _refresh_options(self):
         self._refresh_camera_options()
@@ -474,12 +484,12 @@ class MainWindow(QtW.QWidget, _MainUI):
         self._refresh_camera_list()
         self._refresh_mode_options()
 
-    def bit_changed(self):
+    def _bit_changed(self):
         if self.bit_comboBox.count() > 0:
             bits = self.bit_comboBox.currentText()
             self._mmc_cam.setProperty(self._mmc_cam.getCameraDevice(), "PixelType", bits)
 
-    def bin_changed(self):
+    def _bin_changed(self):
         if self.bin_comboBox.count() > 0:
             bins = self.bin_comboBox.currentText()
             cd = self._mmc_cam.getCameraDevice()
@@ -501,7 +511,6 @@ class MainWindow(QtW.QWidget, _MainUI):
         exposure_ms = self._mmc_cam.getExposure()
 
         self._on_exp_change("", exposure_ms)
-
 
     def _set_affine_ref(self):
         self.affine_ref = [self._mmc.getXPosition(), self._mmc.getYPosition()]
@@ -792,6 +801,7 @@ class MainWindow(QtW.QWidget, _MainUI):
 
             self.fx_doubleSpinBox.setValue(guess_ind[1])
             self.fy_doubleSpinBox.setValue(guess_ind[0])
+
     def fit_holo_frq(self):
         """
         fit offset-holography frequency from data. Use current frequency value as guess value
@@ -1149,16 +1159,15 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.daq_channel_tableWidget.insertRow(idx)
 
         # create a combo_box for channels in the table
-        self.daq_channel_comboBox = QtW.QComboBox(self)
-        self.daq_value_spinBox = QtW.QDoubleSpinBox(self)
-
+        daq_channel_comboBox = QtW.QComboBox(self)
         pks = digital_channels + analog_channels
-        self.daq_channel_comboBox.addItems(pks)
+        daq_channel_comboBox.addItems(pks)
+        daq_channel_comboBox.currentTextChanged.connect(self._on_channel_changed)
+        self.daq_channel_tableWidget.setCellWidget(idx, 0, daq_channel_comboBox)
 
-        self.daq_channel_tableWidget.setCellWidget(idx, 0, self.daq_channel_comboBox)
-        self.daq_channel_tableWidget.setCellWidget(idx, 1, self.daq_value_spinBox)
-
-        self.channel_comboBox.currentTextChanged.connect(self._on_channel_changed)
+        # create spin box for value
+        daq_value_spinBox = QtW.QDoubleSpinBox(self)
+        self.daq_channel_tableWidget.setCellWidget(idx, 1, daq_value_spinBox)
 
         # call function to make sure updated
         self._on_channel_changed()
