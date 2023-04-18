@@ -118,7 +118,7 @@
       <property name="geometry">
        <rect>
         <x>0</x>
-        <y>0</y>
+        <y>-398</y>
         <width>493</width>
         <height>1308</height>
        </rect>
@@ -1692,8 +1692,15 @@
   <tabstop>browse_save_Button</tabstop>
   <tabstop>fname_lineEdit</tabstop>
   <tabstop>sim_exposure_SpinBox</tabstop>
+  <tabstop>sim_circbuf_doubleSpinBox</tabstop>
+  <tabstop>odt_exposure_SpinBox</tabstop>
+  <tabstop>daq_dt_doubleSpinBox</tabstop>
   <tabstop>sim_warmup_doubleSpinBox</tabstop>
+  <tabstop>sim_readout_doubleSpinBox</tabstop>
+  <tabstop>odt_frametime_SpinBox</tabstop>
+  <tabstop>odt_circbuff_SpinBox</tabstop>
   <tabstop>shutter_delay_doubleSpinBox</tabstop>
+  <tabstop>odt_warmup_doubleSpinBox</tabstop>
   <tabstop>cx_spinBox</tabstop>
   <tabstop>sx_spinBox</tabstop>
   <tabstop>cy_spinBox</tabstop>
@@ -1715,17 +1722,23 @@
   <tabstop>z_range_topbottom_doubleSpinBox</tabstop>
   <tabstop>step_size_doubleSpinBox</tabstop>
   <tabstop>stage_groupBox</tabstop>
-  <tabstop>show_Button</tabstop>
   <tabstop>stage_tableWidget</tabstop>
-  <tabstop>run_Button</tabstop>
-  <tabstop>pause_Button</tabstop>
   <tabstop>add_pos_Button</tabstop>
-  <tabstop>cancel_Button</tabstop>
   <tabstop>remove_pos_Button</tabstop>
   <tabstop>clear_pos_Button</tabstop>
-  <tabstop>above_doubleSpinBox</tabstop>
-  <tabstop>below_doubleSpinBox</tabstop>
+  <tabstop>parameter_groupBox</tabstop>
+  <tabstop>scan_together_checkBox</tabstop>
+  <tabstop>parameter_tableWidget</tabstop>
+  <tabstop>add_parameter_pushButton</tabstop>
+  <tabstop>remove_parameter_pushButton</tabstop>
+  <tabstop>clear_parameter_pushButton</tabstop>
+  <tabstop>show_Button</tabstop>
+  <tabstop>run_Button</tabstop>
+  <tabstop>pause_Button</tabstop>
+  <tabstop>cancel_Button</tabstop>
   <tabstop>z_range_abovebelow_doubleSpinBox</tabstop>
+  <tabstop>below_doubleSpinBox</tabstop>
+  <tabstop>above_doubleSpinBox</tabstop>
   <tabstop>zrange_spinBox</tabstop>
  </tabstops>
  <resources/>

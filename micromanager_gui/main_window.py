@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Tuple
-
 import napari
 import numpy as np
 import zarr
@@ -26,7 +25,6 @@ from .prop_browser import PropBrowser
 
 if TYPE_CHECKING:
     from typing import Dict
-
     import napari.layers
     import napari.viewer
     import useq
@@ -34,6 +32,8 @@ if TYPE_CHECKING:
     from pymmcore_plus.mda import PMDAEngine
 
 # dmd and daq control
+import threading
+from PIL import Image
 import json
 import re
 from mcsim.expt_ctrl import dlp6500, daq, phantom_cam
@@ -121,14 +121,24 @@ class _MainUI:
     mode_comboBox: QtW.QComboBox
     daq_shutter_checkBox: QtW.QCheckBox
 
-    # dmd frame
+    # dmd firmware
     pattern_time_SpinBox: QtW.QDoubleSpinBox
     pic_index_spinBox: QtW.QSpinBox
     bit_index_spinBox: QtW.QSpinBox
     set_dmd_pattern_index_pushButton: QtW.QPushButton
+    show_dmd_firmware_pattern_pushButton: QtW.QPushButton
     dmd_snap_checkBox: QtW.QCheckBox
+    dmd_update_immediately_checkBox: QtW.QCheckBox
 
-    # daq frame
+    # dmd pattern
+    dmd_pattern_lineEdit: QtW.QLineEdit
+    dmd_pattern_find_pushButton: QtW.QPushButton
+    upload_dmd_pattern_pushButton: QtW.QPushButton
+    show_dmd_upload_pattern_pushButton: QtW.QPushButton
+    set_uploaded_dmd_pattern_pushButton: QtW.QPushButton
+    dmd_set_file_pattern_time_doubleSpinBox: QtW.QDoubleSpinBox
+
+    # daq
     daq_channel_groupBox: QtW.QGroupBox
     daq_channel_tableWidget: QtW.QTableWidget
     add_ch_Button: QtW.QPushButton
@@ -161,21 +171,16 @@ class MainWindow(QtW.QWidget, _MainUI):
     def __init__(self, viewer: napari.viewer.Viewer, remote=False):
         super().__init__()
         self.setup_ui()
-
         self.viewer = viewer
         self.streaming_timer = None
 
-        # create connection to mmcore server or process-local variant
         # create two cores, the first is the main core, the second only runs the second camera
-        # self._mmcores = [RemoteMMCore(port=54333) if remote else CMMCorePlus(),
-        #                  RemoteMMCore(port=54334) if remote else CMMCorePlus()]
         self._mmcores = [CMMCorePlus(), CMMCorePlus()]
-
+        # core for moving stages and etc
         self._mmc = self._mmcores[0]
+        # keep track of the core used for snapping images. This can be changed
         self._mmc_cam = self._mmcores[1]
-
-        # placeholders for later
-        # since these are passed through to the other widgets, they can be updated but not reassigned
+        # placeholders: since these are passed through to the other widgets, they can be updated but not reassigned
         self.phcam = phantom_cam.phantom_cam()
         self.dmd = dlp6500.dlp6500win(initialize=False)
         self.daq = daq.nidaq(initialize=False)
@@ -184,7 +189,6 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         # connect mmcore signals
         sig: QCoreSignaler = self._mmc.events
-
         # mda events
         sig.systemConfigurationLoaded.connect(self._refresh_options)
         sig.XYStagePositionChanged.connect(self._on_xy_stage_position_changed)
@@ -200,9 +204,12 @@ class MainWindow(QtW.QWidget, _MainUI):
                                                        "microscope"
                                                        ])
 
-        # connect buttons
+        # loading configuration files
         self.load_cfg_Button.clicked.connect(self.load_cfg_pressed)
         self.browse_cfg_Button.clicked.connect(self.browse_cfg)
+        self.properties_Button.clicked.connect(self._show_prop_browser)
+
+        # stage movement
         self.left_Button.clicked.connect(self.stage_x_left)
         self.right_Button.clicked.connect(self.stage_x_right)
         self.y_up_Button.clicked.connect(self.stage_y_up)
@@ -210,30 +217,46 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.up_Button.clicked.connect(self.stage_z_up)
         self.down_Button.clicked.connect(self.stage_z_down)
         self.autoscale_Button.clicked.connect(self.autoscale_active_layer)
+
+        # camera actions
         self.snap_Button.clicked.connect(self.snap)
         self.live_Button.clicked.connect(self.toggle_live)
         self.calibrate_Button.clicked.connect(self.calibrate_camera)
-        self.properties_Button.clicked.connect(self._show_prop_browser)
-        self.set_dmd_pattern_index_pushButton.clicked.connect(self._set_dmd_pattern_index)
         self.set_affine_ref_Button.clicked.connect(self._set_affine_ref)
-        self.add_ch_Button.clicked.connect(self.add_channel)
-        self.remove_ch_Button.clicked.connect(self.remove_channel)
-        self.clear_ch_Button.clicked.connect(self.clear_channel)
-        self.daq_update_pushButton.clicked.connect(self._on_daq_setting_change)
-        self.daq_update_immediately_checkBox.clicked.connect(self._on_channel_changed)
-        # set channel/mode combination
-        self.set_channel_Button.clicked.connect(self.set_channel_and_mode)
-        self.set_channel_Button.clicked.connect(self._on_channel_changed) # update daq display also
-
-        # update mode combo box when channel combo box is changed
-        self.channel_comboBox.currentTextChanged.connect(self._refresh_mode_options)
-        # connect comboBox
         self.bit_comboBox.currentIndexChanged.connect(self._bit_changed)
         self.bin_comboBox.currentIndexChanged.connect(self._bin_changed)
         self.snap_channel_comboBox.currentTextChanged.connect(self._channel_changed)
         self.set_camera_comboBox.currentTextChanged.connect(self._camera_changed)
 
-        # set up image processing
+        # DMD firmware
+        self.pic_index_spinBox.valueChanged.connect(self._on_dmd_firmware_pattern_updated)
+        self.bit_index_spinBox.valueChanged.connect(self._on_dmd_firmware_pattern_updated)
+        self.set_dmd_pattern_index_pushButton.clicked.connect(self._set_dmd_firmware_pattern)
+        self.show_dmd_firmware_pattern_pushButton.clicked.connect(self._show_dmd_firmware_pattern)
+
+        # DMD load from file
+        self.dmd_set_file_pattern_time_doubleSpinBox.setValue(0.105)
+        self.dmd_pattern_find_pushButton.clicked.connect(self._browse_dmd_pattern)
+        self.dmd_pattern_fnames = None
+        self.upload_thread = None
+        self.upload_dmd_pattern_pushButton.clicked.connect(self._upload_dmd_pattern)
+        self.set_uploaded_dmd_pattern_pushButton.clicked.connect(self._set_uploaded_dmd_pattern)
+        self.show_dmd_upload_pattern_pushButton.clicked.connect(self._show_uploaded_dmd_pattern)
+
+        # DAQ
+        self.add_ch_Button.clicked.connect(self.add_channel)
+        self.remove_ch_Button.clicked.connect(self.remove_channel)
+        self.clear_ch_Button.clicked.connect(self.clear_channel)
+        self.daq_update_pushButton.clicked.connect(self._on_daq_setting_change)
+        self.daq_update_immediately_checkBox.clicked.connect(self._on_channel_changed)
+
+        # DAQ/DMD illumination modes
+        self.channel_comboBox.currentTextChanged.connect(self._refresh_mode_options)
+        self.set_channel_Button.clicked.connect(self.set_channel_and_mode)
+        self.set_channel_Button.clicked.connect(self._on_channel_changed)  # update daq display also
+        self.pattern_time_SpinBox.setValue(0.105) # DMD pattern time
+
+        #  image processing
         proc_modes = ["normal", "fft", "hologram"]
         self.image_proc_mode_comboBox.addItems(proc_modes)
         self.snap_channel_comboBox.setCurrentText(proc_modes[0])
@@ -241,14 +264,10 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.fit_holo_frq_Button.clicked.connect(self.fit_holo_frq)
         self.fit_holo_curvature_Button.clicked.connect(self.fit_holo_curvature)
         self.threshold_SpinBox.setValue(50.)
-        # connect spinboxes
         self.exp_spinBox.valueChanged.connect(self._update_exp)
         self.exp_spinBox.setKeyboardTracking(False)
         self.fx_doubleSpinBox.setValue(1600.)
         self.fy_doubleSpinBox.setValue(1400.)
-
-        # DMD
-        self.pattern_time_SpinBox.setValue(0.105)
 
         # refresh options in case a config is already loaded by another remote
         self._refresh_options()
@@ -584,16 +603,19 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         min_p = self.min_scale_doubleSpinBox.value()
         max_p = self.max_scale_doubleSpinBox.value()
+        # operate on selected layers
+        layers_select = list(self.viewer.layers.selection)
 
         # only scale the visible layer, which is the first layer which is not hidden
         # todo: this doesn't always work ... how to figure out which layer is "on top"
-        for l in reversed(self.viewer.layers):
-            if l.visible:
+        # for l in reversed(self.viewer.layers):
+        #     if l.visible:
                 # get slider position and only scale for the visible slice
                 # channel_dim = 4
                 # current_step = list(self.viewer.dims.current_step[:-2])
                 # current_step.pop(channel_dim)
 
+        for l in layers_select:
                 # don't let this code breaking crash the program...
                 try:
                     # todo: think this only works if don't have scale = dxy set
@@ -607,8 +629,6 @@ class MainWindow(QtW.QWidget, _MainUI):
                     l.contrast_limits = (float(vmin), float(vmax))
                 except Exception as e:
                     print(e)
-
-                break
 
     def update_viewer(self, data=None):
 
@@ -1110,6 +1130,10 @@ class MainWindow(QtW.QWidget, _MainUI):
             print(e)
 
     def set_channel_and_mode(self):
+
+        if self.upload_thread is not None:
+            self.upload_thread.join()
+
         # get info from boxes
         channel = self.channel_comboBox.currentText()
         mode = self.mode_comboBox.currentText()
@@ -1134,12 +1158,37 @@ class MainWindow(QtW.QWidget, _MainUI):
                                  clear_pattern_after_trigger=False,
                                  verbose=True)
 
-    def _set_dmd_pattern_index(self):
+    def _on_dmd_firmware_pattern_updated(self):
+
+        if self.dmd_update_immediately_checkBox.isChecked():
+            self.pic_index_spinBox.valueChanged.connect(self._set_dmd_firmware_pattern)
+            self.bit_index_spinBox.valueChanged.connect(self._set_dmd_firmware_pattern)
+        else:
+            try:
+                self.pic_index_spinBox.valueChanged.disconnect()
+            except TypeError:
+                # if already disconnected ...
+                pass
+
+            try:
+                self.pic_index_spinBox.valueChanged.disconnect()
+            except TypeError:
+                pass
+
+    def _set_dmd_firmware_pattern(self):
         pic_ind = self.pic_index_spinBox.value()
         bit_ind = self.bit_index_spinBox.value()
+
+        if self.upload_thread is not None:
+            self.upload_thread.join()
+
         self.dmd.start_stop_sequence('stop')
 
-        self.dmd.set_pattern_sequence([pic_ind], [bit_ind], 105, 0,
+
+        self.dmd.set_pattern_sequence([pic_ind],
+                                      [bit_ind],
+                                      exp_times=105,
+                                      dark_times=0,
                                       triggered=False,
                                       clear_pattern_after_trigger=False,
                                       bit_depth=1,
@@ -1148,6 +1197,112 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         if self.dmd_snap_checkBox.isChecked():
             self.snap()
+
+    def _show_dmd_firmware_pattern(self):
+        pic_ind = self.pic_index_spinBox.value()
+        bit_ind = self.bit_index_spinBox.value()
+        combined_ind = dlp6500.pic_bit_ind_2firmware_ind(pic_ind, bit_ind)
+
+        if self.dmd.firmware_patterns is not None:
+            firmware_pattern = self.dmd.firmware_patterns[combined_ind]
+        else:
+            raise ValueError("DMD is not loaded with firmware pattern data")
+
+        layer_name = f"DMD firmware pic={pic_ind:d}, bit={bit_ind:d}, combined index={combined_ind:d}"
+
+        layer_list = [l for l in self.viewer.layers if l.name == "layer_name"]
+
+        if layer_list == []:
+            self.viewer.add_image(firmware_pattern, name=layer_name)
+        else:
+            layer_list[0].data = firmware_pattern
+
+
+    def _browse_dmd_pattern(self):
+        self.dmd_pattern_fnames = QtW.QFileDialog.getOpenFileNames(self, "", "select DMD patterns", "png(*.png)")[0]
+        self.dmd_pattern_lineEdit.setText("; ".join(self.dmd_pattern_fnames))
+
+    def _upload_dmd_pattern(self):
+        if self.dmd_pattern_fnames is None:
+            return
+
+        # make sure previous uploaded finished before trying to start a new one
+        if self.upload_thread is not None:
+            self.upload_thread.join()
+
+        # load patterns
+        patterns = []
+        for f in self.dmd_pattern_fnames:
+            patterns.append(np.array(Image.open(str(f))).astype(np.uint8))
+        patterns = np.stack(patterns, axis=0)
+
+        ny = patterns.shape[1]
+        nx = patterns.shape[2]
+
+        if ny != self.dmd.height or nx != self.dmd.width:
+            raise ValueError("pattern sizes did not match DMD size")
+
+        # grab pattern time
+        pattern_time_us = int(np.round(self.dmd_set_file_pattern_time_doubleSpinBox.value() * 1e3))
+
+        # set patterns
+        self.dmd.start_stop_sequence('stop')
+        self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
+                                           ["dmd_enable", "dmd_advance"])
+
+        # put in different thread so don't block GUI
+        # still printing to the terminal and not bothering to acquire a lock
+        self.upload_thread = threading.Thread(target=self.dmd.upload_pattern_sequence,
+                                         args=(patterns,),
+                                         kwargs={"exp_times": pattern_time_us,
+                                                 "dark_times": 0,
+                                                 "triggered": False,
+                                                 "clear_pattern_after_trigger": False,
+                                                 "bit_depth": 1,
+                                                 "num_repeats": 0,
+                                                 "compression_mode": "erle",
+                                                 "combine_images": True
+                                                }
+                                         )
+        self.upload_thread.start()
+
+    def _set_uploaded_dmd_pattern(self):
+        if self.dmd_pattern_fnames is None:
+            return
+
+        # grab pattern time
+        pattern_time_us = int(np.round(self.dmd_set_file_pattern_time_doubleSpinBox.value() * 1e3))
+
+        self.dmd.start_stop_sequence('stop')
+        self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
+                                           ["dmd_enable", "dmd_advance"])
+
+        pic_inds, bit_inds = dlp6500.firmware_index_2pic_bit(list(range(len(self.dmd_pattern_fnames))))
+        self.dmd.set_pattern_sequence(pic_inds.tolist(),
+                                      bit_inds.tolist(),
+                                      exp_times=pattern_time_us,
+                                      dark_times=0,
+                                      triggered=False,
+                                      clear_pattern_after_trigger=False,
+                                      bit_depth=1,
+                                      num_repeats=0,
+                                      mode="on-the-fly")
+
+    def _show_uploaded_dmd_pattern(self):
+
+        if self.dmd.firmware_patterns is not None:
+            patterns = self.dmd.on_the_fly_patterns
+        else:
+            raise ValueError("DMD is not loaded with on-the-fly pattern data")
+
+        layer_name = f"DMD on-the-fly patterns"
+
+        layer_list = [l for l in self.viewer.layers if l.name == "layer_name"]
+
+        if layer_list == []:
+            self.viewer.add_image(patterns, name=layer_name)
+        else:
+            layer_list[0].data = patterns
 
     # add, remove, clear DAQ channel table
     def add_channel(self):

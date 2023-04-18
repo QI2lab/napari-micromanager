@@ -362,6 +362,12 @@
   <tabstop>model_comboBox</tabstop>
   <tabstop>layer_comboBox</tabstop>
   <tabstop>update_pushButton</tabstop>
+  <tabstop>compare_checkBox</tabstop>
+  <tabstop>roi_checkBox</tabstop>
+  <tabstop>fit_roi_tableWidget</tabstop>
+  <tabstop>add_pushButton</tabstop>
+  <tabstop>remove_pushButton</tabstop>
+  <tabstop>clear_pushButton</tabstop>
   <tabstop>show_Button</tabstop>
   <tabstop>run_Button</tabstop>
   <tabstop>pause_Button</tabstop>

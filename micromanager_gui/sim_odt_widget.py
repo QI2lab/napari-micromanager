@@ -1348,10 +1348,12 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 # start daq
                 tstart_acq = time.perf_counter()
                 self.daq.start_sequence()
-                thread_save_cam1 = threading.Thread(target=read_cam, args=(mmc1, cam1_dsets, cam1_acq_modes, n_cam1_pics, "cam1"))
+                thread_save_cam1 = threading.Thread(target=read_cam,
+                                                    args=(mmc1, cam1_dsets, cam1_acq_modes, n_cam1_pics, "cam1"))
 
                 if mmc2.getCameraDevice() != "":
-                    thread_save_cam2 = threading.Thread(target=read_cam, args=(mmc2, cam2_dsets, cam2_acq_modes, n_cam2_pics, "cam2"))
+                    thread_save_cam2 = threading.Thread(target=read_cam,
+                                                        args=(mmc2, cam2_dsets, cam2_acq_modes, n_cam2_pics, "cam2"))
 
                 thread_save_cam1.start()
 

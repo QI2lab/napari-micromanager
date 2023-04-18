@@ -533,6 +533,25 @@
    </item>
   </layout>
  </widget>
+ <tabstops>
+  <tabstop>scrollArea</tabstop>
+  <tabstop>save_groupBox</tabstop>
+  <tabstop>dir_lineEdit</tabstop>
+  <tabstop>browse_save_Button</tabstop>
+  <tabstop>fname_lineEdit</tabstop>
+  <tabstop>patterns_lineEdit</tabstop>
+  <tabstop>browse_patterns_button</tabstop>
+  <tabstop>triggering_checkBox</tabstop>
+  <tabstop>exposure_SpinBox</tabstop>
+  <tabstop>time_groupBox</tabstop>
+  <tabstop>timepoints_spinBox</tabstop>
+  <tabstop>interval_spinBox</tabstop>
+  <tabstop>time_comboBox</tabstop>
+  <tabstop>show_dataset_checkBox</tabstop>
+  <tabstop>run_Button</tabstop>
+  <tabstop>pause_Button</tabstop>
+  <tabstop>cancel_Button</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>
