@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import napari.layers.image.image
 from qtpy import QtWidgets as QtW
 from qtpy import uic
-from qtpy.QtCore import QSize, Qt, QTimer
+from qtpy.QtCore import QSize, Qt, QTimer, QPoint
 from qtpy.QtGui import QIcon
 from typing_extensions import Literal
 from useq import MDASequence
@@ -48,6 +48,7 @@ class _PeakTrackerDUI:
     browse_save_Button: QtW.QPushButton
 
     # selection
+    mouse_select_pushButton: QtW.QPushButton
     fit_roi_tableWidget: QtW.QTableWidget
     add_pushButton: QtW.QPushButton
     remove_pushButton: QtW.QPushButton
@@ -90,6 +91,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
 
         # connect buttons
         self.browse_save_Button.clicked.connect(self._set_save_dir)
+        self.mouse_select_pushButton.clicked.connect(self._select_rois_with_mouse)
         self.add_pushButton.clicked.connect(self._add_roi)
         self.remove_pushButton.clicked.connect(self._remove_roi)
         self.clear_pushButton.clicked.connect(self._clear_roi)
@@ -104,10 +106,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         # fit models
         self.fit_models = {"gaussian": fit.gauss2d(),
                            }
-
-        # self.fit_params_lock = threading.Lock()
         self.fit_params = None
-        # self.run_fit_thread = threading.Event()
         self.streaming_timer = None
 
     def _refresh(self):
@@ -155,6 +154,9 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         roi_list = []
         fit_params_roi = []
         for ii in range(nroi):
+            if ii > len(self.fit_params):
+                continue
+
             # grab variables
             # cx = self.cx_doubleSpinBox.value()
             # cy = self.cy_doubleSpinBox.value()
@@ -222,10 +224,15 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
 
         if self.compare_checkBox.checkState():
             center = np.abs(img[img.shape[0] // 2, img.shape[1] // 2])
-            features.update({"A/center": np.array([fp[-1][0] / center for fp in self.fit_params])})
+            ratios = np.array([fp[-1][0] / center for fp in self.fit_params])
+        else:
+            ratios = np.array([np.nan for fp in self.fit_params])
+
+        features.update({"A/center": ratios})
 
         if plot_layer is not None:
             plot_layer.data = plot_data
+            plot_layer.features
             plot_layer.features = features
         else:
             self.viewer.add_points(plot_data,
@@ -273,6 +280,44 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
                                        affine=layer.affine
                                        )
 
+    def _select_rois_with_mouse(self):
+        # much better to use viewer events rather than delve into QT
+        # self.viewer.window.qt_viewer.canvas.events.mouse_press.connect(self._add_roi_by_point)
+        self.viewer.mouse_drag_callbacks.append(self._add_roi_by_point)
+
+        try:
+            self.mouse_select_pushButton.clicked.disconnect()
+        except Exception as e:
+            print(e)
+
+        self.mouse_select_pushButton.clicked.connect(self._stop_select_rois_with_mouse)
+        self.mouse_select_pushButton.setText("Stop selecting...")
+
+    def _stop_select_rois_with_mouse(self):
+
+        self.viewer.mouse_drag_callbacks.pop()
+
+        try:
+            self.mouse_select_pushButton.clicked.disconnect()
+        except Exception as e:
+            print(e)
+
+        self.mouse_select_pushButton.clicked.connect(self._select_rois_with_mouse)
+        self.mouse_select_pushButton.setText("Select with mouse")
+
+    def _add_roi_by_point(self, viewer, event):
+        # center in canvas coordinates
+        canvas_coord = event.position
+
+        layer_name = self.layer_comboBox.currentText()
+        layer = [l for l in self.viewer.layers if l.name == layer_name][0]
+        cy, cx = layer.world_to_data(canvas_coord)
+
+        self._add_roi()
+        idx = self.fit_roi_tableWidget.rowCount() - 1
+        self.fit_roi_tableWidget.cellWidget(idx, 0).setValue(int(np.round(cy)))
+        self.fit_roi_tableWidget.cellWidget(idx, 1).setValue(int(np.round(cx)))
+
     def _add_roi(self):
         idx = self.fit_roi_tableWidget.rowCount()
         self.fit_roi_tableWidget.insertRow(idx)
@@ -300,7 +345,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         # remove selected position
         rows = {r.row() for r in self.fit_roi_tableWidget.selectedIndexes()}
         for idx in sorted(rows, reverse=True):
-            self.channel_tableWidget.removeRow(idx)
+            self.fit_roi_tableWidget.removeRow(idx)
 
     def _clear_roi(self):
         self.fit_roi_tableWidget.clearContents()

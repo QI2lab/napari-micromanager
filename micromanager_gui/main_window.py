@@ -227,6 +227,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.bin_comboBox.currentIndexChanged.connect(self._bin_changed)
         self.snap_channel_comboBox.currentTextChanged.connect(self._channel_changed)
         self.set_camera_comboBox.currentTextChanged.connect(self._camera_changed)
+        self.max_scale_doubleSpinBox.setValue(99.99)
+        self.min_scale_doubleSpinBox.setValue(0.01)
 
         # DMD firmware
         self.pic_index_spinBox.valueChanged.connect(self._on_dmd_firmware_pattern_updated)
