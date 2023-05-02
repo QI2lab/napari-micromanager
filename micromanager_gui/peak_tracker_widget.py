@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import matplotlib.lines
 import napari.layers.image.image
 from qtpy import QtWidgets as QtW
 from qtpy import uic
@@ -29,6 +30,8 @@ import mcsim.expt_ctrl.daq
 from mcsim.expt_ctrl.program_sim_odt import get_sim_odt_sequence
 from mcsim.expt_ctrl import dlp6500
 import mcsim.expt_ctrl.phantom_cam as phc
+import matplotlib
+import matplotlib.pyplot as plt
 
 
 ICONS = Path(__file__).parent / "icons"
@@ -58,9 +61,12 @@ class _PeakTrackerDUI:
     update_pushButton: QtW.QPushButton
     roi_checkBox: QtW.QCheckBox
     compare_checkBox: QtW.QCheckBox
+    plot_trace_checkBox: QtW.QCheckBox
+
+    memory_time_doubleSpinBox: QtW.QDoubleSpinBox
 
     # display
-    tracking_tableWidget: QtW.QTableWidget
+    # tracking_tableWidget: QtW.QTableWidget
 
     # running
     show_Button: QtW.QPushButton
@@ -80,6 +86,8 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
                  phcam=None,
                  parent=None,
                  configuration=None):
+
+        matplotlib.use("Qt5Agg")
 
         self._mmcores = mmcores
         self._mmc = self._mmcores[0]
@@ -105,13 +113,21 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         # todo: want combobox to update when it is clicked on, but couldn't figure out
         self.update_pushButton.clicked.connect(self._refresh)
         self.compare_checkBox.setChecked(True)
+        self.roi_checkBox.setChecked(True)
+        self.plot_trace_checkBox.setChecked(True)
+        self.memory_time_doubleSpinBox.setValue(30.)
         # self.layer_comboBox.mousePressEvent.connect(self._refresh_layers)
 
         # fit models
         self.fit_models = {"gaussian": fit.gauss2d(),
                            }
         self.fit_params = None
+        self.fit_times = None
         self.streaming_timer = None
+
+        # matplotlib figure
+        self._model = None
+        self._figure = None
 
     def _refresh(self):
         self._refresh_layers()
@@ -129,15 +145,9 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
 
     def _fit_peaks(self):
 
-        # model info
-        try:
-            model = self.fit_models[self.model_comboBox.currentText()]
-        except KeyError as e:
-            print(e)
-            return
 
-        ind_x = [ii for ii, name in enumerate(model.parameter_names) if name == "cx"][0]
-        ind_y = [ii for ii, name in enumerate(model.parameter_names) if name == "cy"][0]
+        ind_x = [ii for ii, name in enumerate(self._model.parameter_names) if name == "cx"][0]
+        ind_y = [ii for ii, name in enumerate(self._model.parameter_names) if name == "cy"][0]
 
         # grab data
         layer_name = self.layer_comboBox.currentText()
@@ -156,6 +166,8 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         # ######################
         # fit ROIs
         # ######################
+        self.fit_times = np.concatenate((self.fit_times, np.array([time.time()]))) # time since epoch in seconds
+
         nroi = self.fit_roi_tableWidget.rowCount()
         roi_list = []
         fit_params_roi = []
@@ -178,14 +190,14 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
 
             # do fitting
             # if we have a previous fit, use that value as default
-            lbs = [None] * len(model.parameter_names)
-            ubs = [None] * len(model.parameter_names)
+            lbs = [None] * len(self._model.parameter_names)
+            ubs = [None] * len(self._model.parameter_names)
             lbs[ind_x] = xx_roi.min()
             ubs[ind_x] = xx_roi.max()
             lbs[ind_y] = yy_roi.min()
             ubs[ind_y] = yy_roi.max()
 
-            if self.fit_params[ii] == []:
+            if len(self.fit_params[ii]) == 0:
                 init_params = None
             else:
                 last_fps_in_lbs = [lb is None or ip >= lb for ip, lb in zip(self.fit_params[ii][-1], lbs)]
@@ -196,7 +208,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
                 else:
                     init_params = None
 
-            fit_results = model.fit(img_roi,
+            fit_results = self._model.fit(img_roi,
                                     (yy_roi, xx_roi),
                                     init_params=init_params,
                                     fixed_params=None,
@@ -206,7 +218,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
 
             roi_list.append(roi)
             fit_params_roi.append(fit_params)
-            self.fit_params[ii].append(fit_params)
+            self.fit_params[ii] = np.concatenate((self.fit_params[ii], fit_params[None, :]), axis=0)
 
         # get center value for comparison (really for FFT)
         if self.compare_checkBox.checkState():
@@ -228,8 +240,8 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         # data to be plotted on the screen below
         features = {"A/center": ratios,
                     "roi_index": np.arange(nroi)}
-        features.update(dict(zip(model.parameter_names,
-                            [np.array([fp[-1][ii] for fp in self.fit_params]) for ii in range(len(model.parameter_names))]
+        features.update(dict(zip(self._model.parameter_names,
+                            [np.array([fp[-1, ii] for fp in self.fit_params]) for ii in range(len(self._model.parameter_names))]
                             )
                         )
                         )
@@ -311,7 +323,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
             plot_layer = plot_layer[0]
 
 
-        plot_data = np.array([[fp[-1][ind_y], fp[-1][ind_x]] for fp in self.fit_params])
+        plot_data = np.array([[fp[-1, ind_y], fp[-1, ind_x]] for fp in self.fit_params])
 
         if plot_layer is not None:
             plot_layer.data = plot_data
@@ -362,6 +374,10 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
                                        translate=layer.translate,
                                        affine=layer.affine
                                        )
+
+        # update plot
+        if self.plot_trace_checkBox.isChecked():
+            self._update_figure()
 
     def _select_rois_with_mouse(self):
         # much better to use viewer events rather than delve into QT
@@ -443,12 +459,22 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
     def _clear(self):
         self._on_stop_clicked()
         self.fit_params = None
+        self.fit_times = None
 
     def _on_run_clicked(self):
-        nrois = self.fit_roi_tableWidget.rowCount()
-        self.fit_params = [[] for _ in range(nrois)]
 
-        self._prepare_display_table(nrois)
+        try:
+            self._model = self.fit_models[self.model_comboBox.currentText()]
+        except KeyError as e:
+            print(e)
+            return
+
+        nrois = self.fit_roi_tableWidget.rowCount()
+        self.fit_params = [np.zeros((0, self._model.nparams)) for _ in range(nrois)]
+        self.fit_times = np.zeros((0))
+
+        self._prepare_figure()
+        # self._prepare_display_table(nrois)
 
         self.streaming_timer = QTimer()
         self.streaming_timer.timeout.connect(self._fit_peaks)
@@ -461,26 +487,107 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         except AttributeError:
             pass
 
-    def _prepare_display_table(self, nrois):
-        # clear
-        self.tracking_tableWidget.clearContents()
-        self.tracking_tableWidget.setRowCount(0)
+    # def _prepare_display_table(self, nrois):
+    #     # clear
+    #     self.tracking_tableWidget.clearContents()
+    #     self.tracking_tableWidget.setRowCount(0)
+    #
+    #     # get current model
+    #     nparams = self._model.nparams
+    #
+    #     for jj in range(nparams + 1):
+    #         self.tracking_tableWidget.insertColumn(jj)
+    #         # todo: set name
+    #         # self.tracking_tableWidget.
+    #
+    #     # set new
+    #     for idx in range(nrois):
+    #         self.tracking_tableWidget.insertRow(idx)
+    #
+    #         for jj in range(nparams + 1):
+    #             self.tracking_tableWidget.setCellWidget(idx, jj, QtW.QLabel(self))
 
-        # get current model
-        model = self.fit_models[self.model_comboBox.currentText()]
-        nparams = model.nparams
 
-        for jj in range(nparams + 1):
-            self.tracking_tableWidget.insertColumn(jj)
-            # todo: set name
-            # self.tracking_tableWidget.
+    def _prepare_figure(self):
+        self._figure = plt.figure(figsize=(30, 10))
+        grid = self._figure.add_gridspec(nrows=self._model.nparams, ncols=1, hspace=0.3)
 
-        # set new
-        for idx in range(nrois):
-            self.tracking_tableWidget.insertRow(idx)
+        for ii in range(self._model.nparams):
+            ax = self._figure.add_subplot(grid[ii, 0])
+            ax.set_ylabel(self._model.parameter_names[ii])
+            ax.axhline(0, color="k")
 
-            for jj in range(nparams + 1):
-                self.tracking_tableWidget.setCellWidget(idx, jj, QtW.QLabel(self))
+            if ii == (self._model.nparams - 1):
+                ax.set_xlabel("Time (s)")
+            else:
+                ax.set_xticks([])
+                ax.set_xticklabels([])
+
+        # self._figure.canvas.draw()
+        plt.show(block=False)
+
+    def _update_figure(self):
+        # todo plot all ROIs
+
+        nrois = len(self.fit_params)
+        colors = plt.cm.get_cmap('brg')(np.linspace(0, 1, nrois))
+
+        # t_range_s = 10
+        t_range_s = self.memory_time_doubleSpinBox.value()
+
+        relative_times = self.fit_times - self.fit_times[0]
+
+        max_time = relative_times.max()
+        min_time = np.max([0, max_time - t_range_s])
+        to_use = relative_times >= min_time
+        t = relative_times[to_use]
+
+        for ii in range(self._model.nparams):
+            ax = self._figure.axes[ii]
+
+            ylows = []
+            yhighs = []
+            means = []
+            stds = []
+            for jj in range(nrois):
+                data = self.fit_params[jj][to_use, ii] - self.fit_params[jj][0, ii]
+                means.append(np.mean(self.fit_params[jj][to_use, ii]))
+                stds.append(np.std(self.fit_params[jj][to_use, ii]))
+
+                # try to get line by label
+                line_list = [ch for ch in ax.get_children() if isinstance(ch, matplotlib.lines.Line2D)
+                             and ch.get_label() == f"{jj:d}"]
+
+                if line_list == []:
+                    ax.plot(t, data, c=colors[jj], label=f"{jj:d}")
+                    ylows.append(np.min(data))
+                else:
+                    line_list[0].set_data(t, data)
+
+                    # update limits
+                    ax.set_xlim([min_time, max_time])
+
+                ylows.append(np.min(data))
+                yhighs.append(np.max(data))
+
+            # set limits
+            ylow = np.min(ylows)
+            yhigh = np.max(yhighs)
+
+            if yhigh == ylow:
+                yhigh += 1e-3
+
+            ax.set_ylim([ylow, yhigh])
+
+            # set title
+            ttl_str = f"{self._model.parameter_names[ii]:s};" + \
+                      "; ".join([f" avg={means[jj]:.3f};"
+                      f" std={stds[jj]:.3f}" for jj in range(nrois)])
+
+            ax.set_title(ttl_str)
+
+        self._figure.canvas.draw()
+        self._figure.canvas.flush_events()
 
 
     def _show_dataset(self):
