@@ -41,6 +41,7 @@ import mcsim.analysis.analysis_tools as mctools
 from mcsim.analysis.sim_reconstruction import fit_modulation_frq
 from localize_psf import fit
 from numpy import fft
+from scipy.signal.windows import hann
 from scipy.ndimage import maximum_filter, minimum_filter
 from skimage.restoration import unwrap_phase
 
@@ -326,11 +327,15 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.snap_live_tab.setEnabled(enabled)
 
     def _update_exp(self, exposure: float):
-        self._mmc_cam.setExposure(exposure)
-        if self.streaming_timer:
-            self.streaming_timer.setInterval(int(exposure))
-            self._mmc_cam.stopSequenceAcquisition()
-            self._mmc_cam.startContinuousSequenceAcquisition(exposure)
+
+        try:
+            self._mmc_cam.setExposure(exposure)
+            if self.streaming_timer:
+                self.streaming_timer.setInterval(int(exposure))
+                self._mmc_cam.stopSequenceAcquisition()
+                self._mmc_cam.startContinuousSequenceAcquisition(exposure)
+        except Exception as e:
+            print(e)
 
     def _on_exp_change(self, camera: str, exposure: float):
         with blockSignals(self.exp_spinBox):
@@ -654,16 +659,22 @@ class MainWindow(QtW.QWidget, _MainUI):
         if mode == "normal":
             pass
         elif mode == "fft":
+            wx = np.expand_dims(hann(nx), axis=0)
+            wy = np.expand_dims(hann(ny), axis=1)
+
             if _cupy_available:
-                data_ft = cp.abs(cp.fft.fftshift(cp.fft.fft2(cp.fft.ifftshift(cp.array(data))))).get()
+                data_ft = cp.abs(cp.fft.fftshift(cp.fft.fft2(cp.fft.ifftshift(cp.array(data) * cp.array(wx) * cp.array(wy))))).get()
             else:
-                data_ft = np.abs(fft.fftshift(fft.fft2(fft.ifftshift(data))))
+                data_ft = np.abs(fft.fftshift(fft.fft2(fft.ifftshift(data * wx * wy))))
 
         elif mode == "hologram":
+            wx = np.expand_dims(hann(nx), axis=0)
+            wy = np.expand_dims(hann(ny), axis=1)
+
             if _cupy_available:
-                ft = cp.fft.fftshift(cp.fft.fft2(cp.fft.ifftshift(cp.array(data)))).get()
+                ft = cp.fft.fftshift(cp.fft.fft2(cp.fft.ifftshift(cp.array(data) * cp.array(wx) * cp.array(wy)))).get()
             else:
-                ft = fft.fftshift(fft.fft2(fft.ifftshift(data)))
+                ft = fft.fftshift(fft.fft2(fft.ifftshift(data * wx * wy)))
 
             data_ft = np.abs(ft)
 
@@ -1235,7 +1246,11 @@ class MainWindow(QtW.QWidget, _MainUI):
         # load patterns
         patterns = []
         for f in self.dmd_pattern_fnames:
+            if not Path(f).exists:
+                print(f"{f:s} does not exist...")
+                return
             patterns.append(np.array(Image.open(str(f))).astype(np.uint8))
+
         patterns = np.stack(patterns, axis=0)
 
         ny = patterns.shape[1]
@@ -1292,10 +1307,13 @@ class MainWindow(QtW.QWidget, _MainUI):
 
     def _show_uploaded_dmd_pattern(self):
 
-        if self.dmd.firmware_patterns is not None:
+        if self.dmd.on_the_fly_patterns is not None:
             patterns = self.dmd.on_the_fly_patterns
         else:
-            raise ValueError("DMD is not loaded with on-the-fly pattern data")
+            # raise ValueError("DMD is not loaded with on-the-fly pattern data")
+            print("DMD is not loaded with on-the-fly pattern data")
+            return
+
 
         layer_name = f"DMD on-the-fly patterns"
 

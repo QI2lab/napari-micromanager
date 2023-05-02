@@ -143,26 +143,6 @@
           <string>Peak tracker</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_5">
-          <item row="7" column="2">
-           <widget class="QCheckBox" name="roi_checkBox">
-            <property name="text">
-             <string>show ROI</string>
-            </property>
-           </widget>
-          </item>
-          <item row="9" column="1">
-           <spacer name="verticalSpacer">
-            <property name="orientation">
-             <enum>Qt::Vertical</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>20</width>
-              <height>40</height>
-             </size>
-            </property>
-           </spacer>
-          </item>
           <item row="8" column="0" colspan="3">
            <widget class="QGroupBox" name="groupBox_2">
             <property name="minimumSize">
@@ -225,11 +205,22 @@
             </layout>
            </widget>
           </item>
-          <item row="4" column="1" colspan="2">
-           <widget class="QComboBox" name="layer_comboBox"/>
-          </item>
           <item row="0" column="1" colspan="2">
            <widget class="QComboBox" name="model_comboBox"/>
+          </item>
+          <item row="7" column="2">
+           <widget class="QCheckBox" name="roi_checkBox">
+            <property name="text">
+             <string>show ROI</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <widget class="QCheckBox" name="compare_checkBox">
+            <property name="text">
+             <string>compare to center</string>
+            </property>
+           </widget>
           </item>
           <item row="4" column="0">
            <widget class="QLabel" name="label_18">
@@ -247,6 +238,13 @@
             </property>
             <property name="text">
              <string>layer</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1" colspan="2">
+           <widget class="QPushButton" name="update_pushButton">
+            <property name="text">
+             <string>update</string>
             </property>
            </widget>
           </item>
@@ -275,18 +273,38 @@
             </property>
            </widget>
           </item>
-          <item row="7" column="1">
-           <widget class="QCheckBox" name="compare_checkBox">
-            <property name="text">
-             <string>compare to center</string>
-            </property>
-           </widget>
+          <item row="4" column="1" colspan="2">
+           <widget class="QComboBox" name="layer_comboBox"/>
           </item>
-          <item row="5" column="1" colspan="2">
-           <widget class="QPushButton" name="update_pushButton">
-            <property name="text">
-             <string>update</string>
+          <item row="10" column="1">
+           <spacer name="verticalSpacer">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
             </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item row="9" column="0" colspan="3">
+           <widget class="QGroupBox" name="groupBox_3">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>300</height>
+             </size>
+            </property>
+            <property name="title">
+             <string>Peak tracking</string>
+            </property>
+            <layout class="QGridLayout" name="gridLayout_3">
+             <item row="0" column="0">
+              <widget class="QTableWidget" name="tracking_tableWidget"/>
+             </item>
+            </layout>
            </widget>
           </item>
          </layout>
