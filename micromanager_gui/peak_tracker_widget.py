@@ -62,8 +62,10 @@ class _PeakTrackerDUI:
     roi_checkBox: QtW.QCheckBox
     compare_checkBox: QtW.QCheckBox
     plot_trace_checkBox: QtW.QCheckBox
+    show_on_napari_checkBox: QtW.QCheckBox
 
     memory_time_doubleSpinBox: QtW.QDoubleSpinBox
+    update_rate_doubleSpinBox: QtW.QDoubleSpinBox
 
     # display
     # tracking_tableWidget: QtW.QTableWidget
@@ -115,7 +117,9 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         self.compare_checkBox.setChecked(True)
         self.roi_checkBox.setChecked(True)
         self.plot_trace_checkBox.setChecked(True)
+        self.show_on_napari_checkBox.setChecked(True)
         self.memory_time_doubleSpinBox.setValue(30.)
+        self.update_rate_doubleSpinBox.setValue(100.)
         # self.layer_comboBox.mousePressEvent.connect(self._refresh_layers)
 
         # fit models
@@ -246,74 +250,76 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
                         )
                         )
 
+        if self.show_on_napari_checkBox.isChecked():
+            # ######################
+            # titles
+            # ######################
+            plot_layer_name = layer_name + " titles"
+            plot_layer = [l for l in self.viewer.layers if l.name == plot_layer_name]
+            if plot_layer == []:
+                plot_layer = None
+            else:
+                plot_layer = plot_layer[0]
+
+            plot_data = np.zeros((1, 2))
+
+            ttl_str = [f"{s:15}" for s in list(features.keys())]
+            features_titles = {"titles": "; ".join(ttl_str)}
+
+            if plot_layer is not None:
+                plot_layer.data = plot_data
+                plot_layer.features = features_titles
+            else:
+                self.viewer.add_points(plot_data,
+                                       face_color=[0, 0, 0, 0],
+                                       edge_color=[1, 0, 0, 0],
+                                       features=features_titles,
+                                       text={'string': "{titles:s}",
+                                             'size': 15,
+                                             'color': 'red',
+                                             'translation': np.array([0, 0]),
+                                             'anchor': 'upper_left'
+                                             },
+                                       size=10,
+                                       name=plot_layer_name,
+                                       translate=layer.translate,
+                                       affine=layer.affine)
+
+            # ######################
+            # put fit parameters in points at top of screen
+            # ######################
+
+            plot_layer_name = layer_name + " print fits"
+            plot_layer = [l for l in self.viewer.layers if l.name == plot_layer_name]
+            if plot_layer == []:
+                plot_layer = None
+            else:
+                plot_layer = plot_layer[0]
+
+            plot_data = np.zeros((nroi, 2))
+            plot_data[:, 0] = (np.arange(nroi) + 1) * 50
+
+            if plot_layer is not None:
+                plot_layer.data = plot_data
+                plot_layer.features = features
+            else:
+                self.viewer.add_points(plot_data,
+                                       face_color=[0, 0, 0, 0],
+                                       edge_color=[1, 0, 0, 0],
+                                       features=features,
+                                       text={'string': "{roi_index:d}:  " + "; ".join([f'{{{k:s}:+15.2e}}' for k in features.keys()]),
+                                             'size': 15,
+                                             'color': 'red',
+                                             'translation': np.array([0, 0]),
+                                             'anchor': 'upper_left'
+                                             },
+                                       size=10,
+                                       name=plot_layer_name,
+                                       translate=layer.translate,
+                                       affine=layer.affine)
+
         # ######################
-        # titles
-        # ######################
-        plot_layer_name = layer_name + " titles"
-        plot_layer = [l for l in self.viewer.layers if l.name == plot_layer_name]
-        if plot_layer == []:
-            plot_layer = None
-        else:
-            plot_layer = plot_layer[0]
-
-        plot_data = np.zeros((1, 2))
-
-        ttl_str = [f"{s:15}" for s in list(features.keys())]
-        features_titles = {"titles": "; ".join(ttl_str)}
-
-        if plot_layer is not None:
-            plot_layer.data = plot_data
-            plot_layer.features = features_titles
-        else:
-            self.viewer.add_points(plot_data,
-                                   face_color=[0, 0, 0, 0],
-                                   edge_color=[1, 0, 0, 0],
-                                   features=features_titles,
-                                   text={'string': "{titles:s}",
-                                         'size': 15,
-                                         'color': 'red',
-                                         'translation': np.array([0, 0]),
-                                         'anchor': 'upper_left'
-                                         },
-                                   size=10,
-                                   name=plot_layer_name,
-                                   translate=layer.translate,
-                                   affine=layer.affine)
-
-        # ######################
-        # put fit parameters in points at top of screen
-        # ######################
-        plot_layer_name = layer_name + " print fits"
-        plot_layer = [l for l in self.viewer.layers if l.name == plot_layer_name]
-        if plot_layer == []:
-            plot_layer = None
-        else:
-            plot_layer = plot_layer[0]
-
-        plot_data = np.zeros((nroi, 2))
-        plot_data[:, 0] = (np.arange(nroi) + 1) * 50
-
-        if plot_layer is not None:
-            plot_layer.data = plot_data
-            plot_layer.features = features
-        else:
-            self.viewer.add_points(plot_data,
-                                   face_color=[0, 0, 0, 0],
-                                   edge_color=[1, 0, 0, 0],
-                                   features=features,
-                                   text={'string': "{roi_index:d}:  " + "; ".join([f'{{{k:s}:+15.2e}}' for k in features.keys()]),
-                                         'size': 15,
-                                         'color': 'red',
-                                         'translation': np.array([0, 0]),
-                                         'anchor': 'upper_left'
-                                         },
-                                   size=10,
-                                   name=plot_layer_name,
-                                   translate=layer.translate,
-                                   affine=layer.affine)
-
-        # ######################
-        # plot fit results
+        # plot fit results in napari
         # ######################
         plot_layer_name = layer_name + " fit"
         plot_layer = [l for l in self.viewer.layers if l.name == plot_layer_name]
@@ -478,7 +484,9 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
 
         self.streaming_timer = QTimer()
         self.streaming_timer.timeout.connect(self._fit_peaks)
-        self.streaming_timer.start(100)
+
+        update_rate_ms = self.update_rate_doubleSpinBox.value()
+        self.streaming_timer.start(update_rate_ms)
 
     def _on_stop_clicked(self):
         try:
@@ -509,6 +517,12 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
 
 
     def _prepare_figure(self):
+
+        try:
+            plt.close(self._figure)
+        except:
+            pass
+
         self._figure = plt.figure(figsize=(30, 10))
         grid = self._figure.add_gridspec(nrows=self._model.nparams, ncols=1, hspace=0.3)
 
