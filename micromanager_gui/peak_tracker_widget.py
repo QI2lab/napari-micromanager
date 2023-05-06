@@ -27,9 +27,8 @@ import threading
 from localize_psf import affine, fit, rois
 # daq and dmd
 import mcsim.expt_ctrl.daq
-from mcsim.expt_ctrl.program_sim_odt import get_sim_odt_sequence
+import mcsim.analysis.analysis_tools as tools
 from mcsim.expt_ctrl import dlp6500
-import mcsim.expt_ctrl.phantom_cam as phc
 import matplotlib
 import matplotlib.pyplot as plt
 
@@ -83,7 +82,8 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
 
     def __init__(self,
                  mmcores: list[RemoteMMCore],
-                 daq: mcsim.expt_ctrl.daq.daq, dmd: dlp6500,
+                 daq: mcsim.expt_ctrl.daq.daq,
+                 dmd: dlp6500,
                  viewer,
                  phcam=None,
                  parent=None,
@@ -117,8 +117,8 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         self.compare_checkBox.setChecked(True)
         self.roi_checkBox.setChecked(True)
         self.plot_trace_checkBox.setChecked(True)
-        self.show_on_napari_checkBox.setChecked(True)
-        self.memory_time_doubleSpinBox.setValue(30.)
+        self.show_on_napari_checkBox.setChecked(False)
+        self.memory_time_doubleSpinBox.setValue(180.)
         self.update_rate_doubleSpinBox.setValue(100.)
         # self.layer_comboBox.mousePressEvent.connect(self._refresh_layers)
 
@@ -126,6 +126,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         self.fit_models = {"gaussian": fit.gauss2d(),
                            }
         self.fit_params = None
+        self.phases = None
         self.fit_times = None
         self.streaming_timer = None
 
@@ -165,6 +166,15 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         if img.ndim != 2:
             raise ValueError(f"img.ndim={img.ndim:d}, but only 2D images are supported by _fit_peak()")
 
+        # check for phase layer
+        phase_layer_name = layer_name + " phase"
+        phase_layer_list = [l for l in self.viewer.layers if l.name == phase_layer_name]
+
+        use_phase = True
+        if phase_layer_list == []:
+            use_phase = False
+
+        # coordinates
         xx, yy = np.meshgrid(range(img.shape[0]), range(img.shape[1]))
 
         # ######################
@@ -174,7 +184,6 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
 
         nroi = self.fit_roi_tableWidget.rowCount()
         roi_list = []
-        fit_params_roi = []
         for ii in range(nroi):
             if ii > len(self.fit_params):
                 continue
@@ -221,8 +230,20 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
             fit_params = fit_results["fit_params"]
 
             roi_list.append(roi)
-            fit_params_roi.append(fit_params)
             self.fit_params[ii] = np.concatenate((self.fit_params[ii], fit_params[None, :]), axis=0)
+
+            # phases
+            if use_phase:
+                phases_roi = rois.cut_roi(roi, phase_layer_list[0].data)
+                try:
+                    phase = tools.get_peak_value(phases_roi, xx_roi[0, :], yy_roi[:, 0], np.array([fit_params[ind_x], fit_params[ind_y]]))
+                except:
+                    phase = np.nan
+            else:
+                phase = np.nan
+
+            self.phases[ii] = np.concatenate((self.phases[ii], np.array([phase])[None, :]), axis=0)
+
 
         # get center value for comparison (really for FFT)
         if self.compare_checkBox.checkState():
@@ -465,6 +486,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
     def _clear(self):
         self._on_stop_clicked()
         self.fit_params = None
+        self.phases = None
         self.fit_times = None
 
     def _on_run_clicked(self):
@@ -477,6 +499,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
 
         nrois = self.fit_roi_tableWidget.rowCount()
         self.fit_params = [np.zeros((0, self._model.nparams)) for _ in range(nrois)]
+        self.phases = [np.zeros((0, 1)) for _ in range(nrois)]
         self.fit_times = np.zeros((0))
 
         self._prepare_figure()
@@ -520,18 +543,31 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
 
         try:
             plt.close(self._figure)
+            # fignum = self._figure.number
+            # make_new_figure = not plt.fignum_exists(fignum)
         except:
+            # make_new_figure = True
             pass
 
-        self._figure = plt.figure(figsize=(30, 10))
-        grid = self._figure.add_gridspec(nrows=self._model.nparams, ncols=1, hspace=0.3)
+        # if make_new_figure:
 
-        for ii in range(self._model.nparams):
+        self._figure = plt.figure(figsize=(30, 10))
+
+        nrows = self._model.nparams + 1
+
+
+        grid = self._figure.add_gridspec(nrows=nrows, ncols=1, hspace=0.3)
+        for ii in range(nrows):
             ax = self._figure.add_subplot(grid[ii, 0])
-            ax.set_ylabel(self._model.parameter_names[ii])
+
+            if ii < self._model.nparams:
+                ax.set_ylabel(self._model.parameter_names[ii])
+            else:
+                ax.set_ylabel("phases")
+
             ax.axhline(0, color="k")
 
-            if ii == (self._model.nparams - 1):
+            if ii == (nrows - 1):
                 ax.set_xlabel("Time (s)")
             else:
                 ax.set_xticks([])
@@ -556,17 +592,29 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         to_use = relative_times >= min_time
         t = relative_times[to_use]
 
-        for ii in range(self._model.nparams):
+        nrows = self._model.nparams + 1
+        for ii in range(nrows):
             ax = self._figure.axes[ii]
+
+            if ii < self._model.nparams:
+                name = self._model.parameter_names[ii]
+            else:
+                name = "phase"
 
             ylows = []
             yhighs = []
             means = []
             stds = []
             for jj in range(nrois):
-                data = self.fit_params[jj][to_use, ii] - self.fit_params[jj][0, ii]
-                means.append(np.mean(self.fit_params[jj][to_use, ii]))
-                stds.append(np.std(self.fit_params[jj][to_use, ii]))
+
+                if ii < self._model.nparams:
+                    data = self.fit_params[jj][to_use, ii] - self.fit_params[jj][0, ii]
+                    means.append(np.nanmean(self.fit_params[jj][to_use, ii]))
+                    stds.append(np.nanstd(self.fit_params[jj][to_use, ii]))
+                else:
+                    data = np.unwrap(self.phases[jj][to_use]) - self.phases[jj][0]
+                    means.append(np.nanmean(self.phases[jj][to_use]))
+                    stds.append(np.nanstd(self.phases[jj][to_use]))
 
                 # try to get line by label
                 line_list = [ch for ch in ax.get_children() if isinstance(ch, matplotlib.lines.Line2D)
@@ -581,20 +629,34 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
                     # update limits
                     ax.set_xlim([min_time, max_time])
 
-                ylows.append(np.min(data))
-                yhighs.append(np.max(data))
+                ylows.append(np.nanmin(data))
+                yhighs.append(np.nanmax(data))
 
             # set limits
-            ylow = np.min(ylows)
-            yhigh = np.max(yhighs)
+            ylows = np.array(ylows)
+            yhighs = np.array(yhighs)
+
+            ylows[np.isinf(ylows)] = np.nan
+            yhighs[np.isinf(yhighs)] = np.nan
+
+            if not np.all(np.isnan(ylows)):
+                ylow = np.nanmin(ylows)
+            else:
+                ylow = 0
+
+            if not np.all(np.isnan(yhighs)):
+                yhigh = np.nanmax(yhighs)
+            else:
+                yhigh = 0
 
             if yhigh == ylow:
                 yhigh += 1e-3
 
+
             ax.set_ylim([ylow, yhigh])
 
             # set title
-            ttl_str = f"{self._model.parameter_names[ii]:s};" + \
+            ttl_str = f"{name:s};" + \
                       "; ".join([f" avg={means[jj]:.3f};"
                       f" std={stds[jj]:.3f}" for jj in range(nrois)])
 
