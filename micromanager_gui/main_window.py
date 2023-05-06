@@ -90,6 +90,13 @@ class _MainUI:
     snap_channel_comboBox: QtW.QComboBox
     exp_spinBox: QtW.QDoubleSpinBox
 
+    crop_Button: QtW.QPushButton
+    reset_crop_pushButton: QtW.QPushButton
+    cx_spinBox: QtW.QSpinBox
+    sx_spinBox: QtW.QSpinBox
+    cy_spinBox: QtW.QSpinBox
+    sy_spinBox: QtW.QSpinBox
+
     # image processing
     image_proc_mode_comboBox: QtW.QComboBox
     use_affine_xform_checkBox: QtW.QCheckBox
@@ -220,6 +227,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.autoscale_Button.clicked.connect(self.autoscale_active_layer)
 
         # camera actions
+        self.crop_Button.clicked.connect(self.crop)
+        self.reset_crop_pushButton.clicked.connect(self.reset_crop)
         self.snap_Button.clicked.connect(self.snap)
         self.live_Button.clicked.connect(self.toggle_live)
         self.calibrate_Button.clicked.connect(self.calibrate_camera)
@@ -256,7 +265,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         # DAQ/DMD illumination modes
         self.channel_comboBox.currentTextChanged.connect(self._refresh_mode_options)
         self.set_channel_Button.clicked.connect(self.set_channel_and_mode)
-        self.set_channel_Button.clicked.connect(self._on_channel_changed)  # update daq display also
+        # self.set_channel_Button.clicked.connect(self._on_channel_changed)  # update daq display also
         self.pattern_time_SpinBox.setValue(0.105) # DMD pattern time
 
         #  image processing
@@ -658,61 +667,56 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         if mode == "normal":
             pass
-        elif mode == "fft":
-            wx = np.expand_dims(hann(nx), axis=0)
-            wy = np.expand_dims(hann(ny), axis=1)
-
-            if _cupy_available:
-                data_ft = cp.abs(cp.fft.fftshift(cp.fft.fft2(cp.fft.ifftshift(cp.array(data) * cp.array(wx) * cp.array(wy))))).get()
-            else:
-                data_ft = np.abs(fft.fftshift(fft.fft2(fft.ifftshift(data * wx * wy))))
-
-        elif mode == "hologram":
+        elif mode == "fft"or mode == "hologram":
             wx = np.expand_dims(hann(nx), axis=0)
             wy = np.expand_dims(hann(ny), axis=1)
 
             if _cupy_available:
                 ft = cp.fft.fftshift(cp.fft.fft2(cp.fft.ifftshift(cp.array(data) * cp.array(wx) * cp.array(wy)))).get()
+                data_ft = np.abs(ft)
+                data_phase = np.angle(ft)
             else:
                 ft = fft.fftshift(fft.fft2(fft.ifftshift(data * wx * wy)))
+                data_ft = np.abs(ft)
+                data_phase = np.angle(ft)
 
-            data_ft = np.abs(ft)
 
-            # todo: grab these values from configuration file
-            # todo: could display in some nicer way...but...
-            dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
-            fmax = self.cfg_data["camera_settings_phantom"]["na_detection"] / 0.785
+            if mode == "hologram":
+                # todo: grab these values from configuration file
+                # todo: could display in some nicer way...but...
+                dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
+                fmax = self.cfg_data["camera_settings_phantom"]["na_detection"] / 0.785
 
-            # get frequency coordinates
-            fx = fft.fftshift(fft.fftfreq(nx, dxy))
-            fy = fft.fftshift(fft.fftfreq(ny, dxy))
-            fxfx, fyfy = np.meshgrid(fx, fy)
-            ff = np.sqrt(fxfx**2 + fyfy**2)
-            dfx = fx[1] - fx[0]
-            dfy = fy[1] - fy[0]
+                # get frequency coordinates
+                fx = fft.fftshift(fft.fftfreq(nx, dxy))
+                fy = fft.fftshift(fft.fftfreq(ny, dxy))
+                fxfx, fyfy = np.meshgrid(fx, fy)
+                ff = np.sqrt(fxfx**2 + fyfy**2)
+                dfx = fx[1] - fx[0]
+                dfy = fy[1] - fy[0]
 
-            # convert from pixels in image to real units
-            holo_frq = np.array([dfx * (self.fx_doubleSpinBox.value() - nx // 2),
-                                 dfy * (self.fy_doubleSpinBox.value() - ny // 2)])
+                # convert from pixels in image to real units
+                holo_frq = np.array([dfx * (self.fx_doubleSpinBox.value() - nx // 2),
+                                     dfy * (self.fy_doubleSpinBox.value() - ny // 2)])
 
-            # instead multiply by expected phase ramp
-            ft_xlated = mctools.translate_ft(ft, -holo_frq[0], -holo_frq[1], drs=[dxy, dxy])
-            ft_xlated[ff > fmax] = 0
-            im_holo = fft.fftshift(fft.ifft2(fft.ifftshift(ft_xlated)))
+                # instead multiply by expected phase ramp
+                ft_xlated = mctools.translate_ft(ft, -holo_frq[0], -holo_frq[1], drs=[dxy, dxy])
+                ft_xlated[ff > fmax] = 0
+                im_holo = fft.fftshift(fft.ifft2(fft.ifftshift(ft_xlated)))
 
-            # mask
-            threshold = self.threshold_SpinBox.value()
-            mask = np.abs(im_holo) > threshold
+                # mask
+                threshold = self.threshold_SpinBox.value()
+                mask = np.abs(im_holo) > threshold
 
-            # todo: could also display amplitude data...
-            holo_amp = np.abs(im_holo)
-            # holo_angle = np.angle(im_holo)
-            holo_angle = unwrap_phase(np.angle(im_holo))
+                # todo: could also display amplitude data...
+                holo_amp = np.abs(im_holo)
+                # holo_angle = np.angle(im_holo)
+                holo_angle = unwrap_phase(np.angle(im_holo))
 
-            # don't show masked parts
-            # add center value back
-            holo_angle -= np.mean(holo_angle[mask])
-            holo_angle[holo_amp < threshold] = np.nan
+                # don't show masked parts
+                # add center value back
+                holo_angle -= np.mean(holo_angle[mask])
+                holo_angle[holo_amp < threshold] = np.nan
 
         else:
             raise ValueError(f"mode must be 'normal', 'fft', or 'hologram' but was '{mode:s}'")
@@ -759,16 +763,31 @@ class MainWindow(QtW.QWidget, _MainUI):
         # show FFT next to real space image
         # todo: update for affine transformation possibility
         if mode != "normal":
+            layer_name_ft_phase = f"{cam_name:s} fft phase"
+            try:
+                phase_layer = self.viewer.layers[layer_name_ft_phase]
+                phase_layer.data = data_phase
+            except KeyError:
+                phase_layer = self.viewer.add_image(data_phase,
+                                                      name=layer_name_ft_phase,
+                                                      translate=[0, nx],
+                                                      contrast_limits=[-np.pi, np.pi],
+                                                      colormap="twilight_shifted")
+            # amplitude
             layer_name_ft = f"{cam_name:s} fft"
-            point_layer_name = f"{cam_name:s} fft holo reference"
-
             try:
                 preview_layer = self.viewer.layers[layer_name_ft]
-                preview_layer.data = np.abs(data_ft)
+                preview_layer.data = data_ft
             except KeyError:
-                preview_layer = self.viewer.add_image(np.abs(data_ft), name=layer_name_ft, translate=[0, nx],
-                                                      contrast_limits=[0, np.percentile(np.abs(data_ft), 99.9)], gamma=0.1)
+                preview_layer = self.viewer.add_image(data_ft,
+                                                      name=layer_name_ft,
+                                                      translate=[0, nx],
+                                                      contrast_limits=[0, np.percentile(np.abs(data_ft), 99.9)],
+                                                      gamma=0.1)
 
+        if mode == "hologram":
+            # points layer
+            point_layer_name = f"{cam_name:s} fft holo reference"
             pts = np.array([[self.fy_doubleSpinBox.value(), self.fx_doubleSpinBox.value() + nx]])
             try:
                 point_layer = self.viewer.layers[point_layer_name]
@@ -777,7 +796,7 @@ class MainWindow(QtW.QWidget, _MainUI):
                 point_layer = self.viewer.add_points(pts, name=point_layer_name,
                                                      face_color=[0, 0, 0, 0], edge_color="red", size=10)
 
-        if mode == "hologram":
+            # hologram phase
             layer_name_holo_phase = f"{cam_name:s} {mode:s} phase"
 
             try:
@@ -789,7 +808,7 @@ class MainWindow(QtW.QWidget, _MainUI):
                 preview_layer = self.viewer.add_image(holo_angle, name=layer_name_holo_phase, translate=[ny, 0],
                                                       colormap="twilight_shifted", contrast_limits=lims)
 
-
+            # hologram amplitude
             layer_name_holo_amp = f"{cam_name:s} {mode:s} amp"
             try:
                 preview_layer = self.viewer.layers[layer_name_holo_amp]
@@ -1083,6 +1102,23 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.min_label.setText("")
         self.max_label.setText("")
 
+    def crop(self):
+        cx = self.cx_spinBox.value()
+        cy = self.cy_spinBox.value()
+        sx = self.sx_spinBox.value()
+        sy = self.sy_spinBox.value()
+
+        xstart = cx - sx // 2
+        ystart = cy - sy // 2
+
+        try:
+            self._mmc_cam.setROI(xstart, ystart, sx, sy)
+        except Exception as e: # todo
+            print(e)
+
+    def reset_crop(self):
+        self._mmc_cam.setROI(0, 0, 2048, 2048) # todo: a hack for today
+
     def snap(self):
         self.stop_live()
 
@@ -1170,6 +1206,9 @@ class MainWindow(QtW.QWidget, _MainUI):
                                  triggered=False,
                                  clear_pattern_after_trigger=False,
                                  verbose=True)
+
+        # update daq values on table
+        self._on_channel_changed()
 
     def _on_dmd_firmware_pattern_updated(self):
 
@@ -1378,7 +1417,8 @@ class MainWindow(QtW.QWidget, _MainUI):
 
             # if update immediately, connect
             if self.daq_update_immediately_checkBox.isChecked():
-                self.daq_channel_tableWidget.cellWidget(ii, 1).valueChanged.connect(self._on_daq_setting_change)
+                # only connect to updating this line
+                self.daq_channel_tableWidget.cellWidget(ii, 1).valueChanged.connect(lambda: self._on_daq_setting_change(ii))
                 self.daq_channel_tableWidget.cellWidget(ii, 1).setKeyboardTracking(False)
             else:
                 # disconnect will fail if not connected to anything
@@ -1399,14 +1439,19 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.daq_channel_tableWidget.setRowCount(0)
 
 
-    def _on_daq_setting_change(self):
+    def _on_daq_setting_change(self, row_index=None):
         # grab analog/digital lines from channels
         digital_channels = list(self.daq.digital_line_names.keys())
         analog_channels = list(self.daq.analog_line_names.keys())
 
+        if row_index is None:
+            inds = list(range(self.daq_channel_tableWidget.rowCount()))
+        else:
+            inds = [row_index]
+
         dig_ch_now = {}
         an_ch_now = {}
-        for ii in range(self.daq_channel_tableWidget.rowCount()):
+        for ii in inds:
             ch_name = self.daq_channel_tableWidget.cellWidget(ii, 0).currentText()
             val = self.daq_channel_tableWidget.cellWidget(ii, 1).value()
 
