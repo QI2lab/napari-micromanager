@@ -1117,7 +1117,7 @@ class MainWindow(QtW.QWidget, _MainUI):
             print(e)
 
     def reset_crop(self):
-        self._mmc_cam.setROI(0, 0, 2048, 2048) # todo: a hack for today
+        self._mmc_cam.clearROI()
 
     def snap(self):
         self.stop_live()
@@ -1194,21 +1194,36 @@ class MainWindow(QtW.QWidget, _MainUI):
         if self.daq_shutter_checkBox.isChecked():
             self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["sim_shutter"])
 
+        # update daq values on table
+        self._on_channel_changed()
+
         # time to display DMD pattern before moving to the next
         frame_time_us = int(np.round(self.pattern_time_SpinBox.value() * 1000))
 
-        # set dmd
-        self.dmd.program_dmd_seq(mode, channel,
-                                 nrepeats=1,
-                                 noff_before=0,
-                                 noff_after=0,
-                                 exp_time_us=frame_time_us,
-                                 triggered=False,
-                                 clear_pattern_after_trigger=False,
-                                 verbose=True)
+        self.upload_thread = threading.Thread(target=self.dmd.program_dmd_seq,
+                                              args=(mode, channel),
+                                              kwargs={"nrepeats": 1,
+                                                      "noff_before": 0,
+                                                      "noff_after": 0,
+                                                      "exp_time_us": frame_time_us,
+                                                      "triggered": False,
+                                                      "clear_pattern_after_trigger": False,
+                                                      "verbose": True
+                                                      }
+                                              )
+        self.upload_thread.start()
 
-        # update daq values on table
-        self._on_channel_changed()
+
+        # set dmd
+        # self.dmd.program_dmd_seq(mode, channel,
+        #                          nrepeats=1,
+        #                          noff_before=0,
+        #                          noff_after=0,
+        #                          exp_time_us=frame_time_us,
+        #                          triggered=False,
+        #                          clear_pattern_after_trigger=False,
+        #                          verbose=True)
+
 
     def _on_dmd_firmware_pattern_updated(self):
 
@@ -1237,17 +1252,31 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.dmd.start_stop_sequence('stop')
 
 
-        self.dmd.set_pattern_sequence([pic_ind],
-                                      [bit_ind],
-                                      exp_times=105,
-                                      dark_times=0,
-                                      triggered=False,
-                                      clear_pattern_after_trigger=False,
-                                      bit_depth=1,
-                                      num_repeats=0,
-                                      mode='pre-stored')
+        # self.dmd.set_pattern_sequence([pic_ind],
+        #                               [bit_ind],
+        #                               exp_times=105,
+        #                               dark_times=0,
+        #                               triggered=False,
+        #                               clear_pattern_after_trigger=False,
+        #                               bit_depth=1,
+        #                               num_repeats=0,
+        #                               mode='pre-stored')
+
+        self.upload_thread = threading.Thread(target=self.dmd.set_pattern_sequence,
+                                              args=([pic_ind], [bit_ind]),
+                                              kwargs={"exp_times": 105,
+                                                      "dark_times": 0,
+                                                      "triggered": False,
+                                                      "clear_pattern_after_trigger": False,
+                                                      "bit_depth": 1,
+                                                      "num_repeats": 0,
+                                                      "mode": 'pre-stored'
+                                                      }
+                                              )
+        self.upload_thread.start()
 
         if self.dmd_snap_checkBox.isChecked():
+            self.upload_thread.join()
             self.snap()
 
     def _show_dmd_firmware_pattern(self):
@@ -1325,6 +1354,9 @@ class MainWindow(QtW.QWidget, _MainUI):
     def _set_uploaded_dmd_pattern(self):
         if self.dmd_pattern_fnames is None:
             return
+
+        if self.upload_thread is not None:
+            self.upload_thread.join()
 
         # grab pattern time
         pattern_time_us = int(np.round(self.dmd_set_file_pattern_time_doubleSpinBox.value() * 1e3))

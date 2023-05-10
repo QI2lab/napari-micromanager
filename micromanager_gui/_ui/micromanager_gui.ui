@@ -1760,9 +1760,18 @@
   <tabstop>offset_down_Button</tabstop>
   <tabstop>offset_snap_on_click_z_checkBox</tabstop>
   <tabstop>tabWidget</tabstop>
+  <tabstop>set_camera_comboBox</tabstop>
   <tabstop>exp_spinBox</tabstop>
+  <tabstop>bin_comboBox</tabstop>
   <tabstop>px_size_doubleSpinBox</tabstop>
+  <tabstop>bit_comboBox</tabstop>
+  <tabstop>daq_shutter_checkBox</tabstop>
+  <tabstop>cx_spinBox</tabstop>
+  <tabstop>sx_spinBox</tabstop>
+  <tabstop>cy_spinBox</tabstop>
+  <tabstop>sy_spinBox</tabstop>
   <tabstop>crop_Button</tabstop>
+  <tabstop>reset_crop_pushButton</tabstop>
   <tabstop>snap_Button</tabstop>
   <tabstop>live_Button</tabstop>
   <tabstop>calibrate_Button</tabstop>
