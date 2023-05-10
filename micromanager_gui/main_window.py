@@ -1415,6 +1415,15 @@ class MainWindow(QtW.QWidget, _MainUI):
         daq_value_spinBox = QtW.QDoubleSpinBox(self)
         self.daq_channel_tableWidget.setCellWidget(idx, 1, daq_value_spinBox)
 
+        # create digits box
+        daq_digits_spinBox = QtW.QDoubleSpinBox(self)
+        daq_digits_spinBox.setMinimum(0)
+        daq_digits_spinBox.setMaximum(1)
+        daq_digits_spinBox.setDecimals(3)
+        daq_digits_spinBox.setValue(0.01)
+        daq_digits_spinBox.valueChanged.connect(self._on_channel_changed)
+        self.daq_channel_tableWidget.setCellWidget(idx, 2, daq_digits_spinBox)
+
         # call function to make sure updated
         self._on_channel_changed()
 
@@ -1436,8 +1445,11 @@ class MainWindow(QtW.QWidget, _MainUI):
                 self.daq_channel_tableWidget.cellWidget(ii, 1).setValue(last_val_known)
 
             elif ch in analog_channels:
+                # step = 0.01
+                step = self.daq_channel_tableWidget.cellWidget(ii, 2).value()
+
                 self.daq_channel_tableWidget.cellWidget(ii, 1).setDecimals(3)
-                self.daq_channel_tableWidget.cellWidget(ii, 1).setSingleStep(0.01)
+                self.daq_channel_tableWidget.cellWidget(ii, 1).setSingleStep(step)
                 self.daq_channel_tableWidget.cellWidget(ii, 1).setMinimum(-10.)
                 self.daq_channel_tableWidget.cellWidget(ii, 1).setMaximum(10.)
 
