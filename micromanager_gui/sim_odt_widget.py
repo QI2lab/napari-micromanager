@@ -569,8 +569,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             # get focus device info
             focus_dev = mmc1.getFocusDevice()
-            ul = float(mmc1.getProperty(focus_dev, "Upper Limit"))
-            ll = float(mmc1.getProperty(focus_dev, "Lower Limit"))
+            ul = float(mmc1.getProperty(focus_dev, "Upper Limit (um)"))
+            ll = float(mmc1.getProperty(focus_dev, "Lower Limit (um)"))
             guess_calibration_um_per_v = (ul - ll) / 10
 
             # guess voltages to reach desired positions

@@ -457,15 +457,15 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         # create a combo_box for channels in the table
         cy_spinBox = QtW.QSpinBox(self)
         cy_spinBox.setMinimum(0)
-        cy_spinBox.setMaximum(1e5)
+        cy_spinBox.setMaximum(int(1e5))
 
         cx_spinBox = QtW.QSpinBox(self)
         cx_spinBox.setMinimum(0)
-        cx_spinBox.setMaximum(1e5)
+        cx_spinBox.setMaximum(int(1e5))
 
         size_spinBox = QtW.QSpinBox(self)
         size_spinBox.setMinimum(0)
-        size_spinBox.setMaximum(1e5)
+        size_spinBox.setMaximum(int(1e5))
         size_spinBox.setValue(10)
 
         # create combo_boxes in table
@@ -508,7 +508,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         self.streaming_timer = QTimer()
         self.streaming_timer.timeout.connect(self._fit_peaks)
 
-        update_rate_ms = self.update_rate_doubleSpinBox.value()
+        update_rate_ms = int(np.round(self.update_rate_doubleSpinBox.value()))
         self.streaming_timer.start(update_rate_ms)
 
     def _on_stop_clicked(self):
