@@ -118,9 +118,9 @@
       <property name="geometry">
        <rect>
         <x>0</x>
-        <y>-398</y>
+        <y>0</y>
         <width>493</width>
-        <height>1308</height>
+        <height>1237</height>
        </rect>
       </property>
       <layout class="QGridLayout" name="gridLayout_6">
@@ -130,160 +130,155 @@
        <property name="rightMargin">
         <number>20</number>
        </property>
-       <item row="6" column="0" colspan="2">
-        <widget class="QGroupBox" name="stage_groupBox">
+       <item row="2" column="0" colspan="2">
+        <widget class="QGroupBox" name="channel_groupBox">
+         <property name="enabled">
+          <bool>true</bool>
+         </property>
          <property name="minimumSize">
           <size>
            <width>0</width>
            <height>200</height>
           </size>
          </property>
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>200</height>
+          </size>
+         </property>
          <property name="title">
-          <string>XY-position scan</string>
+          <string>Channels</string>
          </property>
          <property name="checkable">
-          <bool>true</bool>
+          <bool>false</bool>
          </property>
          <property name="checked">
           <bool>false</bool>
          </property>
-         <widget class="QTableWidget" name="stage_tableWidget">
-          <property name="geometry">
-           <rect>
-            <x>10</x>
-            <y>40</y>
-            <width>291</width>
-            <height>124</height>
-           </rect>
+         <layout class="QGridLayout" name="gridLayout_2">
+          <property name="topMargin">
+           <number>7</number>
           </property>
-          <property name="editTriggers">
-           <set>QAbstractItemView::NoEditTriggers</set>
+          <property name="bottomMargin">
+           <number>7</number>
           </property>
-          <property name="tabKeyNavigation">
-           <bool>false</bool>
-          </property>
-          <property name="showDropIndicator" stdset="0">
-           <bool>false</bool>
-          </property>
-          <property name="dragDropOverwriteMode">
-           <bool>false</bool>
-          </property>
-          <property name="alternatingRowColors">
-           <bool>false</bool>
-          </property>
-          <property name="selectionBehavior">
-           <enum>QAbstractItemView::SelectRows</enum>
-          </property>
-          <property name="textElideMode">
-           <enum>Qt::ElideRight</enum>
-          </property>
-          <property name="showGrid">
-           <bool>true</bool>
-          </property>
-          <property name="gridStyle">
-           <enum>Qt::SolidLine</enum>
-          </property>
-          <property name="wordWrap">
-           <bool>true</bool>
-          </property>
-          <property name="columnCount">
-           <number>2</number>
-          </property>
-          <attribute name="horizontalHeaderDefaultSectionSize">
-           <number>102</number>
-          </attribute>
-          <attribute name="verticalHeaderVisible">
-           <bool>false</bool>
-          </attribute>
-          <column>
-           <property name="text">
-            <string>X</string>
-           </property>
-          </column>
-          <column>
-           <property name="text">
-            <string>Y</string>
-           </property>
-          </column>
-         </widget>
-         <widget class="QPushButton" name="clear_pos_Button">
-          <property name="geometry">
-           <rect>
-            <x>330</x>
-            <y>140</y>
-            <width>90</width>
-            <height>24</height>
-           </rect>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>90</width>
-            <height>0</height>
-           </size>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>90</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="text">
-           <string>Clear</string>
-          </property>
-         </widget>
-         <widget class="QPushButton" name="remove_pos_Button">
-          <property name="geometry">
-           <rect>
-            <x>330</x>
-            <y>90</y>
-            <width>90</width>
-            <height>24</height>
-           </rect>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>90</width>
-            <height>0</height>
-           </size>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>90</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="text">
-           <string>Remove</string>
-          </property>
-         </widget>
-         <widget class="QPushButton" name="add_pos_Button">
-          <property name="geometry">
-           <rect>
-            <x>330</x>
-            <y>40</y>
-            <width>90</width>
-            <height>24</height>
-           </rect>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>90</width>
-            <height>0</height>
-           </size>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>90</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="text">
-           <string>Add</string>
-          </property>
-         </widget>
+          <item row="1" column="1">
+           <widget class="QPushButton" name="remove_ch_Button">
+            <property name="minimumSize">
+             <size>
+              <width>90</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>90</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Remove</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QPushButton" name="add_ch_Button">
+            <property name="minimumSize">
+             <size>
+              <width>90</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>90</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Add</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QPushButton" name="clear_ch_Button">
+            <property name="minimumSize">
+             <size>
+              <width>90</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>90</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Clear</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0" rowspan="3">
+           <widget class="QTableWidget" name="channel_tableWidget">
+            <property name="editTriggers">
+             <set>QAbstractItemView::CurrentChanged</set>
+            </property>
+            <property name="tabKeyNavigation">
+             <bool>true</bool>
+            </property>
+            <property name="showDropIndicator" stdset="0">
+             <bool>false</bool>
+            </property>
+            <property name="dragDropOverwriteMode">
+             <bool>false</bool>
+            </property>
+            <property name="alternatingRowColors">
+             <bool>false</bool>
+            </property>
+            <property name="selectionBehavior">
+             <enum>QAbstractItemView::SelectRows</enum>
+            </property>
+            <property name="textElideMode">
+             <enum>Qt::ElideRight</enum>
+            </property>
+            <property name="showGrid">
+             <bool>true</bool>
+            </property>
+            <property name="gridStyle">
+             <enum>Qt::SolidLine</enum>
+            </property>
+            <property name="columnCount">
+             <number>3</number>
+            </property>
+            <attribute name="horizontalHeaderDefaultSectionSize">
+             <number>127</number>
+            </attribute>
+            <attribute name="verticalHeaderVisible">
+             <bool>false</bool>
+            </attribute>
+            <column>
+             <property name="text">
+              <string>Channel</string>
+             </property>
+            </column>
+            <column>
+             <property name="text">
+              <string>Patterns</string>
+             </property>
+            </column>
+            <column>
+             <property name="text">
+              <string>Mode</string>
+             </property>
+            </column>
+           </widget>
+          </item>
+         </layout>
         </widget>
        </item>
-       <item row="4" column="0" colspan="2">
+       <item row="3" column="0" colspan="2">
         <widget class="QGroupBox" name="time_groupBox">
          <property name="enabled">
           <bool>true</bool>
@@ -452,25 +447,16 @@
          </layout>
         </widget>
        </item>
-       <item row="0" column="0" colspan="2">
-        <widget class="QGroupBox" name="save_groupBox">
-         <property name="enabled">
-          <bool>true</bool>
-         </property>
+       <item row="5" column="0" colspan="2">
+        <widget class="QGroupBox" name="stage_groupBox">
          <property name="minimumSize">
           <size>
            <width>0</width>
-           <height>140</height>
-          </size>
-         </property>
-         <property name="maximumSize">
-          <size>
-           <width>16777215</width>
-           <height>140</height>
+           <height>200</height>
           </size>
          </property>
          <property name="title">
-          <string>Save Images</string>
+          <string>XY-position scan</string>
          </property>
          <property name="checkable">
           <bool>true</bool>
@@ -478,62 +464,143 @@
          <property name="checked">
           <bool>false</bool>
          </property>
-         <layout class="QGridLayout" name="gridLayout_9">
-          <item row="0" column="0">
-           <layout class="QGridLayout" name="gridLayout">
-            <item row="0" column="0">
-             <widget class="QLabel" name="label">
-              <property name="text">
-               <string>Directory:</string>
-              </property>
-             </widget>
-            </item>
-            <item row="0" column="1">
-             <widget class="QLineEdit" name="dir_lineEdit">
-              <property name="readOnly">
-               <bool>true</bool>
-              </property>
-             </widget>
-            </item>
-            <item row="0" column="2">
-             <widget class="QPushButton" name="browse_save_Button">
-              <property name="minimumSize">
-               <size>
-                <width>40</width>
-                <height>0</height>
-               </size>
-              </property>
-              <property name="maximumSize">
-               <size>
-                <width>30</width>
-                <height>16777215</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>...</string>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="0">
-             <widget class="QLabel" name="label_2">
-              <property name="text">
-               <string>File Name:</string>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="1">
-             <widget class="QLineEdit" name="fname_lineEdit">
-              <property name="text">
-               <string>Experiment</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-         </layout>
+         <widget class="QTableWidget" name="stage_tableWidget">
+          <property name="geometry">
+           <rect>
+            <x>10</x>
+            <y>40</y>
+            <width>291</width>
+            <height>124</height>
+           </rect>
+          </property>
+          <property name="editTriggers">
+           <set>QAbstractItemView::NoEditTriggers</set>
+          </property>
+          <property name="tabKeyNavigation">
+           <bool>false</bool>
+          </property>
+          <property name="showDropIndicator" stdset="0">
+           <bool>false</bool>
+          </property>
+          <property name="dragDropOverwriteMode">
+           <bool>false</bool>
+          </property>
+          <property name="alternatingRowColors">
+           <bool>false</bool>
+          </property>
+          <property name="selectionBehavior">
+           <enum>QAbstractItemView::SelectRows</enum>
+          </property>
+          <property name="textElideMode">
+           <enum>Qt::ElideRight</enum>
+          </property>
+          <property name="showGrid">
+           <bool>true</bool>
+          </property>
+          <property name="gridStyle">
+           <enum>Qt::SolidLine</enum>
+          </property>
+          <property name="wordWrap">
+           <bool>true</bool>
+          </property>
+          <property name="columnCount">
+           <number>2</number>
+          </property>
+          <attribute name="horizontalHeaderDefaultSectionSize">
+           <number>102</number>
+          </attribute>
+          <attribute name="verticalHeaderVisible">
+           <bool>false</bool>
+          </attribute>
+          <column>
+           <property name="text">
+            <string>X</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Y</string>
+           </property>
+          </column>
+         </widget>
+         <widget class="QPushButton" name="clear_pos_Button">
+          <property name="geometry">
+           <rect>
+            <x>330</x>
+            <y>140</y>
+            <width>90</width>
+            <height>24</height>
+           </rect>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>90</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>90</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <property name="text">
+           <string>Clear</string>
+          </property>
+         </widget>
+         <widget class="QPushButton" name="remove_pos_Button">
+          <property name="geometry">
+           <rect>
+            <x>330</x>
+            <y>90</y>
+            <width>90</width>
+            <height>24</height>
+           </rect>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>90</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>90</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <property name="text">
+           <string>Remove</string>
+          </property>
+         </widget>
+         <widget class="QPushButton" name="add_pos_Button">
+          <property name="geometry">
+           <rect>
+            <x>330</x>
+            <y>40</y>
+            <width>90</width>
+            <height>24</height>
+           </rect>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>90</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>90</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <property name="text">
+           <string>Add</string>
+          </property>
+         </widget>
         </widget>
        </item>
-       <item row="5" column="0" colspan="2">
+       <item row="4" column="0" colspan="2">
         <widget class="QGroupBox" name="stack_groupBox">
          <property name="enabled">
           <bool>true</bool>
@@ -1037,77 +1104,6 @@
          </layout>
         </widget>
        </item>
-       <item row="2" column="0" colspan="2" alignment="Qt::AlignVCenter">
-        <widget class="QGroupBox" name="odt_roi_groupBox">
-         <property name="minimumSize">
-          <size>
-           <width>0</width>
-           <height>65</height>
-          </size>
-         </property>
-         <property name="title">
-          <string>ODT ROI</string>
-         </property>
-         <layout class="QHBoxLayout" name="horizontalLayout_2">
-          <item alignment="Qt::AlignRight">
-           <widget class="QLabel" name="label_14">
-            <property name="text">
-             <string>cx</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QSpinBox" name="cx_spinBox">
-            <property name="maximum">
-             <number>10000</number>
-            </property>
-           </widget>
-          </item>
-          <item alignment="Qt::AlignRight">
-           <widget class="QLabel" name="label_15">
-            <property name="text">
-             <string>sx</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QSpinBox" name="sx_spinBox">
-            <property name="maximum">
-             <number>10000</number>
-            </property>
-           </widget>
-          </item>
-          <item alignment="Qt::AlignRight">
-           <widget class="QLabel" name="label_16">
-            <property name="text">
-             <string>cy</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QSpinBox" name="cy_spinBox">
-            <property name="maximum">
-             <number>10000</number>
-            </property>
-           </widget>
-          </item>
-          <item alignment="Qt::AlignRight">
-           <widget class="QLabel" name="label_17">
-            <property name="text">
-             <string>sy</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QSpinBox" name="sy_spinBox">
-            <property name="maximum">
-             <number>10000</number>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
        <item row="1" column="0" colspan="2">
         <widget class="QGroupBox" name="groupBox">
          <property name="minimumSize">
@@ -1452,155 +1448,7 @@
          </layout>
         </widget>
        </item>
-       <item row="3" column="0" colspan="2">
-        <widget class="QGroupBox" name="channel_groupBox">
-         <property name="enabled">
-          <bool>true</bool>
-         </property>
-         <property name="minimumSize">
-          <size>
-           <width>0</width>
-           <height>200</height>
-          </size>
-         </property>
-         <property name="maximumSize">
-          <size>
-           <width>16777215</width>
-           <height>200</height>
-          </size>
-         </property>
-         <property name="title">
-          <string>Channels</string>
-         </property>
-         <property name="checkable">
-          <bool>false</bool>
-         </property>
-         <property name="checked">
-          <bool>false</bool>
-         </property>
-         <layout class="QGridLayout" name="gridLayout_2">
-          <property name="topMargin">
-           <number>7</number>
-          </property>
-          <property name="bottomMargin">
-           <number>7</number>
-          </property>
-          <item row="1" column="1">
-           <widget class="QPushButton" name="remove_ch_Button">
-            <property name="minimumSize">
-             <size>
-              <width>90</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>90</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Remove</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QPushButton" name="add_ch_Button">
-            <property name="minimumSize">
-             <size>
-              <width>90</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>90</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Add</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QPushButton" name="clear_ch_Button">
-            <property name="minimumSize">
-             <size>
-              <width>90</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>90</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Clear</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0" rowspan="3">
-           <widget class="QTableWidget" name="channel_tableWidget">
-            <property name="editTriggers">
-             <set>QAbstractItemView::CurrentChanged</set>
-            </property>
-            <property name="tabKeyNavigation">
-             <bool>true</bool>
-            </property>
-            <property name="showDropIndicator" stdset="0">
-             <bool>false</bool>
-            </property>
-            <property name="dragDropOverwriteMode">
-             <bool>false</bool>
-            </property>
-            <property name="alternatingRowColors">
-             <bool>false</bool>
-            </property>
-            <property name="selectionBehavior">
-             <enum>QAbstractItemView::SelectRows</enum>
-            </property>
-            <property name="textElideMode">
-             <enum>Qt::ElideRight</enum>
-            </property>
-            <property name="showGrid">
-             <bool>true</bool>
-            </property>
-            <property name="gridStyle">
-             <enum>Qt::SolidLine</enum>
-            </property>
-            <property name="columnCount">
-             <number>3</number>
-            </property>
-            <attribute name="horizontalHeaderDefaultSectionSize">
-             <number>127</number>
-            </attribute>
-            <attribute name="verticalHeaderVisible">
-             <bool>false</bool>
-            </attribute>
-            <column>
-             <property name="text">
-              <string>Channel</string>
-             </property>
-            </column>
-            <column>
-             <property name="text">
-              <string>Patterns</string>
-             </property>
-            </column>
-            <column>
-             <property name="text">
-              <string>Mode</string>
-             </property>
-            </column>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item row="7" column="0" colspan="2">
+       <item row="6" column="0" colspan="2">
         <widget class="QGroupBox" name="parameter_groupBox">
          <property name="enabled">
           <bool>true</bool>
@@ -1679,6 +1527,87 @@
          </layout>
         </widget>
        </item>
+       <item row="0" column="0" colspan="2">
+        <widget class="QGroupBox" name="save_groupBox">
+         <property name="enabled">
+          <bool>true</bool>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>140</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>140</height>
+          </size>
+         </property>
+         <property name="title">
+          <string>Save Images</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+         <property name="checked">
+          <bool>false</bool>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_9">
+          <item row="0" column="0">
+           <layout class="QGridLayout" name="gridLayout">
+            <item row="0" column="0">
+             <widget class="QLabel" name="label">
+              <property name="text">
+               <string>Directory:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QLineEdit" name="dir_lineEdit">
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="2">
+             <widget class="QPushButton" name="browse_save_Button">
+              <property name="minimumSize">
+               <size>
+                <width>40</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>30</width>
+                <height>16777215</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>...</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="label_2">
+              <property name="text">
+               <string>File Name:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QLineEdit" name="fname_lineEdit">
+              <property name="text">
+               <string>Experiment</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
       </layout>
      </widget>
     </widget>
@@ -1701,10 +1630,6 @@
   <tabstop>odt_circbuff_SpinBox</tabstop>
   <tabstop>shutter_delay_doubleSpinBox</tabstop>
   <tabstop>odt_warmup_doubleSpinBox</tabstop>
-  <tabstop>cx_spinBox</tabstop>
-  <tabstop>sx_spinBox</tabstop>
-  <tabstop>cy_spinBox</tabstop>
-  <tabstop>sy_spinBox</tabstop>
   <tabstop>channel_tableWidget</tabstop>
   <tabstop>add_ch_Button</tabstop>
   <tabstop>remove_ch_Button</tabstop>
