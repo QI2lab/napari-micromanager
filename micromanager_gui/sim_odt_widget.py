@@ -533,9 +533,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         else:
             nparams = 1
+            param_dict = None
 
-        if nparams != 1:
-            raise NotImplementedError("Patterns scans not yet implemented")
+        # if nparams != 1:
+        #     raise NotImplementedError("Patterns scans not yet implemented")
 
         # ##############################
         # xy-positions
@@ -794,7 +795,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                      use_dmd_as_odt_shutter=False,
                                      n_digital_ch=self.daq.n_digital_lines,
                                      n_analog_ch=self.daq.n_analog_lines,
-                                     acquisition_mode=pgm_acq_modes)
+                                     acquisition_mode=pgm_acq_modes,
+                                     parameter_scan=param_dict)
         except NotImplementedError:
             return
 
@@ -1039,8 +1041,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##################################
         # loop over positions and collect data
         # ##################################
-
-
         def run():
             # start timer
             tstart_full_sequence = time.perf_counter()
@@ -1048,13 +1048,14 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             print(daq_programming_info)
 
             # time estimate
-            position_time_s = dt * digital_program.shape[0] * ntimes * nz
+            position_time_s = dt * digital_program.shape[0] * ntimes * nz * nparams
             timeout = 10 + position_time_s
 
             pgm_time_s = position_time_s * nxy_positions
             pgm_time_mins = int(pgm_time_s // 60)
 
-            print(f"program expected time = {pgm_time_mins:02d}m:{(pgm_time_s - 60 * pgm_time_mins):.3f}s, timeout per position = {timeout:.1f}s")
+            print(f"program expected time = {pgm_time_mins:02d}m:{(pgm_time_s - 60 * pgm_time_mins):.3f}s,"
+                  f" timeout per position = {timeout:.1f}s")
 
             for pp in range(nxy_positions):
                 # move to new position
@@ -1141,10 +1142,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 # lock to use for printing
                 lock = threading.Lock()
 
-                # todo: think this works now ... should integrate it and make my life easier...
+                # todo: test
                 def single_index2multi(ii, npatterns_channel):
                     # order from slowest to fastest
-                    # ['time', 'z', 'parameters', 'channel', 'pattern']
+                    # ['time', 'parameters', 'z', 'channel', 'pattern']
                     npatterns_all_channels = np.sum(npatterns_channel)
                     npatterns_cumsum = np.cumsum(npatterns_channel)
 
@@ -1154,21 +1155,25 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     # pattern index
                     ip = int((ii % npatterns_all_channels - np.sum(npatterns_channel[:ic])) % npatterns_channel[ic])
                     # other indices are easy
-                    iparam = (ii // npatterns_all_channels) % nparams
-                    iz = (ii // (npatterns_all_channels * nparams)) % nz
+                    iz = (ii // (npatterns_all_channels)) % nz
+                    iparam = (ii // (npatterns_all_channels * nz)) % nparams
                     it = (ii // (npatterns_all_channels * nparams * nz)) % ntimes
 
                     return (it, iz, iparam, ic, ip)
 
 
                 def read_cam(mmc, dsets, cam_acq_modes, ncam_pics, desc=""):
+                    # order from slowest to fastest
+                    # ['time', 'parameters', 'z', 'channel', 'pattern']
+
                     ncam_channels = len(cam_acq_modes)
+                    npatterns_channel = [cam_acq_modes[ic][3] for ic in range(ncam_channels)]
 
                     ii_acquired = 0
                     iz = 0
                     ic = 0
                     iparam = 0
-                    ip = 0
+                    ipatt = 0
                     it = 0
                     for icount in range(ncam_pics):
                         while mmc.getRemainingImageCount() == 0:
@@ -1183,17 +1188,16 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         if npics == 0:
                             break
 
-                        # img_data.cam1.sim[pp, it, iz, 0, ic, ip] = mmc.popNextImage()
-                        dsets[ic][pp, it, iz, iparam, ip] = mmc.popNextImage()
+                        dsets[ic][pp, it, iz, iparam, ipatt] = mmc.popNextImage()
 
-                        # indexing logic. We acquire images (from slow to fast) time, z-position, channel, pattern
+                        # indexing logic. We acquire images (from slow to fast) time, parameters, z-position, channel, pattern
                         ii_acquired += 1
 
-                        if ip != (cam_acq_modes[ic][3] - 1):
+                        if ipatt != (cam_acq_modes[ic][3] - 1):
                             # increment pattern everytime
-                            ip += 1
+                            ipatt += 1
                         else:
-                            ip = 0
+                            ipatt = 0
 
                             elapsed_time = time.perf_counter() - tstart_full_sequence
                             elapsed_time_min = int(elapsed_time // 60)
@@ -1201,75 +1205,14 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                             # print in threadsafe way
                             with lock:
                                 print(
-                                    f"{desc:s} position {pp + 1:d}/{nxy_positions:d},"
-                                    f" channels {ic + 1:d}/{ncam_channels:d},"
-                                    f" z-step {iz + 1:d}/{nz:d},"
-                                    f" time {it + 1:d}/{ntimes:d},"                                
-                                    f" images left in buffer = {npics - 1:d},"
-                                    f" elapsed time = {elapsed_time_min:02d}m:{elapsed_time - elapsed_time_min * 60:.1f}s")
-
-                            # increment channel after pattern
-                            if ic != (ncam_channels - 1):
-                                ic += 1
-                            else:
-                                ic = 0
-
-                                # increment z after channels
-                                if iz != (nz - 1):
-                                    iz += 1
-                                else:
-                                    iz = 0
-                                    if it != (ntimes - 1):
-                                        it += 1
-
-                    return ii_acquired
-
-                def read_phantom_cam(phcam, dsets, cam_acq_modes, ncam_pics, desc=""):
-                    ncam_channels = len(cam_acq_modes)
-
-                    ii_acquired = 0
-                    iz = 0
-                    ic = 0
-                    iparam = 0
-                    ip = 0
-                    it = 0
-                    for icount in range(ncam_pics):
-                        # while mmc.getRemainingImageCount() == 0:
-                        #     tnow = time.perf_counter() - tstart_acq
-                        #
-                        #     if tnow > timeout:
-                        #         print("timeout reached......................")
-                        #         break
-                        #
-                        # # if we timed out, break out of loop
-                        # npics = mmc.getRemainingImageCount()
-                        # if npics == 0:
-                        #     break
-
-                        # img_data.cam1.sim[pp, it, iz, 0, ic, ip] = mmc.popNextImage()
-                        # dsets[ic][pp, it, iz, iparam, ip] = mmc.popNextImage()
-                        dsets[ic][pp, it, iz, iparam, ip] = phcam.get_recorded_img(1, icount)[0]
-
-                        # indexing logic. We acquire images (from slow to fast) time, z-position, channel, pattern
-                        ii_acquired += 1
-
-                        if ip != (cam_acq_modes[ic][3] - 1):
-                            # increment pattern everytime
-                            ip += 1
-                        else:
-                            ip = 0
-
-                            elapsed_time = time.perf_counter() - tstart_full_sequence
-                            elapsed_time_min = int(elapsed_time // 60)
-
-                            # print in threadsafe way
-                            with lock:
-                                print(
-                                    f"{desc:s} position {pp + 1:d}/{nxy_positions:d},"
-                                    f" channels {ic + 1:d}/{ncam_channels:d},"
-                                    f" z-step {iz + 1:d}/{nz:d},"
+                                    f"{desc:s} image {ii_acquired + 1:d}/{ncam_pics:d}, "
+                                    f" position {pp + 1:d}/{nxy_positions:d},"                                    
                                     f" time {it + 1:d}/{ntimes:d},"
-                                    # f" images left in buffer = {npics - 1:d},"
+                                    f" param {iparam + 1:d}/{nparams:d}"
+                                    f" z-step {iz + 1:d}/{nz:d},"
+                                    f" channels {ic + 1:d}/{ncam_channels:d},"                                                                                                                                            
+                                    f" images in buffer = {npics - 1:d},"
+                                    f" multi index = {single_index2multi(ii_acquired, npatterns_channel)},"
                                     f" elapsed time = {elapsed_time_min:02d}m:{elapsed_time - elapsed_time_min * 60:.1f}s")
 
                             # increment channel after pattern
@@ -1283,8 +1226,15 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                     iz += 1
                                 else:
                                     iz = 0
-                                    if it != (ntimes - 1):
-                                        it += 1
+                                    # increment parameters
+                                    if iparam != (iparam - 1):
+                                        iparam += 1
+                                    else:
+                                        iparam = 0
+
+                                        # increment time
+                                        if it != (ntimes - 1):
+                                            it += 1
 
                     return ii_acquired
 
@@ -1315,7 +1265,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 # start camera
                 mmc1.startSequenceAcquisition(n_cam1_pics, 0, True)
 
-                # if mmc2.getCameraDevice() != "":
                 if not cam_is_phantom:
                     mmc2.startSequenceAcquisition(n_cam2_pics, 0, True)
 
@@ -1325,14 +1274,12 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 thread_save_cam1 = threading.Thread(target=read_cam,
                                                     args=(mmc1, cam1_dsets, cam1_acq_modes, n_cam1_pics, "cam1"))
 
-                # if mmc2.getCameraDevice() != "":
                 if not cam_is_phantom:
                     thread_save_cam2 = threading.Thread(target=read_cam,
                                                         args=(mmc2, cam2_dsets, cam2_acq_modes, n_cam2_pics, "cam2"))
 
                 thread_save_cam1.start()
 
-                # if mmc2.getCameraDevice() != "":
                 if not cam_is_phantom:
                     thread_save_cam2.start()
 
