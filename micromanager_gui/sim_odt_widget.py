@@ -1227,7 +1227,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                 else:
                                     iz = 0
                                     # increment parameters
-                                    if iparam != (iparam - 1):
+                                    if iparam != (nparams - 1):
                                         iparam += 1
                                     else:
                                         iparam = 0
