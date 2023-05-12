@@ -1318,13 +1318,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         #  So far wait until done recording to grab them
                         tstart_ph_save = time.perf_counter()
 
-                        # save images to disk directly # todo: will this be fast enough? I expect not...
-                        # read_phantom_cam(cam2, cam2_dsets, cam2_acq_modes, n_cam2_pics, desc="phantom cam")
-                        # print(f"saved position {pp:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
-
-                        # # alternatively can first save tifs and then save to zarr using dask similar to
-                        # # C:\Users\q2ilab\Documents\mcsim_private\misc_scripts\2022_08_29_update_zarrs.py
-
+                        # todo: save using phantom format instead ... need to understand how to convert to zarr
                         print("saving cine to tif")
                         try:
                             mmc2.save_cine(1,
@@ -1334,7 +1328,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         except Exception as e:
                             print(e)
 
-                        print(f"saved position {pp:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
+                        print(f"saved position {pp:d}/{nxy_positions:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
 
                         # delete cine
                         try:
