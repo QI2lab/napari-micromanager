@@ -1328,7 +1328,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         except Exception as e:
                             print(e)
 
-                        print(f"saved position {pp:d}/{nxy_positions:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
+                        print(f"saved position {pp + 1:d}/{nxy_positions:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
 
                         # delete cine
                         try:
