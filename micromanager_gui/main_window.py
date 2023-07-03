@@ -1296,7 +1296,10 @@ class MainWindow(QtW.QWidget, _MainUI):
         combined_ind = dlp6500.pic_bit_ind_2firmware_ind(pic_ind, bit_ind)
 
         if self.dmd.firmware_patterns is not None:
-            firmware_pattern = self.dmd.firmware_patterns[combined_ind]
+            try:
+                firmware_pattern = self.dmd.firmware_patterns[combined_ind]
+            except IndexError as err:
+                print(err)
         else:
             raise ValueError("DMD is not loaded with firmware pattern data")
 
