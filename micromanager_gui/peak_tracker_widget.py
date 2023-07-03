@@ -194,12 +194,13 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
             size_roi = self.fit_roi_tableWidget.cellWidget(ii, 2).value()
 
             # construct ROI
-            roi = rois.get_centered_roi([cy, cx], [size_roi, size_roi], min_vals=[0, 0])
+            # roi = rois.get_centered_roi([cy, cx], [size_roi, size_roi], min_vals=[0, 0])
+            roi = rois.get_centered_rois([cy, cx], [size_roi, size_roi], min_vals=[0, 0])[0]
 
             # cut rois
-            img_roi = np.abs(rois.cut_roi(roi, img))
-            xx_roi = rois.cut_roi(roi, xx)
-            yy_roi = rois.cut_roi(roi, yy)
+            img_roi = np.abs(rois.cut_roi(roi, img)[0])
+            xx_roi = rois.cut_roi(roi, xx)[0]
+            yy_roi = rois.cut_roi(roi, yy)[0]
 
             # do fitting
             # if we have a previous fit, use that value as default
@@ -234,7 +235,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
 
             # phases
             if use_phase:
-                phases_roi = rois.cut_roi(roi, phase_layer_list[0].data)
+                phases_roi = rois.cut_roi(roi, phase_layer_list[0].data)[0]
                 try:
                     phase = tools.get_peak_value(phases_roi, xx_roi[0, :], yy_roi[:, 0], np.array([fit_params[ind_x], fit_params[ind_y]]))
                 except:
