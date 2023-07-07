@@ -744,6 +744,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         z = zarr.open(save_dir / "peak_tracker.zarr", "w")
 
         z.attrs["timestamp"] = datetime.datetime.now().strftime('%Y_%d_%m_%H;%M;%S')
+        z.attrs["configuration"] = self.configuration
         z.attrs["layer"] = self.layer_comboBox.currentText()
         z.attrs["model"] = str(self._model)
         z.attrs["parameter_names"] = self._model.parameter_names
