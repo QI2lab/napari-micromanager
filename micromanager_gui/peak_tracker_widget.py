@@ -48,6 +48,7 @@ class _PeakTrackerDUI:
     fname_lineEdit: QtW.QLineEdit
     dir_lineEdit: QtW.QLineEdit
     browse_save_Button: QtW.QPushButton
+    save_Button: QtW.QPushButton
 
     # selection
     mouse_select_pushButton: QtW.QPushButton
@@ -104,6 +105,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
 
         # connect buttons
         self.browse_save_Button.clicked.connect(self._set_save_dir)
+        self.save_Button.clicked.connect(self._save)
         self.mouse_select_pushButton.clicked.connect(self._select_rois_with_mouse)
         self.add_pushButton.clicked.connect(self._add_roi)
         self.remove_pushButton.clicked.connect(self._remove_roi)
@@ -150,6 +152,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
 
     def _fit_peaks(self):
 
+        fix_initial_centers = self.fix_centers_checkBox.isChecked()
 
         ind_x = [ii for ii, name in enumerate(self._model.parameter_names) if name == "cx"][0]
         ind_y = [ii for ii, name in enumerate(self._model.parameter_names) if name == "cy"][0]
@@ -175,7 +178,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
             use_phase = False
 
         # coordinates
-        xx, yy = np.meshgrid(range(img.shape[0]), range(img.shape[1]))
+        xx, yy = np.meshgrid(range(img.shape[1]), range(img.shape[0]))
 
         # ######################
         # fit ROIs
@@ -183,27 +186,23 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         self.fit_times = np.concatenate((self.fit_times, np.array([time.time()]))) # time since epoch in seconds
 
         nroi = self.fit_roi_tableWidget.rowCount()
-        roi_list = []
         for ii in range(nroi):
             if ii > len(self.fit_params):
                 continue
 
-            # grab variables
-            cy = self.fit_roi_tableWidget.cellWidget(ii, 0).value()
-            cx = self.fit_roi_tableWidget.cellWidget(ii, 1).value()
-            size_roi = self.fit_roi_tableWidget.cellWidget(ii, 2).value()
-
-            # construct ROI
-            # roi = rois.get_centered_roi([cy, cx], [size_roi, size_roi], min_vals=[0, 0])
-            roi = rois.get_centered_rois([cy, cx], [size_roi, size_roi], min_vals=[0, 0])[0]
-
+            roi = self.rois[ii]
             # cut rois
             img_roi = np.abs(rois.cut_roi(roi, img)[0])
             xx_roi = rois.cut_roi(roi, xx)[0]
             yy_roi = rois.cut_roi(roi, yy)[0]
 
+            # todo: handle case where ROI beyond image
+            if img_roi.size == 0:
+                continue
+
             # do fitting
-            # if we have a previous fit, use that value as default
+
+            # set bounds
             lbs = [None] * len(self._model.parameter_names)
             ubs = [None] * len(self._model.parameter_names)
             lbs[ind_x] = xx_roi.min()
@@ -211,26 +210,37 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
             lbs[ind_y] = yy_roi.min()
             ubs[ind_y] = yy_roi.max()
 
+            fixed_params = np.zeros(self._model.nparams, dtype=bool)
+
+            # initial and fixed parameter logic
             if len(self.fit_params[ii]) == 0:
                 init_params = None
             else:
+                # if we have a previous fit, use those parameters as initial value
                 last_fps_in_lbs = [lb is None or ip >= lb for ip, lb in zip(self.fit_params[ii][-1], lbs)]
                 last_fps_in_ubs = [b is None or ip >= b for ip, b in zip(self.fit_params[ii][-1], ubs)]
 
                 if np.all(last_fps_in_lbs) and np.all(last_fps_in_ubs):
                     init_params = self.fit_params[ii][-1]
                 else:
-                    init_params = None
+                    init_params = [None] * self._model.nparams
+
+                if fix_initial_centers:
+                    init_params[ind_x] = self.fit_params[ii][0, ind_x]
+                    init_params[ind_y] = self.fit_params[ii][0, ind_y]
+
+                    fixed_params[ind_x] = True
+                    fixed_params[ind_y] = True
+
 
             fit_results = self._model.fit(img_roi,
                                     (yy_roi, xx_roi),
                                     init_params=init_params,
-                                    fixed_params=None,
+                                    fixed_params=fixed_params,
                                     bounds=(lbs, ubs)
                                     )
             fit_params = fit_results["fit_params"]
 
-            roi_list.append(roi)
             self.fit_params[ii] = np.concatenate((self.fit_params[ii], fit_params[None, :]), axis=0)
 
             # phases
@@ -273,6 +283,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
                         )
 
         if self.show_on_napari_checkBox.isChecked():
+            # todo: this slowed things down ... can probably delete
             # ######################
             # titles
             # ######################
@@ -387,7 +398,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
                                   [roi[0] - 1, roi[3]],
                                   [roi[1], roi[3]],
                                   [roi[1], roi[2] - 1]
-                                  ] for roi in roi_list
+                                  ] for roi in self.rois
                                  ]
                                 )
             if roi_layer is not None:
@@ -498,7 +509,20 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
             print(e)
             return
 
+        # prepare rois
         nrois = self.fit_roi_tableWidget.rowCount()
+
+        self.rois = []
+        for ii in range(nrois):
+            # grab variables
+            cy = self.fit_roi_tableWidget.cellWidget(ii, 0).value()
+            cx = self.fit_roi_tableWidget.cellWidget(ii, 1).value()
+            size_roi = self.fit_roi_tableWidget.cellWidget(ii, 2).value()
+
+            # construct ROI
+            roi = rois.get_centered_rois([cy, cx], [size_roi, size_roi], min_vals=[0, 0])[0]
+            self.rois.append(roi)
+
         self.fit_params = [np.zeros((0, self._model.nparams)) for _ in range(nrois)]
         self.phases = [np.zeros((0, 1)) for _ in range(nrois)]
         self.fit_times = np.zeros((0))
@@ -552,7 +576,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
 
         # if make_new_figure:
 
-        self._figure = plt.figure(figsize=(30, 10))
+        self._figure = plt.figure(figsize=(20, 10))
 
         nrows = self._model.nparams + 1
 
@@ -659,19 +683,86 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
             # set title
             ttl_str = f"{name:s};" + \
                       "; ".join([f" avg={means[jj]:.3f};"
-                      f" std={stds[jj]:.3f}" for jj in range(nrois)])
-
+                      f" sd={stds[jj]:.3f}" for jj in range(nrois)])
             ax.set_title(ttl_str)
 
         self._figure.canvas.draw()
         self._figure.canvas.flush_events()
 
-
     def _show_dataset(self):
-      pass
+        self._prepare_figure()
+        self._update_figure()
 
     def _set_save_dir(self):
-        pass
+        self.dir = QtW.QFileDialog(self)
+        self.dir.setFileMode(QtW.QFileDialog.DirectoryOnly)
+        save_dir = QtW.QFileDialog.getExistingDirectory(self.dir)
+        self.dir_lineEdit.setText(save_dir)
+
+    def _save(self):
+        # grab values form GUI
+        main_dir_str = self.dir_lineEdit.text()
+        if main_dir_str == "":
+            print("no directory selected. Please select a directory if you wish to save tracking results")
+            return
+
+        main_dir = Path(main_dir_str)
+        subdir = Path(self.fname_lineEdit.text())
+
+        # ##############################
+        # ensure subdirs are of the form and numbes are correctly ordered 000_...
+        # ##############################
+
+        # test other subdirs and get their numbers
+        path_exp = "(\d{3})_.*"
+        other_nums = [int(re.match(path_exp, n.name).group(1)) for n in main_dir.glob("*") if
+                      re.match(path_exp, n.name)]
+
+        # number for new subdir should be larger than all old ones
+        if other_nums != []:
+            new_num = int(np.max(other_nums)) + 1
+        else:
+            new_num = 1
+
+        # test if subdir matches pattern ... if so trim the number off the beginning
+        m = re.match("(\d+_).*", subdir.name)
+
+        if m:
+            subdir_final = Path(f"{new_num:03d}_{subdir.name[len(m.group(1)):]}")
+        else:
+            subdir_final = Path(f"{new_num:03d}_{subdir.name}")
+
+        # reset the GUI with the correct name
+        self.fname_lineEdit.setText(subdir_final.name)
+
+        # ensure save path does not already exist
+        save_dir = main_dir / subdir_final
+
+        # #############################
+        # save data
+        # #############################
+        z = zarr.open(save_dir / "peak_tracker.zarr", "w")
+
+        z.attrs["timestamp"] = datetime.datetime.now().strftime('%Y_%d_%m_%H;%M;%S')
+        z.attrs["layer"] = self.layer_comboBox.currentText()
+        z.attrs["model"] = str(self._model)
+        z.attrs["parameter_names"] = self._model.parameter_names
+        z.attrs["nparams"] = self._model.nparams
+        z.array(f"fit_times", self.fit_times, compressor="none", dtype=float)
+
+        nrois = len(self.fit_params)
+        for ii in range(nrois):
+            arr = z.array(f"fit_params_roi={ii:d}", self.fit_params[ii], compressor="none", dtype=float)
+            arr.attrs["roi"] = self.rois[ii].tolist()
+            arr.attrs["phases"] = self.phases[ii].tolist()
+
+        # #############################
+        # save figure if open
+        # #############################
+        try:
+            self._figure.savefig(save_dir / "track.png")
+        except Exception as e:
+            print(e)
 
 
 if __name__ == "__main__":

@@ -58,20 +58,20 @@
          <property name="minimumSize">
           <size>
            <width>0</width>
-           <height>140</height>
+           <height>200</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
            <width>16777215</width>
-           <height>140</height>
+           <height>200</height>
           </size>
          </property>
          <property name="title">
           <string>Save track</string>
          </property>
          <property name="checkable">
-          <bool>true</bool>
+          <bool>false</bool>
          </property>
          <property name="checked">
           <bool>false</bool>
@@ -127,6 +127,19 @@
              </widget>
             </item>
            </layout>
+          </item>
+          <item row="1" column="0">
+           <widget class="QPushButton" name="save_Button">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>40</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>save track</string>
+            </property>
+           </widget>
           </item>
          </layout>
         </widget>
@@ -331,6 +344,13 @@
            <widget class="QLabel" name="label_4">
             <property name="text">
              <string>update rate (ms)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="11" column="3">
+           <widget class="QCheckBox" name="fix_centers_checkBox">
+            <property name="text">
+             <string>fix initial centers</string>
             </property>
            </widget>
           </item>
