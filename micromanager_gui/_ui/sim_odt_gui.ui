@@ -250,7 +250,7 @@
              <enum>Qt::SolidLine</enum>
             </property>
             <property name="columnCount">
-             <number>3</number>
+             <number>4</number>
             </property>
             <attribute name="horizontalHeaderDefaultSectionSize">
              <number>127</number>
@@ -271,6 +271,11 @@
             <column>
              <property name="text">
               <string>Mode</string>
+             </property>
+            </column>
+            <column>
+             <property name="text">
+              <string>Camera</string>
              </property>
             </column>
            </widget>
@@ -1194,7 +1199,7 @@
              </size>
             </property>
             <property name="text">
-             <string>SIM exp (ms):</string>
+             <string>cam1 exp (ms):</string>
             </property>
            </widget>
           </item>
@@ -1302,7 +1307,7 @@
              </size>
             </property>
             <property name="text">
-             <string>ODT exp (ms):</string>
+             <string>cam2 exp (ms):</string>
             </property>
            </widget>
           </item>
