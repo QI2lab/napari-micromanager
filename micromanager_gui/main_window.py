@@ -260,6 +260,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.remove_ch_Button.clicked.connect(self.remove_channel)
         self.clear_ch_Button.clicked.connect(self.clear_channel)
         self.daq_update_pushButton.clicked.connect(self._on_daq_setting_change)
+        self.daq_update_immediately_checkBox.setChecked(True)
         self.daq_update_immediately_checkBox.clicked.connect(self._on_channel_changed)
 
         # DAQ/DMD illumination modes
