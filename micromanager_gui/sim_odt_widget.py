@@ -102,6 +102,9 @@ class _MultiDUI:
     odt_warmup_doubleSpinBox: QtW.QDoubleSpinBox
     sim_warmup_doubleSpinBox: QtW.QDoubleSpinBox
     sim_readout_doubleSpinBox: QtW.QDoubleSpinBox
+    fan_checkBox: QtW.QCheckBox
+    fan_wait_doubleSpinBox: QtW.QDoubleSpinBox
+
 
     # stage group
     stage_groupBox: QtW.QGroupBox
@@ -142,6 +145,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         self.pattern_modes = ["default", "average"]
         self.camera_modes = ["default", "cam1", "cam2", "both"]
 
+        # flag to cancel sequence if necessary
+        self.cancel_sequence = False
+
         self.viewer = viewer
         super().__init__(parent)
         self.setup_ui()
@@ -159,6 +165,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         # run/show
         self.run_Button.clicked.connect(self._on_run_clicked)
+        self.cancel_Button.clicked.connect(self._on_cancel_clicked)
+        self.pause_Button.clicked.connect(self._on_paused_clicked)
         self.show_Button.clicked.connect(self.show_dataset)
 
         # z-stack widget
@@ -414,12 +422,33 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         """
         Run hardware triggered SIM/DMD sequence
         """
-
+        self.cancel_sequence = False
         mmc1 = self._mmcores[0]
         mmc2 = self._mmcores[1]
 
         if len(self._mmc.getLoadedDevices()) < 2:
             raise ValueError("Load a cfg file first.")
+
+        # ###########################################
+        # grab information from GUI
+        # ###########################################
+        # todo: want to grab everything from the GUI at the start while blocking
+        #  this way can't change things when messing with GUI later and can easily save
+        #  now most un-inferrable values are stored here and in zarr
+        gui_settings = {"quiet_fan": self.fan_checkBox.isChecked(),
+                        "fan_delay_s": self.fan_wait_doubleSpinBox.value(),
+                        "saving": self.save_groupBox.isChecked(),
+                        "exposure_tms_sim": self.sim_exposure_SpinBox.value(),
+                        "exposure_tms_odt": self.odt_exposure_SpinBox.value(),
+                        "min_odt_frame_time_ms": self.odt_frametime_SpinBox.value(),
+                        "odt_circ_buffer_mb": int(np.round(self.odt_circbuff_SpinBox.value() * 1e3)),
+                        "sim_circ_buffer_mb": int(np.round(self.sim_circbuf_doubleSpinBox.value() * 1e3)),
+                        "dt": int(np.round(self.daq_dt_doubleSpinBox.value())) * 1e-6,
+                        "sim_warmup_time_ms": self.sim_warmup_doubleSpinBox.value(),
+                        "odt_warmup_time_ms": self.odt_warmup_doubleSpinBox.value(),
+                        "shutter_delay_time_ms": self.shutter_delay_doubleSpinBox.value(),
+                        "sim_readout_time_ms": self.sim_readout_doubleSpinBox.value(),
+                        }
 
         # ##############################
         # turn off live mode if on
@@ -430,13 +459,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         if mmc2.isSequenceRunning():
             mmc2.stopSequenceAcquisition()
 
-        saving = self.save_groupBox.isChecked()
-
         # saving
-        if saving and not (self.fname_lineEdit.text() and Path(self.dir_lineEdit.text()).is_dir()):
+        if gui_settings["saving"] and not (self.fname_lineEdit.text() and Path(self.dir_lineEdit.text()).is_dir()):
             raise ValueError("Select a filename and a valid directory.")
 
-        if saving:
+        if gui_settings["saving"]:
             # grab values form GUI
             main_dir = Path(self.dir_lineEdit.text())
             subdir = Path(self.fname_lineEdit.text())
@@ -477,24 +504,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         print("##############################################################")
         start_str = f"starting acquisition"
-        if saving:
+        if gui_settings["saving"]:
             start_str += f", saving to {str(save_path):s}"
         print(start_str)
-
-        # ##############################
-        # grab timing information from GUI
-        # ##############################
-        exposure_tms_sim = self.sim_exposure_SpinBox.value()
-        exposure_tms_odt = self.odt_exposure_SpinBox.value()
-        min_odt_frame_time_ms = self.odt_frametime_SpinBox.value()
-        odt_circ_buffer_mb = int(np.round(self.odt_circbuff_SpinBox.value() * 1e3))
-        sim_circ_buffer_mb = int(np.round(self.sim_circbuf_doubleSpinBox.value() * 1e3))
-        dt = int(np.round(self.daq_dt_doubleSpinBox.value())) * 1e-6
-
-        sim_warmup_time_ms = self.sim_warmup_doubleSpinBox.value()
-        odt_warmup_time_ms = self.odt_warmup_doubleSpinBox.value()
-        shutter_delay_time_ms = self.shutter_delay_doubleSpinBox.value()
-        sim_readout_time_ms = self.sim_readout_doubleSpinBox.value()
 
         # ##############################
         # time lapse
@@ -567,6 +579,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##############################
         # get current z-position info
         z_now = mmc1.getZPosition()
+        # todo: note this will not work if you have restarted the program ... because the daq only remembers
+        #  the values you have set since it was instantiated
+        #  would like to read the line value ...but not sure how to do this right now
         z_volts_start = self.daq.last_known_analog_val[self.daq.analog_line_names["z_stage"]]
 
         do_zstack = self.stack_groupBox.isChecked()
@@ -633,30 +648,45 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##############################
         # grab channel information from GUI
         # ##############################
-        nrows = self.channel_tableWidget.rowCount()
+        # (dmd channel, pattern mode, acquisition mode, camera, number of patterns)
+        acq_modes = [{"channel": self.channel_tableWidget.cellWidget(c, 0).currentText(),
+                      "patterns": self.channel_tableWidget.cellWidget(c, 1).currentText(),
+                      "pattern_mode": self.channel_tableWidget.cellWidget(c, 2).currentText(),
+                      "camera": self.channel_tableWidget.cellWidget(c, 3).currentText(),
+                      "npatterns": 0,
+                      "nimages": 0}
+                     for c in range(self.channel_tableWidget.rowCount())]
 
-        if nrows == 0:
+        if acq_modes == []:
             print("no channels/modes selected")
             return
 
-        # (dmd channel, pattern mode, acquisition mode, camera, number of patterns)
-        acq_modes = list(zip([self.channel_tableWidget.cellWidget(c, 0).currentText() for c in range(nrows)],
-                             [self.channel_tableWidget.cellWidget(c, 1).currentText() for c in range(nrows)],
-                             [self.channel_tableWidget.cellWidget(c, 2).currentText() for c in range(nrows)],
-                             [self.channel_tableWidget.cellWidget(c, 3).currentText() for c in range(nrows)]
-                             ))
-        # convert to lists
-        # acq_modes = [list(am) for am in acq_modes]
+        # get npatterns and nimages information
+        for am in acq_modes:
+            # reset number of pictures if mode is average
+            am["npatterns"] = len(self.dmd.presets[am["channel"]][am["patterns"]]["picture_indices"])
 
-        acq_modes = [{"channel": am[0],
-                      "patterns": am[1],
-                      "pattern_mode": am[2],
-                      "camera": am[3],
-                      "npatterns": 0,
-                      "nimages": 0}
-                     for am in acq_modes]
+            if am["pattern_mode"] == "average":
+                am["nimages"] = 1
+            else:
+                am["nimages"] = am["npatterns"]
 
+            # set default camera modes
+            if am["camera"] == "default":
+                if am["channel"] == "odt":
+                    am["camera"] = "cam2"
+                else:
+                    am["camera"] = "cam1"
 
+        any_mode_odt = np.any([am["channel"] == "odt" for am in acq_modes])
+
+        cam1_acq_modes = [am for am in acq_modes if am["camera"] in ["cam1", "both"]]
+        cam2_acq_modes = [am for am in acq_modes if am["camera"] in ["cam2", "both"]]
+        print(f'     acquisition modes:')
+        for am in acq_modes:
+            print(am)
+        print(f"cam1 acquisition modes = {cam1_acq_modes}")
+        print(f"cam2 acquisition modes = {cam2_acq_modes}")
 
         # ##################################
         # get odt camera and set up
@@ -668,11 +698,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         if not cam_is_phantom:
             cam2_name = mmc2.getCameraDevice()
             # set camera properties
-            mmc2.setProperty(cam2_name, "Exposure", exposure_tms_odt)
+            mmc2.setProperty(cam2_name, "Exposure", gui_settings["exposure_tms_odt"])
             # set external triggering
             mmc2.setProperty(cam2_name, "TriggerMode", "Edge Trigger")
             # set circular buffer
-            mmc2.setCircularBufferMemoryFootprint(odt_circ_buffer_mb)
+            mmc2.setCircularBufferMemoryFootprint(gui_settings["odt_circ_buffer_mb"])
         else:
             mmc2 = self.phcam
 
@@ -689,7 +719,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             params = mmc2.get_params(cine_no)
             try:
                 params_out = mmc2.setAcqParams(cine_no=cine_no,
-                                               Exposure=int(np.round(exposure_tms_odt * 1e6)), # in ns
+                                               Exposure=int(np.round(gui_settings["exposure_tms_odt"] * 1e6)), # in ns
                                                dFrameRate=50., # need fps to be a little bit slower ... can set to 50
                                                SyncImaging=phc.SYNC_EXTERNAL,
                                                PTFrames=params.ImCount # post-trigger frames
@@ -713,7 +743,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         #set camera properties
         mmc1.setProperty(cam1, "ScanMode", "2")
-        mmc1.setProperty(cam1, "Exposure", exposure_tms_sim)
+        mmc1.setProperty(cam1, "Exposure", gui_settings["exposure_tms_sim"])
         # set external triggering
         mmc1.setProperty(cam1, "TRIGGER SOURCE", "EXTERNAL")
         mmc1.setProperty(cam1, "TriggerPolarity", "POSITIVE")
@@ -743,75 +773,48 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         cam1_roi = [ny1_start, ny1_start + ny1_size, nx1_start, nx1_start + nx1_size]
 
         # set circular buffer
-        mmc1.setCircularBufferMemoryFootprint(sim_circ_buffer_mb)
+        mmc1.setCircularBufferMemoryFootprint(gui_settings["sim_circ_buffer_mb"])
 
         # ##################################
         # prepare daq program, but don't program device yet
         # ##################################
-        for am in acq_modes:
-            # reset number of pictures if mode is average
-            am["npatterns"] = len(self.dmd.presets[am["channel"]][am["patterns"]]["picture_indices"])
-
-            if am["pattern_mode"] == "average":
-                am["nimages"] = 1
-            else:
-                am["nimages"] = am["npatterns"]
-
-            # set default camera modes
-            if am["camera"] == "default":
-                if am["channel"] == "odt":
-                    am["camera"] = "cam2"
-                else:
-                    am["camera"] = "cam1"
-
-        cam1_acq_modes = [am for am in acq_modes if am["camera"] in ["cam1", "both"]]
-        cam2_acq_modes = [am for am in acq_modes if am["camera"] in ["cam2", "both"]]
-        print(f'     acquisition modes = {acq_modes}')
-        print(f"cam1 acquisition modes = {cam1_acq_modes}")
-        print(f"cam2 acquisition modes = {cam2_acq_modes}")
-
-        # set trigger width
-        # todo: calculate this based on modes ... need to account for average mode
-        # n_trig_width = np.max([int(np.floor(min_odt_frame_time_ms * 1e-3 / 2 / dt)), 1])
-        n_trig_width = 1
-
         # odt stabilize time
-        if (len(acq_modes) == 1 or ntimes == 1) and acq_modes[0]["channel"] == "odt" and nz == 1:
-            odt_warmup_time_ms = 0
+        all_modes_odt = np.all([am["channel"] == "odt" for am in acq_modes])
+
+        # if (len(acq_modes) == 1 or ntimes == 1) and acq_modes[0]["channel"] == "odt" and nz == 1:
+        if all_modes_odt:
+            gui_settings["odt_warmup_time_ms"] = 0
             print("set odt_warmup_time_ms=0")
-
-        # line info
-        daq_do_map = self.daq.digital_line_names
-        daq_ao_map = self.daq.analog_line_names
-        daq_presets = self.daq.presets
-
-        # pgm_channels = [am[0] for am in acq_modes]
-        # pgm_acq_modes = [pmode if pmode == "both" or pmode == "average" else "sim" for (chan, patt, pmode, cam, _) in acq_modes]
-        # pgm_npatterns = [nps if am != "average" else len(self.dmd.presets[dm][pm]["picture_indices"])
-        #                  for dm, pm, am, cam, nps in acq_modes]
 
         try:
             digital_program, analog_program, daq_programming_info = \
-                get_sim_odt_sequence(daq_do_map,
-                                     daq_ao_map,
-                                     daq_presets,
+                get_sim_odt_sequence(self.daq.digital_line_names,
+                                     self.daq.analog_line_names,
+                                     self.daq.presets,
                                      acq_modes,
-                                     exposure_tms_odt * 1e-3,
-                                     exposure_tms_sim * 1e-3,
-                                     dt=dt,
+                                     gui_settings["exposure_tms_odt"] * 1e-3,
+                                     gui_settings["exposure_tms_sim"] * 1e-3,
+                                     dt=gui_settings["dt"],
                                      interval=interval_ms * 1e-3,
                                      n_odt_per_sim=1,
-                                     n_trig_width=n_trig_width,
-                                     odt_stabilize_t=odt_warmup_time_ms * 1e-3,
-                                     min_odt_frame_time=min_odt_frame_time_ms * 1e-3,
-                                     sim_stabilize_t=sim_warmup_time_ms * 1e-3,
-                                     shutter_delay_time=shutter_delay_time_ms * 1e-3,
-                                     sim_readout_time=sim_readout_time_ms * 1e-3,
+                                     n_trig_width=1,
+                                     odt_stabilize_t=gui_settings["odt_warmup_time_ms"] * 1e-3,
+                                     min_odt_frame_time=gui_settings["min_odt_frame_time_ms"] * 1e-3,
+                                     sim_stabilize_t=gui_settings["sim_warmup_time_ms"] * 1e-3,
+                                     shutter_delay_time=gui_settings["shutter_delay_time_ms"] * 1e-3,
+                                     sim_readout_time=gui_settings["sim_readout_time_ms"] * 1e-3,
                                      z_voltages=z_volts,
                                      use_dmd_as_odt_shutter=False,
                                      n_digital_ch=self.daq.n_digital_lines,
                                      n_analog_ch=self.daq.n_analog_lines,
                                      parameter_scan=param_dict)
+
+            if any_mode_odt:
+                digital_program[:, self.daq.digital_line_names["odt_laser"]] = 1
+
+            if all_modes_odt:
+                digital_program[:, self.daq.digital_line_names["odt_shutter"]] = 1
+
         except NotImplementedError:
             return
 
@@ -836,6 +839,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         img_data.attrs["dz_um"] = dz
         img_data.attrs["z_calibration_um_per_v"] = calibration_um_per_v
         img_data.attrs["interval_ms"] = interval_ms
+        img_data.attrs["gui_settings"] = gui_settings
 
         # micromanager configuration
         for aaaa, core in enumerate(self._mmcores):
@@ -863,7 +867,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         g1 = img_data.create_group("cam1")
         g1.attrs["channels"] = [c["channel"] for c in cam1_acq_modes]
         g1.attrs["acquisition_modes"] = cam1_acq_modes
-        g1.attrs["exposure_time_ms"] = exposure_tms_sim
+        g1.attrs["exposure_time_ms"] = gui_settings["exposure_tms_sim"]
         g1.attrs["camera_roi"] = cam1_roi
         g1.attrs["na_detection"] = self.configuration["camera_settings_1"]["na_detection"]
 
@@ -944,7 +948,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         g2 = img_data.create_group("cam2")
         g2.attrs["channels"] = cam2_acq_modes
         g2.attrs["camera_roi"] = cam2_roi
-        g2.attrs["exposure_time_ms"] = exposure_tms_odt
+        g2.attrs["exposure_time_ms"] = gui_settings["exposure_tms_odt"]
 
         try:
             g2.attrs["dx_um"] = self.configuration[cam2_settings_name]["dxy"]
@@ -999,7 +1003,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             if am["channel"] == "odt":
                 ds.attrs["wavelength_um"] = 0.785
-                ds.attrs["volume_time_ms"] = min_odt_frame_time_ms * am["npatterns"]  # todo: correct this
+                ds.attrs["volume_time_ms"] = gui_settings["min_odt_frame_time_ms"] * am["npatterns"]  # todo: correct this
 
                 odt_firmware_data = self.dmd.presets[am["channel"]][am["patterns"]]
                 odt_pic_inds = odt_firmware_data["picture_indices"]
@@ -1037,12 +1041,12 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         img_data.create_dataset("daq/digital_program", shape=digital_program.shape, dtype='int8', compressor="none")
         img_data.daq.digital_program.attrs["dimensions"] = ["time", "channel"]
         img_data.daq.digital_program[:] = digital_program
-        img_data.daq.digital_program.attrs["channel_map"] = daq_do_map
+        img_data.daq.digital_program.attrs["channel_map"] = self.daq.digital_line_names
 
         img_data.create_dataset("daq/analog_program", shape=analog_program.shape, dtype='float32', compressor="none")
         img_data.daq.analog_program.attrs["dimensions"] = ["time", "channel"]
         img_data.daq.analog_program[:] = analog_program
-        img_data.daq.analog_program.attrs["channel_map"] = daq_ao_map
+        img_data.daq.analog_program.attrs["channel_map"] = self.daq.analog_line_names
 
         img_data.create_dataset("daq/analog_input",
                                 shape=(nxy_positions, digital_program.shape[0] * ntimes * nz, self.daq.n_analog_inputs),
@@ -1050,7 +1054,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                 compressor="none")
         img_data.daq.analog_input.attrs["dimensions"] = ["position", "time/z", "analog channel"]
 
-        img_data.daq.attrs["dt"] = dt
+        img_data.daq.attrs["dt"] = gui_settings["dt"]
 
 
         # ##################################
@@ -1063,7 +1067,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             print(daq_programming_info)
 
             # time estimate
-            position_time_s = dt * digital_program.shape[0] * ntimes * nz * nparams
+            position_time_s = gui_settings["dt"] * digital_program.shape[0] * ntimes * nz * nparams
             timeout = 10 + position_time_s
 
             pgm_time_s = position_time_s * nxy_positions
@@ -1082,24 +1086,23 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 # ##################################
                 # set DAQ to initial state
                 # ##################################
-
                 # make sure DMD advance/enable trigger lines are low before we program the DMD
-                self.daq.set_digital_lines_by_name(np.array([0, 0, 1, 1, 0, 0], dtype=np.uint8),
+                self.daq.set_digital_lines_by_name(np.array([0, 0, 0, 0], dtype=np.uint8),
                                                    ["dmd_enable",
                                                     "dmd_advance",
-                                                    "odt_laser",
-                                                    "odt_shutter",
                                                     "odt_cam_sync",
                                                     "camera_trigger_monitor"])
+
+                # pre-warm the ODT laser/shutter if using ODT
+                if any_mode_odt:
+                    self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
+                                                       ["odt_laser",
+                                                        "odt_shutter"])
+
 
                 # ##################################
                 # program DMD
                 # ##################################
-                # blank = [False if ch == "odt" or am == "average" else True for ch, _, am, _ in acq_modes]
-                # noff_after = [1 if am == "average" else 0 for ch, _, am, _ in acq_modes]
-                # dmd_modes = [chm if ch == "odt" else "default" for ch, chm, _, _ in acq_modes]
-                # dmd_channels = [ch for ch, _, _, _, in acq_modes]
-
                 blank = [False if am["channel"] == "odt" or am["pattern_mode"] == "average" else True for am in acq_modes]
                 noff_after = [1 if am["pattern_mode"] == "average" else 0 for am in acq_modes]
                 dmd_modes = [am["patterns"] if am["channel"] == "odt" else "default" for am in acq_modes]
@@ -1141,11 +1144,19 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 # trigger camera twice, required for Phantom camera
                 # ##################################
                 if cam_is_phantom:
-                    if cam2_acq_modes != []:
-                        mmc2.quiet_fan(True) # quiet fan to avoid vibrations
+                    if gui_settings["quiet_fan"]:
+                        mmc2.quiet_fan(True)
+
+                        tstart_quiet = time.perf_counter()
+                        tquiet_now = time.perf_counter() - tstart_quiet
+                        while tquiet_now < gui_settings["fan_delay_s"]:
+                            print(f"quieting fan and waiting {tquiet_now:.0f}s/{gui_settings['fan_delay_s']:.0f}:s", end="\r")
+                            time.sleep(0.5)
+                            tquiet_now = time.perf_counter() - tstart_quiet
 
                     mmc2.record_cine(1)
 
+                    # seems to be necessary but not clear why
                     self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam_sync"])
                     time.sleep(0.1)
                     self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_sync"])
@@ -1187,7 +1198,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     # ['time', 'parameters', 'z', 'channel', 'pattern']
 
                     ncam_channels = len(cam_acq_modes)
-                    # npatterns_channel = [cam_acq_modes[ic][3] for ic in range(ncam_channels)]
                     npatterns_channel = [am["nimages"] for am in cam_acq_modes]
 
                     ii_acquired = 0
@@ -1204,7 +1214,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                 print("timeout reached......................")
                                 break
 
-                        # if we timed out, break out of loop
+                            if self.cancel_sequence:
+                                print("sequence cancelled......................")
+                                break
+
+                        # if we timed out or sequence was cancelled, break out of loop once all images are read
                         npics = mmc.getRemainingImageCount()
                         if npics == 0:
                             break
@@ -1214,7 +1228,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         # indexing logic. We acquire images (from slow to fast) time, parameters, z-position, channel, pattern
                         ii_acquired += 1
 
-                        # if ipatt != (cam_acq_modes[ic][3] - 1):
                         if ipatt != (cam_acq_modes[ic]["nimages"] - 1):
                             # increment pattern everytime
                             ipatt += 1
@@ -1230,7 +1243,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                     f"{desc:s} image {ii_acquired:d}/{ncam_pics:d}, "
                                     f" position {pp + 1:d}/{nxy_positions:d},"                                    
                                     f" time {it + 1:d}/{ntimes:d},"
-                                    f" param {iparam + 1:d}/{nparams:d}"
+                                    f" param {iparam + 1:d}/{nparams:d},"
                                     f" z-step {iz + 1:d}/{nz:d},"
                                     f" channels {ic + 1:d}/{ncam_channels:d},"                                                                                                                                            
                                     f" images in buffer = {npics - 1:d},"
@@ -1277,7 +1290,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 # program DAQ
                 self.daq.set_sequence(digital_program,
                                       analog_program,
-                                      1/dt,
+                                      1/gui_settings["dt"],
                                       analog_clock_source="/Dev1/PFI2",
                                       digital_input_source="/Dev1/PFI1",
                                       di_export_line="/Dev1/PFI2",
@@ -1306,6 +1319,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         timeout_min = int(timeout // 60)
 
                         while t_elapsed_now < timeout:
+                            if self.cancel_sequence:
+                                break
+
                             elapsed_time_min = int(t_elapsed_now // 60)
 
                             print(f"elapsed time = "
@@ -1326,7 +1342,17 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
                 # wait until program is over, then stop daq. Meanwhile, print timing information
                 t_elapsed_now = time.perf_counter() - tstart_acq
-                time.sleep(position_time_s - (t_elapsed_now) + 0.1) # need extra margin or lose frames at fast frame rates
+                t_remaining = position_time_s - t_elapsed_now + 0.1
+                while t_remaining > 0:
+                    if self.cancel_sequence:
+                        break
+
+                    tsleep = np.min([1, t_remaining])
+                    time.sleep(tsleep)
+
+                    t_elapsed_now = time.perf_counter() - tstart_acq
+                    t_remaining = position_time_s - t_elapsed_now + 0.1
+                # time.sleep(position_time_s - (t_elapsed_now) + 0.1) # need extra margin or lose frames at fast frame rates
 
                 # reset DAQ
                 self.daq.stop_sequence()
@@ -1346,12 +1372,15 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     mmc2.stopSequenceAcquisition()
 
                 # wait for pictures to be stored to disk
+                # if cancel is selected these threads need to detect it and end otherwise program will hang until timeout
                 thread_save_cam1.join()
                 thread_save_cam2.join()
 
                 if cam_is_phantom:
                     mmc2.stopSequenceAcquisition() # stop recording
-                    mmc2.quiet_fan(False) # turn fan back on
+
+                    if gui_settings["quiet_fan"]:
+                        mmc2.quiet_fan(False) # turn fan back on
 
                     if cam2_acq_modes != []:
                         # todo: is it possible to grab pictures as they come in on the phantom?
@@ -1376,51 +1405,51 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         except Exception as e:
                             print(e)
 
-                        # print(f"saved position {pp:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
-
             # after all positions have run, set z-position back to start
             self.daq.set_analog_lines_by_name([z_volts_start], ["z_stage"])
 
             # store real xy-positions
             img_data.attrs["xy_position_um_real"] = xy_positions_real
 
-            if cam_is_phantom and cam2_acq_modes != [] and saving:
+            if cam_is_phantom and cam2_acq_modes != [] and gui_settings["saving"]:
                 # write images to zarr
                 npatterns_ch_2 = np.array([am["nimages"] for am in cam2_acq_modes], dtype=int)
                 npatterns2_all = np.sum(npatterns_ch_2) # number of combined patterns for all channels
 
-                imgs_tif = []
-                for pp in range(nxy_positions):
-                    tif_pattern = f"ph_position={pp:d}_odt*.tif"
-                    temp = imread(save_path.parent / tif_pattern)
-                    if len(temp) > n_cam2_pics:
-                        # in case extra pictures bc DAQ didn't stop immediately (it is stopped in software so this can happen)
-                        temp2 = temp[:n_cam2_pics]
-                    elif len(temp) < n_cam2_pics:
-                        # this should not happen, but want to debug it if it does
-                        temp2 = da.concatenate((temp,
-                                                da.zeros((n_cam2_pics - len(temp), temp.shape[1], temp.shape[2]))),
-                                               axis=0)
-                    else:
-                        temp2 = temp
+                try:
+                    imgs_tif = []
+                    for pp in range(nxy_positions):
+                        tif_pattern = f"ph_position={pp:d}_odt*.tif"
+                        temp = imread(save_path.parent / tif_pattern)
+                        if len(temp) > n_cam2_pics:
+                            # in case extra pictures bc DAQ didn't stop immediately (it is stopped in software so this can happen)
+                            temp2 = temp[:n_cam2_pics]
+                        elif len(temp) < n_cam2_pics:
+                            # this should not happen, but want to debug it if it does
+                            temp2 = da.concatenate((temp,
+                                                    da.zeros((n_cam2_pics - len(temp), temp.shape[1], temp.shape[2]))),
+                                                   axis=0)
+                        else:
+                            temp2 = temp
 
-                    imgs_tif.append(temp2.reshape([ntimes, nz, nparams, npatterns2_all, ny_cam2, nx_cam2]).rechunk((1, 1, 1, 1, nx_cam2, nx_cam2)))
+                        imgs_tif.append(temp2.reshape([ntimes, nz, nparams, npatterns2_all, ny_cam2, nx_cam2]).rechunk((1, 1, 1, 1, nx_cam2, nx_cam2)))
 
-                ims = da.stack(imgs_tif, axis=0)
+                    ims = da.stack(imgs_tif, axis=0)
 
-                # deal with multiple channels
-                print("writing to zarr...")
-                for ic, ds in enumerate(cam2_dsets):
-                    istart = np.sum(npatterns_ch_2[:ic])
+                    # deal with multiple channels
+                    print("writing to zarr...")
+                    for ic, ds in enumerate(cam2_dsets):
+                        istart = np.sum(npatterns_ch_2[:ic])
 
-                    with ProgressBar():
-                        da.to_zarr(ims[..., istart:istart + npatterns_ch_2[ic], :, :], ds)
+                        with ProgressBar():
+                            da.to_zarr(ims[..., istart:istart + npatterns_ch_2[ic], :, :], ds)
 
-                # # delete tif files
-                fname_tifs = list(save_path.parent.glob("ph*.tif"))
-                for f in fname_tifs:
-                    f.unlink()
-
+                    # # delete tif files
+                    fname_tifs = list(save_path.parent.glob("ph*.tif"))
+                    for f in fname_tifs:
+                        f.unlink()
+                except Exception as e:
+                    print(e)
 
             # ##################################
             # reset cameras to internal triggering
@@ -1439,6 +1468,13 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         thread_run.start()
 
         return
+
+
+    def _on_cancel_clicked(self):
+        self.cancel_sequence = True
+
+    def _on_paused_clicked(self):
+        print("Pause button not implemented...")
 
     def show_dataset(self):
         """
