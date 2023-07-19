@@ -62,13 +62,8 @@ class _PeakTrackerDUI:
     roi_checkBox: QtW.QCheckBox
     compare_checkBox: QtW.QCheckBox
     plot_trace_checkBox: QtW.QCheckBox
-    show_on_napari_checkBox: QtW.QCheckBox
-
     memory_time_doubleSpinBox: QtW.QDoubleSpinBox
     update_rate_doubleSpinBox: QtW.QDoubleSpinBox
-
-    # display
-    # tracking_tableWidget: QtW.QTableWidget
 
     # running
     show_Button: QtW.QPushButton
@@ -119,13 +114,20 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         self.compare_checkBox.setChecked(True)
         self.roi_checkBox.setChecked(True)
         self.plot_trace_checkBox.setChecked(True)
-        self.show_on_napari_checkBox.setChecked(False)
         self.memory_time_doubleSpinBox.setValue(180.)
         self.update_rate_doubleSpinBox.setValue(100.)
         # self.layer_comboBox.mousePressEvent.connect(self._refresh_layers)
 
         # fit models
+        symm_gauss = fit.fixed_parameter_model(fit.gauss2d(use_sigma_ratio_parameterization=True),
+                                               fixed_inds=(4, 6),
+                                               fixed_values=(1, 0))
+
+        ellipse = fit.rotated_model_2d(fit.ellipsoid2d(0.1), center_inds=(2, 1))
+
         self.fit_models = {"gaussian": fit.gauss2d(),
+                           "symmetric gaussian": symm_gauss,
+                           "ellipse": ellipse,
                            }
         self.fit_params = None
         self.phases = None
@@ -239,7 +241,8 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
                                     fixed_params=fixed_params,
                                     bounds=(lbs, ubs)
                                     )
-            fit_params = fit_results["fit_params"]
+            # fit_params = fit_results["fit_params"]
+            fit_params = self._model.normalize_parameters(fit_results["fit_params"])
 
             self.fit_params[ii] = np.concatenate((self.fit_params[ii], fit_params[None, :]), axis=0)
 
@@ -266,13 +269,6 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         # ######################
         # put data in table
         # ######################
-        # todo: runs slow if do this
-        # for ii in range(nroi):
-        #     for jj in range(model.nparams):
-        #         self.tracking_tableWidget.cellWidget(ii, jj).setText(f"{self.fit_params[ii][-1][jj]:.4g}")
-        #
-        #     self.tracking_tableWidget.cellWidget(ii, model.nparams).setText(f"{ratios[ii]:.4g}")
-
         # data to be plotted on the screen below
         features = {"A/center": ratios,
                     "roi_index": np.arange(nroi)}
@@ -281,75 +277,6 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
                             )
                         )
                         )
-
-        if self.show_on_napari_checkBox.isChecked():
-            # todo: this slowed things down ... can probably delete
-            # ######################
-            # titles
-            # ######################
-            plot_layer_name = layer_name + " titles"
-            plot_layer = [l for l in self.viewer.layers if l.name == plot_layer_name]
-            if plot_layer == []:
-                plot_layer = None
-            else:
-                plot_layer = plot_layer[0]
-
-            plot_data = np.zeros((1, 2))
-
-            ttl_str = [f"{s:15}" for s in list(features.keys())]
-            features_titles = {"titles": "; ".join(ttl_str)}
-
-            if plot_layer is not None:
-                plot_layer.data = plot_data
-                plot_layer.features = features_titles
-            else:
-                self.viewer.add_points(plot_data,
-                                       face_color=[0, 0, 0, 0],
-                                       edge_color=[1, 0, 0, 0],
-                                       features=features_titles,
-                                       text={'string': "{titles:s}",
-                                             'size': 15,
-                                             'color': 'red',
-                                             'translation': np.array([0, 0]),
-                                             'anchor': 'upper_left'
-                                             },
-                                       size=10,
-                                       name=plot_layer_name,
-                                       translate=layer.translate,
-                                       affine=layer.affine)
-
-            # ######################
-            # put fit parameters in points at top of screen
-            # ######################
-
-            plot_layer_name = layer_name + " print fits"
-            plot_layer = [l for l in self.viewer.layers if l.name == plot_layer_name]
-            if plot_layer == []:
-                plot_layer = None
-            else:
-                plot_layer = plot_layer[0]
-
-            plot_data = np.zeros((nroi, 2))
-            plot_data[:, 0] = (np.arange(nroi) + 1) * 50
-
-            if plot_layer is not None:
-                plot_layer.data = plot_data
-                plot_layer.features = features
-            else:
-                self.viewer.add_points(plot_data,
-                                       face_color=[0, 0, 0, 0],
-                                       edge_color=[1, 0, 0, 0],
-                                       features=features,
-                                       text={'string': "{roi_index:d}:  " + "; ".join([f'{{{k:s}:+15.2e}}' for k in features.keys()]),
-                                             'size': 15,
-                                             'color': 'red',
-                                             'translation': np.array([0, 0]),
-                                             'anchor': 'upper_left'
-                                             },
-                                       size=10,
-                                       name=plot_layer_name,
-                                       translate=layer.translate,
-                                       affine=layer.affine)
 
         # ######################
         # plot fit results in napari
@@ -372,8 +299,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
                                    face_color=[0, 0, 0, 0],
                                    edge_color=[1, 0, 0, 1],
                                    features=features,
-                                   text={#'string': "; ".join([f'{k:s}={{{k:s}:.3g}}' for k in features.keys()]),
-                                         'string': "{roi_index:d}",
+                                   text={'string': "{roi_index:d}",
                                          'size': 10,
                                          'color': 'red',
                                          'translation': np.array([-7, 0]),
@@ -383,7 +309,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
                                    translate=layer.translate,
                                    affine=layer.affine)
 
-        #
+        # draw box around ROI
         if self.roi_checkBox.checkState():
             roi_layer_name = layer_name + " roi"
             roi_layer = [l for l in self.viewer.layers if l.name == roi_layer_name]
@@ -475,10 +401,16 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
         cx_spinBox.setMinimum(0)
         cx_spinBox.setMaximum(int(1e5))
 
+        # grab last ROI size if available
+        if idx != 0:
+            roi_size = self.fit_roi_tableWidget.cellWidget(idx - 1, 2).value()
+        else:
+            roi_size = 10
+
         size_spinBox = QtW.QSpinBox(self)
         size_spinBox.setMinimum(0)
         size_spinBox.setMaximum(int(1e5))
-        size_spinBox.setValue(10)
+        size_spinBox.setValue(roi_size)
 
         # create combo_boxes in table
         self.fit_roi_tableWidget.setCellWidget(idx, 0, cy_spinBox)
