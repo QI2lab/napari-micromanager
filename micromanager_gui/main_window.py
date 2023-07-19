@@ -1299,19 +1299,22 @@ class MainWindow(QtW.QWidget, _MainUI):
         if self.dmd.firmware_patterns is not None:
             try:
                 firmware_pattern = self.dmd.firmware_patterns[combined_ind]
+
+                layer_name = f"DMD firmware pic={pic_ind:d}, bit={bit_ind:d}, combined index={combined_ind:d}"
+
+                layer_list = [l for l in self.viewer.layers if l.name == "layer_name"]
+
+                if layer_list == []:
+                    self.viewer.add_image(firmware_pattern, name=layer_name)
+                else:
+                    layer_list[0].data = firmware_pattern
+
             except IndexError as err:
                 print(err)
         else:
             raise ValueError("DMD is not loaded with firmware pattern data")
 
-        layer_name = f"DMD firmware pic={pic_ind:d}, bit={bit_ind:d}, combined index={combined_ind:d}"
 
-        layer_list = [l for l in self.viewer.layers if l.name == "layer_name"]
-
-        if layer_list == []:
-            self.viewer.add_image(firmware_pattern, name=layer_name)
-        else:
-            layer_list[0].data = firmware_pattern
 
 
     def _browse_dmd_pattern(self):
