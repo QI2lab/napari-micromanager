@@ -104,6 +104,7 @@ class _MultiDUI:
     sim_readout_doubleSpinBox: QtW.QDoubleSpinBox
     fan_checkBox: QtW.QCheckBox
     fan_wait_doubleSpinBox: QtW.QDoubleSpinBox
+    cine2zarr_checkBox: QtW.QCheckBox
 
 
     # stage group
@@ -157,6 +158,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         # save dialog
         self.browse_save_Button.clicked.connect(self._set_save_dir)
+
+        #
+        self.cine2zarr_checkBox.setChecked(True)
 
         # channel widget
         self.add_ch_Button.clicked.connect(self.add_channel)
@@ -448,6 +452,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         gui_settings = {"quiet_fan": self.fan_checkBox.isChecked(),
                         "fan_delay_s": self.fan_wait_doubleSpinBox.value(),
                         "saving": self.save_groupBox.isChecked(),
+                        "convert_cine_to_zarr_live": self.cine2zarr_checkBox.isChecked(),
                         "exposure_tms_sim": self.sim_exposure_SpinBox.value(),
                         "exposure_tms_odt": self.odt_exposure_SpinBox.value(),
                         "min_odt_frame_time_ms": self.odt_frametime_SpinBox.value(),
@@ -723,6 +728,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             # set up cine: only need one
             mmc2.set_cines(1)
+
             # this also seems to clear CSR, so do CSR
             try:
                 mmc2.set_black_reference()
@@ -1013,6 +1019,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                    chunks=(1, 1, 1, 1, 1, ny_cam2, nx_cam2),
                                    dtype="uint16",
                                    compressor="none")
+            # todo: in testing found the (lossless) zlib compressor works well ... speeds up saving ... maybe should use this?
+            #  alternatively see 2023_07_27_convert_cine.py for example of saving as 12bit packed
+
             ds.attrs["dimensions"] = axis_list
             ds.attrs["channels"] = [am["channel"]]
 
@@ -1407,10 +1416,17 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         # todo: save using phantom format instead ... need to understand how to convert to zarr
                         print("saving cine to tif")
                         try:
+                            # mmc2.save_cine(1,
+                            #                save_path.parent / f"ph_position={pp:d}_odt.tif",
+                            #                first_image=0,
+                            #                img_count=n_cam2_pics,
+                            #                file_type="tif12")
                             mmc2.save_cine(1,
-                                           save_path.parent / f"ph_position={pp:d}_odt.tif",
+                                           save_path.parent / f"ph_position={pp:d}_odt.cine",
                                            first_image=0,
-                                           img_count=n_cam2_pics)
+                                           img_count=n_cam2_pics,
+                                           file_type="cine raw")
+
                         except Exception as e:
                             print(e)
 
@@ -1434,37 +1450,64 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 npatterns2_all = np.sum(npatterns_ch_2) # number of combined patterns for all channels
 
                 try:
-                    imgs_tif = []
+
+                    # tifffile handling
+                    # imgs_tif = []
+                    # for pp in range(nxy_positions):
+                    #     tif_pattern = f"ph_position={pp:d}_odt*.tif"
+                    #     temp = imread(save_path.parent / tif_pattern)
+                    #     if len(temp) > n_cam2_pics:
+                    #         # in case extra pictures bc DAQ didn't stop immediately (it is stopped in software so this can happen)
+                    #         temp2 = temp[:n_cam2_pics]
+                    #     elif len(temp) < n_cam2_pics:
+                    #         # this should not happen, but want to debug it if it does
+                    #         temp2 = da.concatenate((temp,
+                    #                                 da.zeros((n_cam2_pics - len(temp), temp.shape[1], temp.shape[2]))),
+                    #                                axis=0)
+                    #     else:
+                    #         temp2 = temp
+                    #
+                    #     imgs_tif.append(temp2.reshape([ntimes, nz, nparams, npatterns2_all, ny_cam2, nx_cam2]).rechunk((1, 1, 1, 1, nx_cam2, nx_cam2)))
+                    #
+                    # ims = da.stack(imgs_tif, axis=0)
+                    #
+                    # # deal with multiple channels
+                    # print("writing to zarr...")
+                    # for ic, ds in enumerate(cam2_dsets):
+                    #     istart = np.sum(npatterns_ch_2[:ic])
+                    #
+                    #     with ProgressBar():
+                    #         da.to_zarr(ims[..., istart:istart + npatterns_ch_2[ic], :, :], ds)
+                    #
+                    # # # delete tif files
+                    # fname_tifs = list(save_path.parent.glob("ph*.tif"))
+                    # for f in fname_tifs:
+                    #     f.unlink()
+
+                    imgs_cine = []
+                    mds = []
                     for pp in range(nxy_positions):
-                        tif_pattern = f"ph_position={pp:d}_odt*.tif"
-                        temp = imread(save_path.parent / tif_pattern)
-                        if len(temp) > n_cam2_pics:
-                            # in case extra pictures bc DAQ didn't stop immediately (it is stopped in software so this can happen)
-                            temp2 = temp[:n_cam2_pics]
-                        elif len(temp) < n_cam2_pics:
-                            # this should not happen, but want to debug it if it does
-                            temp2 = da.concatenate((temp,
-                                                    da.zeros((n_cam2_pics - len(temp), temp.shape[1], temp.shape[2]))),
-                                                   axis=0)
-                        else:
-                            temp2 = temp
+                        fname_cine = save_path.parent / f"ph_position={pp:d}_odt.cine"
+                        imgs_now, md = phc.imread_cine(fname_cine, read_setup_info=True)
+                        mds.append(md)
+                        imgs_cine.append(imgs_now.reshape([ntimes, nz, nparams, npatterns2_all, ny_cam2, nx_cam2]).rechunk((1, 1, 1, 1, nx_cam2, nx_cam2)))
+                    ims = da.stack(imgs_cine, axis=0)
 
-                        imgs_tif.append(temp2.reshape([ntimes, nz, nparams, npatterns2_all, ny_cam2, nx_cam2]).rechunk((1, 1, 1, 1, nx_cam2, nx_cam2)))
+                    # save header data
+                    g2.attrs["cine_metadata"] = mds[0]["header_data"]
 
-                    ims = da.stack(imgs_tif, axis=0)
+                    if gui_settings["convert_cine_to_zarr_live"]:
+                        # print("writing to zarr...")
+                        for ic, ds in enumerate(cam2_dsets):
+                            istart = np.sum(npatterns_ch_2[:ic])
+                            with ProgressBar():
+                                da.to_zarr(ims[..., istart:istart + npatterns_ch_2[ic], :, :], ds)
 
-                    # deal with multiple channels
-                    print("writing to zarr...")
-                    for ic, ds in enumerate(cam2_dsets):
-                        istart = np.sum(npatterns_ch_2[:ic])
+                        # delete cine files
+                        fname_cines = list(save_path.parent.glob("ph*.cine"))
+                        for f in fname_cines:
+                            f.unlink()
 
-                        with ProgressBar():
-                            da.to_zarr(ims[..., istart:istart + npatterns_ch_2[ic], :, :], ds)
-
-                    # # delete tif files
-                    fname_tifs = list(save_path.parent.glob("ph*.tif"))
-                    for f in fname_tifs:
-                        f.unlink()
                 except Exception as e:
                     print(e)
 
