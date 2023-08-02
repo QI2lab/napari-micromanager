@@ -261,6 +261,12 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             mode_comboBox = QtW.QComboBox(self)
             camera_comboBox = QtW.QComboBox(self)
 
+            dmd_on_time_spinBox = QtW.QDoubleSpinBox(self)
+            dmd_on_time_spinBox.setDecimals(1)
+            dmd_on_time_spinBox.setSingleStep(10)
+            dmd_on_time_spinBox.setMinimum(0.)
+            dmd_on_time_spinBox.setMaximum(10000.)
+
             # populate channel options
             pks = list(presets.keys())
             channel_comboBox.addItems(pks)
@@ -270,6 +276,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             self.channel_tableWidget.setCellWidget(idx, 1, patterns_comboBox)
             self.channel_tableWidget.setCellWidget(idx, 2, mode_comboBox)
             self.channel_tableWidget.setCellWidget(idx, 3, camera_comboBox)
+            self.channel_tableWidget.setCellWidget(idx, 4, dmd_on_time_spinBox)
 
             # connect to on channel changes
             channel_comboBox.currentTextChanged.connect(lambda: self._on_channel_changed(channel_comboBox))
@@ -289,15 +296,18 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 self.channel_tableWidget.cellWidget(ii, 1).addItems(list(self.dmd.presets[ch].keys()))
                 self.channel_tableWidget.cellWidget(ii, 1).setCurrentText("default")
 
-                # populate mode options and set to "default"
+                # populate pattern mode options and set to "default"
                 self.channel_tableWidget.cellWidget(ii, 2).clear()
                 self.channel_tableWidget.cellWidget(ii, 2).addItems(self.pattern_modes)
                 self.channel_tableWidget.cellWidget(ii, 2).setCurrentText("default")
 
-                # average patterns
+                # populate camer mode options camera modes patterns
                 self.channel_tableWidget.cellWidget(ii, 3).clear()
                 self.channel_tableWidget.cellWidget(ii, 3).addItems(self.camera_modes)
                 self.channel_tableWidget.cellWidget(ii, 3).setCurrentText("default")
+
+                # set DMD on time
+                self.channel_tableWidget.cellWidget(ii, 4).setValue(0.)
 
     def remove_channel(self):
         # remove selected position
@@ -653,6 +663,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                       "patterns": self.channel_tableWidget.cellWidget(c, 1).currentText(),
                       "pattern_mode": self.channel_tableWidget.cellWidget(c, 2).currentText(),
                       "camera": self.channel_tableWidget.cellWidget(c, 3).currentText(),
+                      "dmd_on_time": self.channel_tableWidget.cellWidget(c, 4).value() * 1e-3, # convert to s
                       "npatterns": 0,
                       "nimages": 0}
                      for c in range(self.channel_tableWidget.rowCount())]
@@ -663,6 +674,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         # get npatterns and nimages information
         for am in acq_modes:
+            # if dmd_on_time = 0, interpret this as always on
+            if am["dmd_on_time"] == 0:
+                am["dmd_on_time"] = None
+
             # reset number of pictures if mode is average
             am["npatterns"] = len(self.dmd.presets[am["channel"]][am["patterns"]]["picture_indices"])
 
@@ -1134,8 +1149,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     ds.attrs["dimensions"] = ["pattern", "time"]
 
                     if self.dmd.firmware_patterns is not None:
-                        ds = g_dmd.array("firmware_patterns", self.dmd.firmware_patterns.astype(bool),
-                                         compressor=numcodecs.packbits.PackBits(), dtype=bool,
+                        ds = g_dmd.array("firmware_patterns",
+                                         self.dmd.firmware_patterns.astype(bool),
+                                         compressor=numcodecs.packbits.PackBits(),
+                                         dtype=bool,
                                          chunks=(1, self.dmd.height, self.dmd.width))
                         ds.attrs["picture_indices"] = self.dmd.picture_indices.tolist()
                         ds.attrs["bit_indices"] = self.dmd.bit_indices.tolist()

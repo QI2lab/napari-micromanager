@@ -250,7 +250,7 @@
              <enum>Qt::SolidLine</enum>
             </property>
             <property name="columnCount">
-             <number>4</number>
+             <number>5</number>
             </property>
             <attribute name="horizontalHeaderDefaultSectionSize">
              <number>127</number>
@@ -276,6 +276,11 @@
             <column>
              <property name="text">
               <string>Camera</string>
+             </property>
+            </column>
+            <column>
+             <property name="text">
+              <string>DMD on time (ms)</string>
              </property>
             </column>
            </widget>
