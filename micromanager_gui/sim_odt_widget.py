@@ -529,7 +529,20 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         do_time_lapse = self.time_groupBox.isChecked()
         if do_time_lapse:
             ntimes = self.timepoints_spinBox.value()
-            interval_ms = self.interval_spinBox.value()
+            time_unit = self.time_comboBox.currentText()
+
+            if time_unit == "ms":
+                interval_ms = self.interval_spinBox.value()
+            elif time_unit == "sec":
+                interval_ms = self.interval_spinBox.value() * 1e3
+            elif time_unit == "min":
+                interval_ms = self.interval_spinBox.value() * 1e3 * 60
+            else:
+                raise ValueError(f"time_unit={time_unit:s} is not supported")
+
+            interval_ms = (interval_ms * 1e-3 // gui_settings["dt"]) * gui_settings["dt"] * 1e3
+            print(f"rounded interval to {interval_ms:.3f}ms to be commensurate with sampling rate")
+
         else:
             ntimes = 1
             interval_ms = 0.
@@ -816,7 +829,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                      gui_settings["exposure_tms_odt"] * 1e-3,
                                      gui_settings["exposure_tms_sim"] * 1e-3,
                                      dt=gui_settings["dt"],
-                                     interval=interval_ms * 1e-3,
+                                     # interval=interval_ms * 1e-3,
+                                     interval=0, # now handled by daq
                                      n_odt_per_sim=1,
                                      n_trig_width=1,
                                      odt_stabilize_t=gui_settings["odt_warmup_time_ms"] * 1e-3,
@@ -828,7 +842,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                      use_dmd_as_odt_shutter=False,
                                      n_digital_ch=self.daq.n_digital_lines,
                                      n_analog_ch=self.daq.n_analog_lines,
-                                     parameter_scan=param_dict)
+                                     parameter_scan=param_dict,
+                                     turn_lasers_off_interval=interval_ms != 0)
 
             if any_mode_odt:
                 digital_program[:, self.daq.digital_line_names["odt_laser"]] = 1
@@ -1091,7 +1106,14 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             print(daq_programming_info)
 
             # time estimate
-            position_time_s = gui_settings["dt"] * digital_program.shape[0] * ntimes * nz * nparams
+            if interval_ms == 0:
+                # position_time_s = gui_settings["dt"] * digital_program.shape[0] * ntimes * nz * nparams
+                # program now includes ntimes and nz
+                position_time_s = gui_settings["dt"] * digital_program.shape[0] * ntimes
+            else:
+                # last time-step only needs to last as long as program
+                position_time_s = interval_ms * 1e-3 * (ntimes - 1) + gui_settings["dt"] * digital_program.shape[0]
+
             timeout = 10 + position_time_s
 
             pgm_time_s = position_time_s * nxy_positions
@@ -1199,7 +1221,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 # lock to use for printing
                 lock = threading.Lock()
 
-                # todo: test
+                # todo: test and use
                 def single_index2multi(ii, npatterns_channel):
                     # order from slowest to fastest
                     # ['time', 'parameters', 'z', 'channel', 'pattern']
@@ -1321,7 +1343,13 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                       digital_input_source="/Dev1/PFI1",
                                       di_export_line="/Dev1/PFI2",
                                       continuous=True,
-                                      nrepeats=ntimes * nz)
+                                      # nrepeats=ntimes * nz * nparams, # only used for analog input
+                                      nrepeats=ntimes,
+                                      pause_trigger_line="/Dev1/PFI12",
+                                      interval=interval_ms*1e-3,
+                                      # pause_every_n=nz * nparams # perform z-stack before pausing
+                                      pause_every_n=1
+                                      )
 
                 # start camera
                 mmc1.startSequenceAcquisition(n_cam1_pics, 0, True)
@@ -1414,7 +1442,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         tstart_ph_save = time.perf_counter()
 
                         # todo: save using phantom format instead ... need to understand how to convert to zarr
-                        print("saving cine to tif")
+                        print("saving cine to disk")
                         try:
                             # mmc2.save_cine(1,
                             #                save_path.parent / f"ph_position={pp:d}_odt.tif",
