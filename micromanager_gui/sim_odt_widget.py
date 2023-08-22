@@ -878,10 +878,13 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         img_data.attrs["interval_ms"] = interval_ms
 
         # make parameter dictionary json serializable
-        param_dict_list = deepcopy(param_dict)
-        for k, v in param_dict_list.items():
-            param_dict_list[k] = param_dict_list[k].tolist()
-        img_data.attrs["parameter_scan_dictionary"] = param_dict_list
+        try:
+            param_dict_list = deepcopy(param_dict)
+            for k, v in param_dict_list.items():
+                param_dict_list[k] = param_dict_list[k].tolist()
+            img_data.attrs["parameter_scan_dictionary"] = param_dict_list
+        except:
+            img_data.attrs["parameter_scan_dictionary"] = None
 
         img_data.attrs["gui_settings"] = gui_settings
 
