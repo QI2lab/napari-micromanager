@@ -15,6 +15,7 @@ from useq import MDASequence
 if TYPE_CHECKING:
     from pymmcore_plus import RemoteMMCore
 
+from copy import deepcopy
 import re
 import numpy as np
 import time
@@ -647,7 +648,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             z_volts = z_volts_start + dzs / calibration_um_per_v
 
             print(f"z-positions= {z_check}")
-            print(f"z-calibration was {calibration_um_per_v:.3f}f um/V")
+            print(f"z-calibration was {calibration_um_per_v:.3f} um/V")
             print(f"new z-volts = {z_volts}")
 
             if np.any(z_volts < -5) or np.any(z_volts > 5):
@@ -875,6 +876,13 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         img_data.attrs["dz_um"] = dz
         img_data.attrs["z_calibration_um_per_v"] = calibration_um_per_v
         img_data.attrs["interval_ms"] = interval_ms
+
+        # make parameter dictionary json serializable
+        param_dict_list = deepcopy(param_dict)
+        for k, v in param_dict_list.items():
+            param_dict_list[k] = param_dict_list[k].tolist()
+        img_data.attrs["parameter_scan_dictionary"] = param_dict_list
+
         img_data.attrs["gui_settings"] = gui_settings
 
         # micromanager configuration
