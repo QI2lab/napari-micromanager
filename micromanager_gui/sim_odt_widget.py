@@ -103,6 +103,7 @@ class _MultiDUI:
     odt_warmup_doubleSpinBox: QtW.QDoubleSpinBox
     sim_warmup_doubleSpinBox: QtW.QDoubleSpinBox
     sim_readout_doubleSpinBox: QtW.QDoubleSpinBox
+    stage_delay_doubleSpinBox: QtW.QDoubleSpinBox
     fan_checkBox: QtW.QCheckBox
     fan_wait_doubleSpinBox: QtW.QDoubleSpinBox
     cine2zarr_checkBox: QtW.QCheckBox
@@ -447,9 +448,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ###########################################
         # grab information from GUI
         # ###########################################
-        # todo: want to grab everything from the GUI at the start while blocking
-        #  this way can't change things when messing with GUI later and can easily save
-        #  now most un-inferrable values are stored here and in zarr
         gui_settings = {"quiet_fan": self.fan_checkBox.isChecked(),
                         "fan_delay_s": self.fan_wait_doubleSpinBox.value(),
                         "saving": self.save_groupBox.isChecked(),
@@ -464,6 +462,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         "odt_warmup_time_ms": self.odt_warmup_doubleSpinBox.value(),
                         "shutter_delay_time_ms": self.shutter_delay_doubleSpinBox.value(),
                         "sim_readout_time_ms": self.sim_readout_doubleSpinBox.value(),
+                        "stage_delay_ms": self.stage_delay_doubleSpinBox.value()
                         }
 
         # ##############################
@@ -477,7 +476,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         # saving
         if gui_settings["saving"] and not (self.fname_lineEdit.text() and Path(self.dir_lineEdit.text()).is_dir()):
-            raise ValueError("Select a filename and a valid directory.")
+            print("Select a filename and a valid directory.")
+            return
 
         if gui_settings["saving"]:
             # grab values form GUI
@@ -527,8 +527,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##############################
         # time lapse
         # ##############################
-        do_time_lapse = self.time_groupBox.isChecked()
-        if do_time_lapse:
+        if self.time_groupBox.isChecked():
             ntimes = self.timepoints_spinBox.value()
             time_unit = self.time_comboBox.currentText()
 
@@ -551,13 +550,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##############################
         # parameter scan
         # ##############################
-        do_param_scan = self.parameter_groupBox.isChecked()
-        if do_param_scan:
+        if self.parameter_groupBox.isChecked():
             scan_params = []
             scan_param_vals = []
             for rr in range(self.parameter_tableWidget.rowCount()):
                 scan_params.append(self.parameter_tableWidget.cellWidget(rr, 0).currentText())
-
                 start = self.parameter_tableWidget.cellWidget(rr, 1).value()
                 stop = self.parameter_tableWidget.cellWidget(rr, 2).value()
                 step = self.parameter_tableWidget.cellWidget(rr, 3).value()
@@ -569,7 +566,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             if self.scan_together_checkBox.isChecked():
                 # dot product like
                 if not np.all(n_per_param == n_per_param[0]):
-                    raise ValueError(f"when scan together is selected all parameter scans must have the same length, but they had lengths {n_per_param}")
+                    raise ValueError(f"when scan together is selected all parameter scans must have the same length, "
+                                     f"but they had lengths {n_per_param}")
 
                 param_dict = dict(zip(scan_params, scan_param_vals))
                 nparams = len(scan_param_vals[0])
@@ -613,8 +611,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         #  would like to read the line value ...but not sure how to do this right now
         z_volts_start = self.daq.last_known_analog_val[self.daq.analog_line_names["z_stage"]]
 
-        do_zstack = self.stack_groupBox.isChecked()
-        if do_zstack:
+        if self.stack_groupBox.isChecked():
             zpositions = self._get_zstack_params()
             nz = len(zpositions)
 
@@ -725,8 +722,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##################################
         # get odt camera and set up
         # ##################################
-        # cam2 = mmc2.getCameraDevice()
-        # cam_is_phantom = cam2 == ""
         cam_is_phantom = True
 
         if not cam_is_phantom:
@@ -816,7 +811,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # odt stabilize time
         all_modes_odt = np.all([am["channel"] == "odt" for am in acq_modes])
 
-        # if (len(acq_modes) == 1 or ntimes == 1) and acq_modes[0]["channel"] == "odt" and nz == 1:
         if all_modes_odt:
             gui_settings["odt_warmup_time_ms"] = 0
             print("set odt_warmup_time_ms=0")
@@ -830,8 +824,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                      gui_settings["exposure_tms_odt"] * 1e-3,
                                      gui_settings["exposure_tms_sim"] * 1e-3,
                                      dt=gui_settings["dt"],
-                                     # interval=interval_ms * 1e-3,
-                                     interval=0, # now handled by daq
+                                     interval=0., # now handled by daq
                                      n_odt_per_sim=1,
                                      n_trig_width=1,
                                      odt_stabilize_t=gui_settings["odt_warmup_time_ms"] * 1e-3,
@@ -852,7 +845,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             if all_modes_odt:
                 digital_program[:, self.daq.digital_line_names["odt_shutter"]] = 1
 
-        except NotImplementedError:
+        except Exception as e:
+            print(e)
             return
 
         # ##################################
@@ -947,7 +941,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         cam1_dsets = []
         for am in cam1_acq_modes:
             # chan, patt, pmode, np_now = mode
-
             name = f"{am['channel']:s}"
 
             if am["patterns"] == "default":
@@ -964,8 +957,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 icount += 1
 
             # create dataset and add attributes
-            ds = g1.create_dataset(name_final, shape=(nxy_positions, ntimes, nz, nparams, am["nimages"], ny_cam1, nx_cam1),
-                                   chunks=(1, 1, 1, 1, 1, ny_cam1, nx_cam1), dtype="uint16", compressor="none")
+            ds = g1.create_dataset(name_final,
+                                   shape=(nxy_positions, ntimes, nz, nparams, am["nimages"], ny_cam1, nx_cam1),
+                                   chunks=(1, 1, 1, 1, 1, ny_cam1, nx_cam1),
+                                   dtype="uint16", compressor="none")
+            ds.attrs["acquisition_mode"] = am
             ds.attrs["dimensions"] = axis_list
             ds.attrs["channels"] = [am["channel"]]
 
@@ -1044,7 +1040,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                    shape=(nxy_positions, ntimes, nz, nparams, am["nimages"], ny_cam2, nx_cam2),
                                    chunks=(1, 1, 1, 1, 1, ny_cam2, nx_cam2),
                                    dtype="uint16",
-                                   compressor="none")
+                                   compressor=numcodecs.Zlib()
+                                   # compressor="none"
+                                   )
             # todo: in testing found the (lossless) zlib compressor works well ... speeds up saving ... maybe should use this?
             #  alternatively see 2023_07_27_convert_cine.py for example of saving as 12bit packed
 
@@ -1118,8 +1116,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             # time estimate
             if interval_ms == 0:
-                # position_time_s = gui_settings["dt"] * digital_program.shape[0] * ntimes * nz * nparams
-                # program now includes ntimes and nz
+                # program now includes looping over patterns, channelas, and z
                 position_time_s = gui_settings["dt"] * digital_program.shape[0] * ntimes
             else:
                 # last time-step only needs to last as long as program
@@ -1252,6 +1249,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     return (it, iz, iparam, ic, ip)
 
 
+                # todo: use single_index2multi here
                 def read_cam(mmc, dsets, cam_acq_modes, ncam_pics, desc=""):
                     # order from slowest to fastest
                     # ['time', 'parameters', 'z', 'channel', 'pattern']
@@ -1306,6 +1304,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                     f" z-step {iz + 1:d}/{nz:d},"
                                     f" channels {ic + 1:d}/{ncam_channels:d},"                                                                                                                                            
                                     f" images in buffer = {npics - 1:d},"
+                                    f" compare multi = {(it, iparam, iz, ic, ipatt)}, "
                                     f" multi index = {single_index2multi(ii_acquired, npatterns_channel)},"
                                     f" elapsed time = {elapsed_time_min:02d}m:{elapsed_time - elapsed_time_min * 60:.1f}s")
 
@@ -1354,11 +1353,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                       digital_input_source="/Dev1/PFI1",
                                       di_export_line="/Dev1/PFI2",
                                       continuous=True,
-                                      # nrepeats=ntimes * nz * nparams, # only used for analog input
                                       nrepeats=ntimes,
                                       pause_trigger_line="/Dev1/PFI12",
                                       interval=interval_ms*1e-3,
-                                      # pause_every_n=nz * nparams # perform z-stack before pausing
                                       pause_every_n=1
                                       )
 
@@ -1417,7 +1414,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
                     t_elapsed_now = time.perf_counter() - tstart_acq
                     t_remaining = position_time_s - t_elapsed_now + 0.1
-                # time.sleep(position_time_s - (t_elapsed_now) + 0.1) # need extra margin or lose frames at fast frame rates
 
                 # reset DAQ
                 self.daq.stop_sequence()
@@ -1452,14 +1448,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         #  So far wait until done recording to grab them
                         tstart_ph_save = time.perf_counter()
 
-                        # todo: save using phantom format instead ... need to understand how to convert to zarr
                         print("saving cine to disk")
                         try:
-                            # mmc2.save_cine(1,
-                            #                save_path.parent / f"ph_position={pp:d}_odt.tif",
-                            #                first_image=0,
-                            #                img_count=n_cam2_pics,
-                            #                file_type="tif12")
                             mmc2.save_cine(1,
                                            save_path.parent / f"ph_position={pp:d}_odt.cine",
                                            first_image=0,
@@ -1467,6 +1457,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                            file_type="cine raw")
 
                         except Exception as e:
+                            # todo: understand why sometimes get exceptions. Particularly in multiposition runs
+                            # todo: the second position sometimes doesnt exist
                             print(e)
 
                         print(f"saved position {pp + 1:d}/{nxy_positions:d} to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
@@ -1489,40 +1481,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 npatterns2_all = np.sum(npatterns_ch_2) # number of combined patterns for all channels
 
                 try:
-
-                    # tifffile handling
-                    # imgs_tif = []
-                    # for pp in range(nxy_positions):
-                    #     tif_pattern = f"ph_position={pp:d}_odt*.tif"
-                    #     temp = imread(save_path.parent / tif_pattern)
-                    #     if len(temp) > n_cam2_pics:
-                    #         # in case extra pictures bc DAQ didn't stop immediately (it is stopped in software so this can happen)
-                    #         temp2 = temp[:n_cam2_pics]
-                    #     elif len(temp) < n_cam2_pics:
-                    #         # this should not happen, but want to debug it if it does
-                    #         temp2 = da.concatenate((temp,
-                    #                                 da.zeros((n_cam2_pics - len(temp), temp.shape[1], temp.shape[2]))),
-                    #                                axis=0)
-                    #     else:
-                    #         temp2 = temp
-                    #
-                    #     imgs_tif.append(temp2.reshape([ntimes, nz, nparams, npatterns2_all, ny_cam2, nx_cam2]).rechunk((1, 1, 1, 1, nx_cam2, nx_cam2)))
-                    #
-                    # ims = da.stack(imgs_tif, axis=0)
-                    #
-                    # # deal with multiple channels
-                    # print("writing to zarr...")
-                    # for ic, ds in enumerate(cam2_dsets):
-                    #     istart = np.sum(npatterns_ch_2[:ic])
-                    #
-                    #     with ProgressBar():
-                    #         da.to_zarr(ims[..., istart:istart + npatterns_ch_2[ic], :, :], ds)
-                    #
-                    # # # delete tif files
-                    # fname_tifs = list(save_path.parent.glob("ph*.tif"))
-                    # for f in fname_tifs:
-                    #     f.unlink()
-
                     imgs_cine = []
                     mds = []
                     for pp in range(nxy_positions):

@@ -163,25 +163,6 @@
           <property name="bottomMargin">
            <number>7</number>
           </property>
-          <item row="1" column="1">
-           <widget class="QPushButton" name="remove_ch_Button">
-            <property name="minimumSize">
-             <size>
-              <width>90</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>90</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Remove</string>
-            </property>
-           </widget>
-          </item>
           <item row="0" column="1">
            <widget class="QPushButton" name="add_ch_Button">
             <property name="minimumSize">
@@ -198,25 +179,6 @@
             </property>
             <property name="text">
              <string>Add</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QPushButton" name="clear_ch_Button">
-            <property name="minimumSize">
-             <size>
-              <width>90</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>90</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>Clear</string>
             </property>
            </widget>
           </item>
@@ -283,6 +245,44 @@
               <string>DMD on time (ms)</string>
              </property>
             </column>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QPushButton" name="clear_ch_Button">
+            <property name="minimumSize">
+             <size>
+              <width>90</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>90</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Clear</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QPushButton" name="remove_ch_Button">
+            <property name="minimumSize">
+             <size>
+              <width>90</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>90</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Remove</string>
+            </property>
            </widget>
           </item>
          </layout>
@@ -1286,8 +1286,8 @@
           <string>Sequence settings</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_5">
-          <item row="7" column="3">
-           <widget class="QDoubleSpinBox" name="odt_frametime_SpinBox">
+          <item row="11" column="3">
+           <widget class="QDoubleSpinBox" name="fan_wait_doubleSpinBox">
             <property name="minimumSize">
              <size>
               <width>0</width>
@@ -1295,28 +1295,15 @@
              </size>
             </property>
             <property name="decimals">
-             <number>3</number>
+             <number>1</number>
             </property>
             <property name="maximum">
-             <double>10000.000000000000000</double>
+             <double>1000.000000000000000</double>
             </property>
            </widget>
           </item>
-          <item row="9" column="4">
-           <widget class="QLabel" name="label_19">
-            <property name="minimumSize">
-             <size>
-              <width>100</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>ODT circ buff (GB)</string>
-            </property>
-           </widget>
-          </item>
-          <item row="11" column="0">
-           <widget class="QDoubleSpinBox" name="shutter_delay_doubleSpinBox">
+          <item row="11" column="4">
+           <widget class="QDoubleSpinBox" name="odt_warmup_doubleSpinBox">
             <property name="minimumSize">
              <size>
               <width>0</width>
@@ -1325,6 +1312,94 @@
             </property>
             <property name="maximum">
              <double>10000.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="4">
+           <widget class="QLabel" name="label_20">
+            <property name="text">
+             <string>dt (us)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="0">
+           <widget class="QDoubleSpinBox" name="sim_warmup_doubleSpinBox">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="maximum">
+             <double>10000.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="4">
+           <widget class="QDoubleSpinBox" name="odt_circbuff_SpinBox">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="maximum">
+             <double>100.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="label_12">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>80</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>cam1 exp (ms):</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <widget class="QDoubleSpinBox" name="sim_readout_doubleSpinBox">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="maximum">
+             <double>10000000000000.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="13" column="0">
+           <widget class="QCheckBox" name="cine2zarr_checkBox">
+            <property name="text">
+             <string>cine2zarr</string>
+            </property>
+           </widget>
+          </item>
+          <item row="12" column="3">
+           <widget class="QLabel" name="label_14">
+            <property name="text">
+             <string>fan cooldown (s)</string>
             </property>
            </widget>
           </item>
@@ -1350,28 +1425,16 @@
             </property>
            </widget>
           </item>
-          <item row="12" column="0">
-           <widget class="QLabel" name="label_23">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
+          <item row="9" column="4">
+           <widget class="QLabel" name="label_19">
             <property name="minimumSize">
              <size>
               <width>100</width>
               <height>0</height>
              </size>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>80</width>
-              <height>16777215</height>
-             </size>
-            </property>
             <property name="text">
-             <string>shutter delay (ms)</string>
+             <string>ODT circ buff (GB)</string>
             </property>
            </widget>
           </item>
@@ -1385,19 +1448,6 @@
             </property>
             <property name="text">
              <string>SIM circ buff (GB)</string>
-            </property>
-           </widget>
-          </item>
-          <item row="7" column="4">
-           <widget class="QDoubleSpinBox" name="odt_circbuff_SpinBox">
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>25</height>
-             </size>
-            </property>
-            <property name="maximum">
-             <double>100.000000000000000</double>
             </property>
            </widget>
           </item>
@@ -1420,16 +1470,6 @@
             </property>
            </widget>
           </item>
-          <item row="0" column="1">
-           <widget class="QDoubleSpinBox" name="sim_circbuf_doubleSpinBox">
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>25</height>
-             </size>
-            </property>
-           </widget>
-          </item>
           <item row="9" column="3">
            <widget class="QLabel" name="label_18">
             <property name="minimumSize">
@@ -1443,20 +1483,32 @@
             </property>
            </widget>
           </item>
-          <item row="3" column="4">
-           <widget class="QLabel" name="label_20">
-            <property name="text">
-             <string>dt (us)</string>
-            </property>
-           </widget>
-          </item>
-          <item row="7" column="0">
-           <widget class="QDoubleSpinBox" name="sim_warmup_doubleSpinBox">
+          <item row="0" column="4">
+           <widget class="QDoubleSpinBox" name="daq_dt_doubleSpinBox">
             <property name="minimumSize">
              <size>
               <width>0</width>
               <height>25</height>
              </size>
+            </property>
+            <property name="decimals">
+             <number>0</number>
+            </property>
+            <property name="maximum">
+             <double>100000.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="3">
+           <widget class="QDoubleSpinBox" name="odt_frametime_SpinBox">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="decimals">
+             <number>3</number>
             </property>
             <property name="maximum">
              <double>10000.000000000000000</double>
@@ -1488,13 +1540,6 @@
             </property>
            </widget>
           </item>
-          <item row="9" column="1">
-           <widget class="QLabel" name="label_25">
-            <property name="text">
-             <string>SIM readout (ms)</string>
-            </property>
-           </widget>
-          </item>
           <item row="3" column="3">
            <widget class="QLabel" name="label_13">
             <property name="sizePolicy">
@@ -1517,76 +1562,6 @@
             </property>
             <property name="text">
              <string>cam2 exp (ms):</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="label_12">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>80</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>cam1 exp (ms):</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="4">
-           <widget class="QDoubleSpinBox" name="daq_dt_doubleSpinBox">
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>25</height>
-             </size>
-            </property>
-            <property name="decimals">
-             <number>0</number>
-            </property>
-            <property name="maximum">
-             <double>100000.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="7" column="1">
-           <widget class="QDoubleSpinBox" name="sim_readout_doubleSpinBox">
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>25</height>
-             </size>
-            </property>
-            <property name="decimals">
-             <number>2</number>
-            </property>
-            <property name="maximum">
-             <double>10000000000000.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="11" column="4">
-           <widget class="QDoubleSpinBox" name="odt_warmup_doubleSpinBox">
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>25</height>
-             </size>
-            </property>
-            <property name="maximum">
-             <double>10000.000000000000000</double>
             </property>
            </widget>
           </item>
@@ -1615,40 +1590,82 @@
             </property>
            </widget>
           </item>
-          <item row="11" column="3">
-           <widget class="QDoubleSpinBox" name="fan_wait_doubleSpinBox">
+          <item row="11" column="0">
+           <widget class="QDoubleSpinBox" name="shutter_delay_doubleSpinBox">
             <property name="minimumSize">
              <size>
               <width>0</width>
               <height>25</height>
              </size>
             </property>
-            <property name="decimals">
-             <number>1</number>
-            </property>
             <property name="maximum">
-             <double>1000.000000000000000</double>
+             <double>10000.000000000000000</double>
             </property>
            </widget>
           </item>
-          <item row="11" column="1">
+          <item row="0" column="1">
+           <widget class="QDoubleSpinBox" name="sim_circbuf_doubleSpinBox">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>25</height>
+             </size>
+            </property>
+           </widget>
+          </item>
+          <item row="9" column="1">
+           <widget class="QLabel" name="label_25">
+            <property name="text">
+             <string>SIM readout (ms)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="12" column="0">
+           <widget class="QLabel" name="label_23">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>100</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>80</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>shutter delay (ms)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="13" column="1">
            <widget class="QCheckBox" name="fan_checkBox">
             <property name="text">
              <string>Quiet fan</string>
             </property>
            </widget>
           </item>
-          <item row="12" column="3">
-           <widget class="QLabel" name="label_14">
-            <property name="text">
-             <string>fan cooldown (s)</string>
+          <item row="11" column="1">
+           <widget class="QDoubleSpinBox" name="stage_delay_doubleSpinBox">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>25</height>
+             </size>
             </property>
            </widget>
           </item>
           <item row="12" column="1">
-           <widget class="QCheckBox" name="cine2zarr_checkBox">
+           <widget class="QLabel" name="label_15">
             <property name="text">
-             <string>cine2zarr</string>
+             <string>Stage delay (ms)</string>
             </property>
            </widget>
           </item>
