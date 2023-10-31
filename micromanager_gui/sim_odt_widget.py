@@ -40,6 +40,25 @@ OBJECTIVE_DEVICE = "Objective"
 # Once the PR #43 is merged, we pass the objective device to this variable
 
 
+def parse_time(dt: float,
+               print_days: bool = False,
+               print_hours: bool = False):
+    """
+    Helper function for printing timing info
+    """
+    days = int(dt // (24 * 60 * 60))
+    hours = int(dt // (60 * 60) - days * 24)
+    mins = int(dt // 60 - hours * 60 - days * 24 * 60)
+    secs = dt - mins * 60 - hours * 60 * 60 - days * 24 * 60 * 60
+    str = ""
+    if print_days:
+        str += f"{days:02d} days, "
+    if print_hours:
+        str += f"{hours:02d}h:"
+    str += f"{mins:02d}m:{secs:.1f}s"
+
+    return (days, hours, mins, secs), str
+
 @dataclass
 class SequenceMeta:
     mode: Literal["mda"] | Literal["explorer"] = ""
@@ -201,6 +220,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         self.add_parameter_pushButton.clicked.connect(self._add_parameter)
         self.remove_parameter_pushButton.clicked.connect(self._remove_parameter)
         self.clear_parameter_pushButton.clicked.connect(self._clear_parameter)
+
+        # lock for printing while multithreading
+        self.print_lock = threading.Lock()
+
 
     def set_cfg(self):
         defaults = self.configuration["sim_odt_program_defaults"]
@@ -1108,33 +1131,48 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##################################
         # loop over positions and collect data
         # ##################################
+        print(daq_programming_info)
+
+        # time estimate
+        if interval_ms == 0:
+            # program now includes looping over patterns, channels, and z
+            position_time_s = gui_settings["dt"] * digital_program.shape[0] * ntimes
+        else:
+            # last time-step only needs to last as long as program
+            position_time_s = interval_ms * 1e-3 * (ntimes - 1) + gui_settings["dt"] * digital_program.shape[0]
+
+        timeout = 10 + position_time_s
+        pgm_time_s = position_time_s * nxy_positions
+
+        print(f"program expected time = {parse_time(pgm_time_s)[1]:s},"
+              f" timeout per position = {parse_time(timeout)[1]:s}")
+
+
+        order = ['position', 'time', 'parameter', 'z', 'channel', 'pattern']
+        def single_index2multi(ii, npatterns_channel):
+            # order from slowest to fastest: ['time', 'parameters', 'z', 'channel', 'pattern']
+            npatterns_all_channels = np.sum(npatterns_channel)
+            npatterns_cumsum = np.cumsum(npatterns_channel)
+
+            # channel index
+            cinds = np.arange(len(npatterns_channel))
+            ic = cinds[ii % npatterns_all_channels < npatterns_cumsum][0]
+
+            # pattern index
+            ip = int((ii % npatterns_all_channels - np.sum(npatterns_channel[:ic])) % npatterns_channel[ic])
+            # other indices are easy
+            iz = (ii // (npatterns_all_channels)) % nz
+            iparam = (ii // (npatterns_all_channels * nz)) % nparams
+            it = (ii // (npatterns_all_channels * nparams * nz)) % ntimes
+
+            return (it, iparam, iz, ic, ip)
+
         def run():
-            # start timer
-            tstart_full_sequence = time.perf_counter()
-
-            print(daq_programming_info)
-
-            # time estimate
-            if interval_ms == 0:
-                # program now includes looping over patterns, channelas, and z
-                position_time_s = gui_settings["dt"] * digital_program.shape[0] * ntimes
-            else:
-                # last time-step only needs to last as long as program
-                position_time_s = interval_ms * 1e-3 * (ntimes - 1) + gui_settings["dt"] * digital_program.shape[0]
-
-            timeout = 10 + position_time_s
-
-            pgm_time_s = position_time_s * nxy_positions
-            pgm_time_mins = int(pgm_time_s // 60)
-
-            print(f"program expected time = {pgm_time_mins:02d}m:{(pgm_time_s - 60 * pgm_time_mins):.3f}s,"
-                  f" timeout per position = {timeout:.1f}s")
-
+            tstart_full_sequence = time.perf_counter() # start timer
             for pp in range(nxy_positions):
                 # move to new position
                 if do_xy_scan:
                     mmc1.setXYPosition(xy_positions[pp][0], xy_positions[pp][1])
-
                     xy_positions_real.append([float(self._mmc.getXPosition()), float(self._mmc.getYPosition())])
 
                 # ##################################
@@ -1226,48 +1264,16 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 n_cam1_pics = ntimes * nz * nparams * int(np.sum([am["nimages"] for am in cam1_acq_modes]))
                 n_cam2_pics = ntimes * nz * nparams * int(np.sum([am["nimages"] for am in cam2_acq_modes]))
 
-                # lock to use for printing
-                lock = threading.Lock()
-
-                # todo: test and use
-                def single_index2multi(ii, npatterns_channel):
-                    # order from slowest to fastest
-                    # ['time', 'parameters', 'z', 'channel', 'pattern']
-                    npatterns_all_channels = np.sum(npatterns_channel)
-                    npatterns_cumsum = np.cumsum(npatterns_channel)
-
-                    # channel index
-                    cinds = np.arange(len(npatterns_channel))
-                    ic = cinds[ii % npatterns_all_channels < npatterns_cumsum][0]
-                    # pattern index
-                    ip = int((ii % npatterns_all_channels - np.sum(npatterns_channel[:ic])) % npatterns_channel[ic])
-                    # other indices are easy
-                    iz = (ii // (npatterns_all_channels)) % nz
-                    iparam = (ii // (npatterns_all_channels * nz)) % nparams
-                    it = (ii // (npatterns_all_channels * nparams * nz)) % ntimes
-
-                    return (it, iz, iparam, ic, ip)
-
-
-                # todo: use single_index2multi here
+                # right now leaving in here because reference tstart_acq ... could easily make that an argument
                 def read_cam(mmc, dsets, cam_acq_modes, ncam_pics, desc=""):
                     # order from slowest to fastest
-                    # ['time', 'parameters', 'z', 'channel', 'pattern']
-
                     ncam_channels = len(cam_acq_modes)
                     npatterns_channel = [am["nimages"] for am in cam_acq_modes]
 
-                    ii_acquired = 0
-                    iz = 0
-                    ic = 0
-                    iparam = 0
-                    ipatt = 0
-                    it = 0
-                    for icount in range(ncam_pics):
+                    for ii_acquired in range(ncam_pics):
+                        # wait for camera to get picture
                         while mmc.getRemainingImageCount() == 0:
-                            tnow = time.perf_counter() - tstart_acq
-
-                            if tnow > timeout:
+                            if (time.perf_counter() - tstart_acq) > timeout:
                                 print("timeout reached......................")
                                 break
 
@@ -1280,54 +1286,17 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         if npics == 0:
                             break
 
+                        # get index to assign picture
+                        inds = (pp,) + single_index2multi(ii_acquired, npatterns_channel)
+                        _, it, iparam, iz, ic, ipatt = inds
                         dsets[ic][pp, it, iz, iparam, ipatt] = mmc.popNextImage()
 
-                        # indexing logic. We acquire images (from slow to fast) time, parameters, z-position, channel, pattern
-                        ii_acquired += 1
-
-                        if ipatt != (cam_acq_modes[ic]["nimages"] - 1):
-                            # increment pattern everytime
-                            ipatt += 1
-                        else:
-                            ipatt = 0
-
-                            elapsed_time = time.perf_counter() - tstart_full_sequence
-                            elapsed_time_min = int(elapsed_time // 60)
-
-                            # print in threadsafe way
-                            with lock:
-                                print(
-                                    f"{desc:s} image {ii_acquired:d}/{ncam_pics:d}, "
-                                    f" position {pp + 1:d}/{nxy_positions:d},"                                    
-                                    f" time {it + 1:d}/{ntimes:d},"
-                                    f" param {iparam + 1:d}/{nparams:d},"
-                                    f" z-step {iz + 1:d}/{nz:d},"
-                                    f" channels {ic + 1:d}/{ncam_channels:d},"                                                                                                                                            
-                                    f" images in buffer = {npics - 1:d},"
-                                    f" compare multi = {(it, iparam, iz, ic, ipatt)}, "
-                                    f" multi index = {single_index2multi(ii_acquired, npatterns_channel)},"
-                                    f" elapsed time = {elapsed_time_min:02d}m:{elapsed_time - elapsed_time_min * 60:.1f}s")
-
-                            # increment channel after pattern
-                            if ic != (ncam_channels - 1):
-                                ic += 1
-                            else:
-                                ic = 0
-
-                                # increment z after channels
-                                if iz != (nz - 1):
-                                    iz += 1
-                                else:
-                                    iz = 0
-                                    # increment parameters
-                                    if iparam != (nparams - 1):
-                                        iparam += 1
-                                    else:
-                                        iparam = 0
-
-                                        # increment time
-                                        if it != (ntimes - 1):
-                                            it += 1
+                        # print in threadsafe way
+                        if ipatt == 0:
+                            with self.print_lock:
+                                print(f"{desc:s} image {ii_acquired + 1:d}/{ncam_pics:d}, "
+                                      f" (position, time, param, z, chann, patt) = {inds}/{(nxy_positions, ntimes, nparams, nz, ncam_channels, 0)},"                                
+                                      f" elapsed time = {parse_time(time.perf_counter() - tstart_full_sequence)[1]}")
 
                     return ii_acquired
 
@@ -1378,18 +1347,16 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     def print_time(tstart, timeout, sleeptime=0.1):
                         t_elapsed_now = time.perf_counter() - tstart
 
-                        timeout_min = int(timeout // 60)
-
                         while t_elapsed_now < timeout:
                             if self.cancel_sequence:
                                 break
 
-                            elapsed_time_min = int(t_elapsed_now // 60)
+                            with self.print_lock:
+                                print(f"elapsed time = "
+                                      f"{parse_time(t_elapsed_now)[1]:s}/"
+                                      f"{parse_time(timeout)[1]:s}",
+                                      end="\r")
 
-                            print(f"elapsed time = "
-                                  f"{elapsed_time_min:02d}m:{t_elapsed_now - elapsed_time_min * 60.:.1f}s/"
-                                  f"{timeout_min:02d}m:{timeout - timeout_min * 60:.1f}s",
-                                  end="\r")
                             time.sleep(sleeptime)
                             t_elapsed_now = time.perf_counter() - tstart
 
@@ -1433,7 +1400,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     mmc2.stopSequenceAcquisition()
 
                 # wait for pictures to be stored to disk
-                # if cancel is selected these threads need to detect it and end otherwise program will hang until timeout
+                # threads should stop themselves if self.cancel() = True
                 thread_save_cam1.join()
                 thread_save_cam2.join()
 
@@ -1468,6 +1435,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                             mmc2.destroy_cine(1)
                         except Exception as e:
                             print(e)
+
+            return
 
             # after all positions have run, set z-position back to start
             self.daq.set_analog_lines_by_name([z_volts_start], ["z_stage"])
