@@ -228,15 +228,23 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
     def set_cfg(self):
         defaults = self.configuration["sim_odt_program_defaults"]
 
-        # default value for exposure times
-        self.odt_exposure_SpinBox.setValue(float(defaults["odt_exposure_ms"]))
-        self.sim_exposure_SpinBox.setValue(float(defaults["sim_exposure_ms"]))
-        self.odt_frametime_SpinBox.setValue(float(defaults["odt_frametime_ms"]))
-        self.daq_dt_doubleSpinBox.setValue(int(defaults["daq_dt_us"]))
-        self.sim_warmup_doubleSpinBox.setValue(float(defaults["sim_warmup_time_ms"]))
-        self.odt_warmup_doubleSpinBox.setValue(float(defaults["odt_warmup_time_ms"]))
-        self.shutter_delay_doubleSpinBox.setValue(float(defaults["shutter_delay_ms"]))
-        self.sim_readout_doubleSpinBox.setValue(float(defaults["sim_readout_time_ms"]))
+        names = {"odt_exposure_ms": self.odt_exposure_SpinBox,
+                 "sim_exposure_ms": self.sim_exposure_SpinBox,
+                 "odt_frametime_ms": self.odt_frametime_SpinBox,
+                 "daq_dt_us": self.daq_dt_doubleSpinBox,
+                 "sim_warmup_time_ms": self.sim_warmup_doubleSpinBox,
+                 "odt_warmup_time_ms": self.odt_warmup_doubleSpinBox,
+                 "shutter_delay_ms": self.shutter_delay_doubleSpinBox,
+                 "sim_readout_time_ms": self.sim_readout_doubleSpinBox,
+                 "stage_delay_ms": self.stage_delay_doubleSpinBox
+                 }
+
+        # set default values
+        for k, v in names.items():
+            try:
+                v.setValue(float(defaults[k]))
+            except KeyError as e:
+                print(e)
 
     def _set_enabled(self, enabled: bool):
         self.save_groupBox.setEnabled(enabled)
@@ -471,6 +479,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ###########################################
         # grab information from GUI
         # ###########################################
+        axis_list = ["position", "time", "z", "parameters", "pattern", "y", "x"]
+        axis_acquisition_order = ['position', 'time', 'parameter', 'z', 'channel', 'pattern']
+
         gui_settings = {"quiet_fan": self.fan_checkBox.isChecked(),
                         "fan_delay_s": self.fan_wait_doubleSpinBox.value(),
                         "saving": self.save_groupBox.isChecked(),
@@ -758,36 +769,33 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         else:
             mmc2 = self.phcam
 
-            # set up cine: only need one
-            mmc2.set_cines(1)
-
-            # this also seems to clear CSR, so do CSR
             try:
-                mmc2.set_black_reference()
-            except Exception as e:
-                print(e)
+                # set up cine: only need one
+                mmc2.set_cines(1)
+                # setting cine also seems to clear CSR, so do CSR
+                try:
+                    mmc2.set_black_reference()
+                except Exception as e:
+                    # catch b'Current session Reference was done in camera'
+                    print(f"during camera CSR:\n{e}")
 
-            # get current parameters
-            cine_no = 1 # cine indexing starts at 1
-            params = mmc2.get_params(cine_no)
-            try:
+                # get current parameters
+                cine_no = 1 # cine indexing starts at 1
+                params = mmc2.get_params(cine_no)
+
                 params_out = mmc2.setAcqParams(cine_no=cine_no,
                                                Exposure=int(np.round(gui_settings["exposure_tms_odt"] * 1e6)), # in ns
-                                               dFrameRate=50., # need fps to be a little bit slower ... can set to 50
+                                               dFrameRate=50., # need fps to be a bit slower ... can set to 50
                                                SyncImaging=phc.SYNC_EXTERNAL,
                                                PTFrames=params.ImCount # post-trigger frames
                                                )
             except Exception as e:
-                print(e)
+                print(f"During cine preparation:\n{e}")
                 return
 
         # get size and ROI
-        nx_cam2 = mmc2.getImageWidth()
-        ny_cam2 = mmc2.getImageHeight()
-
-        # get ROI
-        nx_start, ny_start, nx_size, ny_size = mmc2.getROI()
-        cam2_roi = [ny_start, ny_start + ny_size, nx_start, nx_start + nx_size]
+        nx_start, ny_start, nx_cam2, ny_cam2 = mmc2.getROI()
+        cam2_roi = [ny_start, ny_start + ny_cam2, nx_start, nx_start + nx_cam2]
 
         # ##################################
         # get SIM camera and set properties
@@ -801,17 +809,14 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         mmc1.setProperty(cam1, "TRIGGER SOURCE", "EXTERNAL")
         mmc1.setProperty(cam1, "TriggerPolarity", "POSITIVE")
 
-        # set output signal
+        # set output signals
         # line 1 trigger ready
-        ## mmc.setProperty(odt_cam, "OUTPUT TRIGGER KIND[0]", "TRIGGER READY")
         mmc1.setProperty(cam1, "OUTPUT TRIGGER KIND[0]", "EXPOSURE")
         mmc1.setProperty(cam1, "OUTPUT TRIGGER POLARITY[0]", "POSITIVE")
         # line 2 at end of readout
         mmc1.setProperty(cam1, "OUTPUT TRIGGER DELAY[1]", "0.0000")
         mmc1.setProperty(cam1, "OUTPUT TRIGGER KIND[1]", "EXPOSURE")
-        # mmc1.setProperty(sim_cam, "OUTPUT TRIGGER PERIOD[1]", "0.001")
         mmc1.setProperty(cam1, "OUTPUT TRIGGER POLARITY[1]", "POSITIVE")
-        # mmc1.setProperty(sim_cam, "OUTPUT TRIGGER SOURCE[1]", "READOUT END")
         # line 3 at start of readout
         mmc1.setProperty(cam1, "OUTPUT TRIGGER DELAY[2]", "0.0000")
         mmc1.setProperty(cam1, "OUTPUT TRIGGER KIND[2]", "PROGRAMABLE")
@@ -825,6 +830,12 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         nx1_start, ny1_start, nx1_size, ny1_size = mmc1.getROI()
         cam1_roi = [ny1_start, ny1_start + ny1_size, nx1_start, nx1_start + nx1_size]
 
+        # todo: think I can remove the getImageWidth() calls in-favor of getROI()?
+        if nx_cam1 != nx1_size:
+            print(f"nx_cam1= {nx_cam1:d} but nx1_size={nx1_size:d}")
+        if ny_cam1 != ny1_size:
+            print(f"ny_cam1= {ny_cam1:d} but ny1_size={ny1_size:d}")
+
         # set circular buffer
         mmc1.setCircularBufferMemoryFootprint(gui_settings["sim_circ_buffer_mb"])
 
@@ -836,7 +847,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         if all_modes_odt:
             gui_settings["odt_warmup_time_ms"] = 0
-            print("set odt_warmup_time_ms=0")
+            print(f"set odt_warmup_time_ms={gui_settings['odt_warmup_time_ms']:.3f}s")
 
         try:
             digital_program, analog_program, daq_programming_info = \
@@ -855,6 +866,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                      sim_stabilize_t=gui_settings["sim_warmup_time_ms"] * 1e-3,
                                      shutter_delay_time=gui_settings["shutter_delay_time_ms"] * 1e-3,
                                      sim_readout_time=gui_settings["sim_readout_time_ms"] * 1e-3,
+                                     n_xy_positions=nxy_positions,
+                                     stage_delay_time=gui_settings["stage_delay_ms"] * 1e-3,
                                      z_voltages=z_volts,
                                      use_dmd_as_odt_shutter=False,
                                      n_digital_ch=self.daq.n_digital_lines,
@@ -869,20 +882,17 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 digital_program[:, self.daq.digital_line_names["odt_shutter"]] = 1
 
         except Exception as e:
-            print(e)
+            print(f"exception while generating DAQ program:\n{e}")
             return
 
         # ##################################
         # create zarr
         # ##################################
+        img_data = zarr.open(save_path, mode="w")
+        img_data.attrs["save_directory"] = str(save_path)
         if save_path is not None:
-            img_data = zarr.open(save_path, mode="w")
-            img_data.attrs["save_directory"] = str(save_path)
-
             self.img_data = zarr.open(save_path, mode="r")
         else:
-            img_data = zarr.open(mode="w")
-
             self.img_data = img_data
 
         # other metadata
@@ -893,6 +903,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         img_data.attrs["dz_um"] = dz
         img_data.attrs["z_calibration_um_per_v"] = calibration_um_per_v
         img_data.attrs["interval_ms"] = interval_ms
+        img_data.attrs["axis_acquisition_order"] = axis_acquisition_order
 
         # make parameter dictionary json serializable
         try:
@@ -900,7 +911,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             for k, v in param_dict_list.items():
                 param_dict_list[k] = param_dict_list[k].tolist()
             img_data.attrs["parameter_scan_dictionary"] = param_dict_list
-        except:
+        except Exception as e:
+            print(e)
             img_data.attrs["parameter_scan_dictionary"] = None
 
         img_data.attrs["gui_settings"] = gui_settings
@@ -923,8 +935,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             img_data.attrs["configuration"] = None
             img_data.attrs["affine_cam2_roi_to_cam1"] = None
 
-        axis_list = ["position", "time", "z", "parameters", "pattern", "y", "x"]
-
         # ###################################
         # group for camera # 1
         # ###################################
@@ -935,20 +945,21 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         g1.attrs["camera_roi"] = cam1_roi
         g1.attrs["na_detection"] = self.configuration["camera_settings_1"]["na_detection"]
 
-        try:
-            g1.attrs["dx_um"] = self.configuration["camera_settings_1"]["dxy"]
-            g1.attrs["dy_um"] = self.configuration["camera_settings_1"]["dxy"]
-        except (ValueError, TypeError) as e:
-            print(e)
-            g1.attrs["dx_um"] = None
-            g1.attrs["dy_um"] = None
+        g1_params = {"dx_um": "dxy",
+                     "dy_um": "dxy",
+                     "otf_model_parameters": "otf_calibration"}
+        for k, v in g1_params.items():
+            try:
+                g1.attrs[k] = self.configuration["camera_settings_1"][v]
+            except (KeyError, TypeError) as e:
+                g1.attrs[k] = None
 
-        # OTF
-        try:
-            g1.attrs["otf_model_parameters"] = self.configuration["camera_settings_1"]["otf_calibration"]["fit_params"]
-        except (KeyError, TypeError) as e:
-            print(e)
-            g1.attrs["otf_model_parameters"] = None
+        # # OTF
+        # try:
+        #     g1.attrs["otf_model_parameters"] = self.configuration["camera_settings_1"]["otf_calibration"]["fit_params"]
+        # except (KeyError, TypeError) as e:
+        #     print(e)
+        #     g1.attrs["otf_model_parameters"] = None
 
         # affine transformation information for specific channels we are using
         try:
@@ -983,13 +994,15 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             ds = g1.create_dataset(name_final,
                                    shape=(nxy_positions, ntimes, nz, nparams, am["nimages"], ny_cam1, nx_cam1),
                                    chunks=(1, 1, 1, 1, 1, ny_cam1, nx_cam1),
-                                   dtype="uint16", compressor="none")
+                                   dtype="uint16",
+                                   compressor="none")
             ds.attrs["acquisition_mode"] = am
             ds.attrs["dimensions"] = axis_list
             ds.attrs["channels"] = [am["channel"]]
 
             # sim pattern information for specific channels we are using
-            sim_pattern_dat = dlp6500.get_preset_info(self.dmd.presets[am["channel"]][am["patterns"]], self.dmd.firmware_pattern_info)[0]
+            sim_pattern_dat = dlp6500.get_preset_info(self.dmd.presets[am["channel"]][am["patterns"]],
+                                                      self.dmd.firmware_pattern_info)[0]
 
             try:
                 ds.attrs["nangles"] = sim_pattern_dat["nangles"][0]
@@ -1006,31 +1019,25 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ###################################
         # group for camera #2
         # ###################################
-        if cam_is_phantom:
-            cam2_settings_name = "camera_settings_phantom"
-        else:
-            cam2_settings_name = "camera_settings_2"
-
         g2 = img_data.create_group("cam2")
         g2.attrs["channels"] = cam2_acq_modes
         g2.attrs["camera_roi"] = cam2_roi
         g2.attrs["exposure_time_ms"] = gui_settings["exposure_tms_odt"]
 
-        try:
-            g2.attrs["dx_um"] = self.configuration[cam2_settings_name]["dxy"]
-            g2.attrs["dy_um"] = self.configuration[cam2_settings_name]["dxy"]
-            g2.attrs["na_excitation"] = self.configuration[cam2_settings_name]["na_excitation"]
-            g2.attrs["na_detection"] = self.configuration[cam2_settings_name]["na_detection"]
-        except (KeyError, TypeError) as e:
-            print(e)
-            g2.attrs["dx_um"] = None
-            g2.attrs["dy_um"] = None
-            g2.attrs["na_excitation"] = None
-            g2.attrs["na_detection"] = None
+        cam2_settings_name = "camera_settings_phantom" if cam_is_phantom else "camera_settings_2"
+        g2_params = {"dx_um": "dxy",
+                     "dy_um": "dxy",
+                     "na_excitation": "na_excitation",
+                     "na_detection": "na_detection"}
+
+        for k, v in g2_params.items():
+            try:
+                g2.attrs[k] = self.configuration[cam2_settings_name][v]
+            except (KeyError, TypeError) as e:
+                g2.attrs[k] = None
 
         if cam_is_phantom:
             params_save = phc.struct2dict(params_out)
-
             # convert byte fields to string to serialize in zarr
             for k, v in params_save.items():
                 if isinstance(v, bytes):
@@ -1044,8 +1051,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ###################################
         cam2_dsets = []
         for am in cam2_acq_modes:
-            # chan, patt, pmode, np_now = mode
-
             if am["channel"] == "odt":
                 name = am["channel"]
             else:
@@ -1064,16 +1069,12 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                    chunks=(1, 1, 1, 1, 1, ny_cam2, nx_cam2),
                                    dtype="uint16",
                                    compressor=numcodecs.Zlib()
-                                   # compressor="none"
                                    )
-            # todo: in testing found the (lossless) zlib compressor works well ... speeds up saving ... maybe should use this?
-            #  alternatively see 2023_07_27_convert_cine.py for example of saving as 12bit packed
 
             ds.attrs["dimensions"] = axis_list
             ds.attrs["channels"] = [am["channel"]]
-
             if am["channel"] == "odt":
-                ds.attrs["wavelength_um"] = 0.785
+                ds.attrs["wavelength_um"] = 0.785  # todo: put in config file
                 ds.attrs["volume_time_ms"] = gui_settings["min_odt_frame_time_ms"] * am["npatterns"]  # todo: correct this
 
                 odt_firmware_data = self.dmd.presets[am["channel"]][am["patterns"]]
@@ -1088,11 +1089,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 ds.attrs["spot_frqs_mirrors"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["spot_frqs_mirrors"]).tolist()
                 ds.attrs["carrier_frq"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["carrier frequency"]).tolist()
                 ds.attrs["radius"] = dmd_pattern_data[odt_firmware_inds[0]]["radius"]
-
             else:
                 # sim pattern information for specific channels we are using
-                sim_pattern_dat = dlp6500.get_preset_info(self.dmd.presets[am["channel"]][am["patterns"]], self.dmd.firmware_pattern_info)[0]
-
+                sim_pattern_dat = dlp6500.get_preset_info(self.dmd.presets[am["channel"]][am["patterns"]],
+                                                          self.dmd.firmware_pattern_info)[0]
                 try:
                     ds.attrs["nangles"] = sim_pattern_dat["nangles"][0]
                     ds.attrs["nphases"] = sim_pattern_dat["nphases"][0]
@@ -1127,7 +1127,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         img_data.daq.attrs["dt"] = gui_settings["dt"]
 
-
         # ##################################
         # loop over positions and collect data
         # ##################################
@@ -1147,8 +1146,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         print(f"program expected time = {parse_time(pgm_time_s)[1]:s},"
               f" timeout per position = {parse_time(timeout)[1]:s}")
 
-
-        order = ['position', 'time', 'parameter', 'z', 'channel', 'pattern']
         def single_index2multi(ii, npatterns_channel):
             # order from slowest to fastest: ['time', 'parameters', 'z', 'channel', 'pattern']
             npatterns_all_channels = np.sum(npatterns_channel)
