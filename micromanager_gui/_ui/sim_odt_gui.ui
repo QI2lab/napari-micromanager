@@ -118,7 +118,7 @@
       <property name="geometry">
        <rect>
         <x>0</x>
-        <y>0</y>
+        <y>-337</y>
         <width>482</width>
         <height>1247</height>
        </rect>
@@ -606,6 +606,19 @@
           </property>
           <property name="text">
            <string>Add</string>
+          </property>
+         </widget>
+         <widget class="QCheckBox" name="return_checkBox">
+          <property name="geometry">
+           <rect>
+            <x>30</x>
+            <y>170</y>
+            <width>191</width>
+            <height>22</height>
+           </rect>
+          </property>
+          <property name="text">
+           <string>Return to initial position</string>
           </property>
          </widget>
         </widget>

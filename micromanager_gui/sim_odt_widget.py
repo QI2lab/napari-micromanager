@@ -127,6 +127,7 @@ class _MultiDUI:
     fan_wait_doubleSpinBox: QtW.QDoubleSpinBox
     cine2zarr_checkBox: QtW.QCheckBox
 
+    return_checkBox: QtW.QCheckBox
 
     # stage group
     stage_groupBox: QtW.QGroupBox
@@ -182,6 +183,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         #
         self.cine2zarr_checkBox.setChecked(True)
+        self.return_checkBox.setChecked(True)
 
         # channel widget
         self.add_ch_Button.clicked.connect(self.add_channel)
@@ -486,6 +488,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         "fan_delay_s": self.fan_wait_doubleSpinBox.value(),
                         "saving": self.save_groupBox.isChecked(),
                         "convert_cine_to_zarr_live": self.cine2zarr_checkBox.isChecked(),
+                        "return_to_start_position": self.return_checkBox.isChecked(),
                         "exposure_tms_sim": self.sim_exposure_SpinBox.value(),
                         "exposure_tms_odt": self.odt_exposure_SpinBox.value(),
                         "min_odt_frame_time_ms": self.odt_frametime_SpinBox.value(),
@@ -1113,86 +1116,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                 compressor="none")
         g_daq.analog_input.attrs["dimensions"] = ["position", "time/z", "analog channel"]
 
-        # ##################################
-        # program DMD
-        # ##################################
-        # make sure DMD advance/enable trigger lines are low before we program the DMD
-        self.daq.set_digital_lines_by_name(np.array([0, 0, 0, 0], dtype=np.uint8),
-                                           ["dmd_enable",
-                                            "dmd_advance",
-                                            "odt_cam_sync",
-                                            "camera_trigger_monitor"])
-
-        # pre-warm the ODT laser/shutter if using ODT
-        if any_mode_odt:
-            self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
-                                               ["odt_laser",
-                                                "odt_shutter"])
-
-        # program DMD
-        blank = [False if am["channel"] == "odt" or am["pattern_mode"] == "average" else True for am in acq_modes]
-        noff_after = [1 if am["pattern_mode"] == "average" else 0 for am in acq_modes]
-        dmd_modes = [am["patterns"] if am["channel"] == "odt" else "default" for am in acq_modes]
-        dmd_channels = [am["channel"] for am in acq_modes]
-
-        pic_inds, bit_inds = self.dmd.program_dmd_seq(dmd_modes,
-                                                      dmd_channels,
-                                                      nrepeats=1,
-                                                      noff_before=0,
-                                                      noff_after=noff_after,
-                                                      blank=blank,
-                                                      mode_pattern_indices=None,
-                                                      triggered=True,
-                                                      verbose=False)
-
-        # store DMD program information
-        g_dmd = img_data.create_group("dmd_data")
-        g_dmd.attrs["dmd_nx"] = self.dmd.width
-        g_dmd.attrs["dmd_ny"] = self.dmd.height
-        g_dmd.attrs["dmd_pitch_um"] = self.dmd.pitch
-        g_dmd.attrs["firmware_info"] = self.dmd.get_firmware_type()
-        ds = g_dmd.array("dmd_program",
-                         np.vstack((pic_inds, bit_inds)),
-                         dtype='int16',
-                         compressor='none')
-        ds.attrs["dimensions"] = ["pattern", "time"]
-
-        if self.dmd.firmware_patterns is not None:
-            ds = g_dmd.array("firmware_patterns",
-                             self.dmd.firmware_patterns.astype(bool),
-                             compressor=numcodecs.packbits.PackBits(),
-                             dtype=bool,
-                             chunks=(1, self.dmd.height, self.dmd.width))
-            ds.attrs["picture_indices"] = self.dmd.picture_indices.tolist()
-            ds.attrs["bit_indices"] = self.dmd.bit_indices.tolist()
-
-        # ##################################
-        # trigger camera twice, required for Phantom camera
-        # ##################################
-        if cam_is_phantom:
-            if gui_settings["quiet_fan"]:
-                mmc2.quiet_fan(True)
-
-                tstart_quiet = time.perf_counter()
-                tquiet_now = time.perf_counter() - tstart_quiet
-                while tquiet_now < gui_settings["fan_delay_s"]:
-                    print(f"quieting fan and waiting {tquiet_now:.0f}s/{gui_settings['fan_delay_s']:.0f}:s",
-                          end="\r")
-                    time.sleep(0.5)
-                    tquiet_now = time.perf_counter() - tstart_quiet
-
-            mmc2.record_cine(cine_no)
-
-            # seems to be necessary but not clear why
-            self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam_sync"])
-            time.sleep(0.1)
-            self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_sync"])
-            time.sleep(0.1)
-            self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam_sync"])
-            time.sleep(0.1)
-            self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_sync"])
-            time.sleep(0.1)
-
         # total number of pictures for cameras per position
         n_cam1_pics = ntimes * nxy_positions * nparams * nz * int(np.sum([am["nimages"] for am in cam1_acq_modes]))
         n_cam2_pics = ntimes * nxy_positions * nparams * nz * int(np.sum([am["nimages"] for am in cam2_acq_modes]))
@@ -1222,6 +1145,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             ncam_channels = len(cam_acq_modes)
             npatterns_channel = [am["nimages"] for am in cam_acq_modes]
 
+            ii_acquired = None
             for ii_acquired in range(ncam_pics):
                 # wait for camera to get picture
                 while mmc.getRemainingImageCount() == 0:
@@ -1272,6 +1196,91 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             return
 
         def run():
+            # ##################################
+            # program DMD
+            # ##################################
+            # make sure DMD advance/enable trigger lines are low before we program the DMD
+            self.daq.set_digital_lines_by_name(np.array([0, 0, 0, 0], dtype=np.uint8),
+                                               ["dmd_enable",
+                                                "dmd_advance",
+                                                "odt_cam_sync",
+                                                "camera_trigger_monitor"])
+
+            # pre-warm the ODT laser/shutter if using ODT
+            if any_mode_odt:
+                self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
+                                                   ["odt_laser",
+                                                    "odt_shutter"])
+
+            # program DMD
+            blank = [False if am["channel"] == "odt" or am["pattern_mode"] == "average" else True for am in acq_modes]
+            noff_after = [1 if am["pattern_mode"] == "average" else 0 for am in acq_modes]
+            dmd_modes = [am["patterns"] if am["channel"] == "odt" else "default" for am in acq_modes]
+            dmd_channels = [am["channel"] for am in acq_modes]
+
+            with self.print_lock:
+                tstart_program_dmd = time.perf_counter()
+                print("programming DMD ...", end="\r")
+            pic_inds, bit_inds = self.dmd.program_dmd_seq(dmd_modes,
+                                                          dmd_channels,
+                                                          nrepeats=1,
+                                                          noff_before=0,
+                                                          noff_after=noff_after,
+                                                          blank=blank,
+                                                          mode_pattern_indices=None,
+                                                          triggered=True,
+                                                          verbose=False)
+            with self.print_lock:
+                print(f"programmed DMD in {time.perf_counter() - tstart_program_dmd:.2f}s")
+
+            # store DMD program information
+            g_dmd = img_data.create_group("dmd_data")
+            g_dmd.attrs["dmd_nx"] = self.dmd.width
+            g_dmd.attrs["dmd_ny"] = self.dmd.height
+            g_dmd.attrs["dmd_pitch_um"] = self.dmd.pitch
+            g_dmd.attrs["firmware_info"] = self.dmd.get_firmware_type()
+            ds = g_dmd.array("dmd_program",
+                             np.vstack((pic_inds, bit_inds)),
+                             dtype='int16',
+                             compressor='none')
+            ds.attrs["dimensions"] = ["pattern", "time"]
+
+            if self.dmd.firmware_patterns is not None:
+                ds = g_dmd.array("firmware_patterns",
+                                 self.dmd.firmware_patterns.astype(bool),
+                                 compressor=numcodecs.packbits.PackBits(),
+                                 dtype=bool,
+                                 chunks=(1, self.dmd.height, self.dmd.width))
+                ds.attrs["picture_indices"] = self.dmd.picture_indices.tolist()
+                ds.attrs["bit_indices"] = self.dmd.bit_indices.tolist()
+
+            # ##################################
+            # trigger camera twice, required for Phantom camera
+            # ##################################
+            if cam_is_phantom:
+                if gui_settings["quiet_fan"]:
+                    mmc2.quiet_fan(True)
+
+                    tstart_quiet = time.perf_counter()
+                    tquiet_now = time.perf_counter() - tstart_quiet
+                    while tquiet_now < gui_settings["fan_delay_s"]:
+                        print(f"quieting fan and waiting {tquiet_now:.0f}s/{gui_settings['fan_delay_s']:.0f}:s",
+                              end="\r")
+                        time.sleep(0.5)
+                        tquiet_now = time.perf_counter() - tstart_quiet
+
+                mmc2.record_cine(cine_no)
+
+                # seems to be necessary but not clear why
+                self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam_sync"])
+                time.sleep(0.1)
+                self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_sync"])
+                time.sleep(0.1)
+                self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam_sync"])
+                time.sleep(0.1)
+                self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_sync"])
+                time.sleep(0.1)
+
             # ##################################
             # prepare acquisition
             # ##################################
@@ -1356,6 +1365,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         time.sleep(np.min([1, t_remaining_lapse]))
                         t_remaining_lapse = iteration_time - (time.perf_counter() - tstart_time)
 
+            # optionally return stage to start position
+            if gui_settings["return_to_start_position"] and do_xy_scan:
+                mmc1.setXYPosition(xy_positions[0][0], xy_positions[0][1])
+
             # ##############################
             # clean-up after sequence finishes
             # ##############################
@@ -1390,7 +1403,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     fname_cine = save_path.parent / "ph_odt.cine"
 
                     tstart_ph_save = time.perf_counter()
-                    print("saving cine to disk...")
+                    print("saving cine to disk...", end="\r")
                     try:
                         mmc2.save_cine(cine_no,
                                        fname_cine,
@@ -1453,7 +1466,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 params_out = mmc2.setAcqParams(cine_no=0,
                                                SyncImaging=phc.SYNC_INTERNAL,
                                                )
-            print("sequence finished!")
+
+            with self.print_lock:
+                print("sequence finished!")
+
             return
 
         thread_run = threading.Thread(target=run)
