@@ -763,6 +763,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             try:
                 # set up cine: only need one
+                cine_no = 1  # cine indexing starts at 1
                 mmc2.set_cines(1)
                 # setting cine also seems to clear CSR, so do CSR
                 try:
@@ -772,7 +773,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     print(f"during camera CSR:{e}")
 
                 # get current parameters
-                cine_no = 1 # cine indexing starts at 1
                 params = mmc2.get_params(cine_no)
 
                 params_out = mmc2.setAcqParams(cine_no=cine_no,
@@ -827,10 +827,13 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ##################################
         # odt stabilize time
         all_modes_odt = np.all([am["channel"] == "odt" for am in acq_modes])
+        if not do_xy_scan:
+            gui_settings["stage_delay_ms"] = 0.
+            print(f"Only one position present, so set stage delay = {gui_settings['stage_delay_ms']:.3f}ms")
 
         if all_modes_odt:
             gui_settings["odt_warmup_time_ms"] = 0
-            print(f"set odt_warmup_time_ms={gui_settings['odt_warmup_time_ms']:.3f}s")
+            print(f"set odt warmup time={gui_settings['odt_warmup_time_ms']:.3f}ms")
 
         try:
             digital_program, analog_program, daq_programming_info = \
@@ -1257,6 +1260,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             # ##################################
             # trigger camera twice, required for Phantom camera
             # ##################################
+            with self.print_lock:
+                print("warmup and prepare sequence")
+
             if cam_is_phantom:
                 if gui_settings["quiet_fan"]:
                     mmc2.quiet_fan(True)
@@ -1399,7 +1405,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
                 if cam2_acq_modes != [] and gui_settings["saving"]:
                     # todo: is it possible to grab pictures as they come in on the phantom?
-                    #  So far wait until done recording to grab them
                     fname_cine = save_path.parent / "ph_odt.cine"
 
                     tstart_ph_save = time.perf_counter()
@@ -1411,8 +1416,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                        img_count=n_cam2_pics,
                                        file_type="cine raw")
                     except Exception as e:
-                        # todo: understand why sometimes get exceptions. Particularly in multiposition runs
-                        # todo: the second position sometimes doesnt exist
                         print(f"while saving cine: {e}")
 
                     print(f"saved ODT to disk in {time.perf_counter() - tstart_ph_save:.2f}s")
@@ -1477,7 +1480,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         return
 
-
     def _on_cancel_clicked(self):
         self.cancel_sequence = True
 
@@ -1519,11 +1521,14 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                     img_to_show = da.from_zarr(arr)
 
                     dxy = g.attrs["dx_um"]
-                    dz = self.img_data.attrs["dz_um"]
+                    dz = img_data.attrs["dz_um"]
                     if dz != 0:
                         z_scale = dz / dxy
                     else:
                         z_scale = 1.
+
+                    dim_names = arr.attrs["dimensions"]
+                    scale = [z_scale if d == "z" else 1. for d in dim_names]
 
                     # try to update layer. If it doesn't exist, add it
                     try:
@@ -1531,17 +1536,17 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         preview_layer.data = img_to_show
                         preview_layer.scale[-5] = z_scale
 
-
                     except KeyError:
-                        # clims_low = [np.percentile(im, 1) for im in img_data.sim[0, 0, 0, 0, :, 0]]
-                        # clims_high = [np.percentile(im, 99) for im in img_data.sim[0, 0, 0, 0, :, 0]]
-
                         # catch errors in case zarr attr does not exist yet
                         try:
                             cmap = cmap_dict[arr.attrs["channels"][0]]
-                            self.viewer.add_image(img_to_show, name=layer_name, colormap=cmap,
-                                                  scale=(1., 1., z_scale, 1., 1., 1., 1.))
-                            self.viewer.dims.axis_labels = arr.attrs["dimensions"]
+
+                            self.viewer.add_image(img_to_show,
+                                                  name=layer_name,
+                                                  colormap=cmap,
+                                                  scale=scale)
+
+                            self.viewer.dims.axis_labels = dim_names
 
                         except Exception as e:
                             print(f"while plotting channels: {e}")
