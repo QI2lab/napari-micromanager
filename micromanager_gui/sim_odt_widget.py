@@ -1078,11 +1078,14 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 dmd_pattern_data = self.dmd.firmware_pattern_info
 
                 # set odt dataset metadata
-                ds.attrs["offsets"] = [np.array(dmd_pattern_data[ii]["offsets"]).tolist() for ii in odt_firmware_inds]
-                ds.attrs["drs"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["drs"]).tolist()
-                ds.attrs["spot_frqs_mirrors"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["spot_frqs_mirrors"]).tolist()
-                ds.attrs["carrier_frq"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["carrier frequency"]).tolist()
-                ds.attrs["radius"] = dmd_pattern_data[odt_firmware_inds[0]]["radius"]
+                try:
+                    ds.attrs["offsets"] = [np.array(dmd_pattern_data[ii]["offsets"]).tolist() for ii in odt_firmware_inds]
+                    ds.attrs["drs"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["drs"]).tolist()
+                    ds.attrs["spot_frqs_mirrors"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["spot_frqs_mirrors"]).tolist()
+                    ds.attrs["carrier_frq"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["carrier frequency"]).tolist()
+                    ds.attrs["radius"] = dmd_pattern_data[odt_firmware_inds[0]]["radius"]
+                except KeyError as e:
+                    print(f"while writing cam2 pattern parameters: {e}")
             else:
                 # sim pattern information for specific channels we are using
                 sim_pattern_dat = dlp6500.get_preset_info(self.dmd.presets[am["channel"]][am["patterns"]],
@@ -1195,6 +1198,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
                 time.sleep(sleeptime)
                 t_elapsed_now = time.perf_counter() - tstart
+
+            with self.print_lock:
+                print("")
 
             return
 
