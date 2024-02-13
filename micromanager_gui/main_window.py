@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from pymmcore_plus.mda import PMDAEngine
 
 # dmd and daq control
+import warnings
 import threading
 from PIL import Image
 import json
@@ -39,11 +40,13 @@ import re
 from mcsim.expt_ctrl import dlp6500, daq, phantom_cam
 import mcsim.analysis.analysis_tools as mctools
 from mcsim.analysis.sim_reconstruction import fit_modulation_frq
+from mcsim.analysis.fft import ft2, ift2
+from mcsim.analysis.optimize import to_cpu
 from localize_psf import fit
 from numpy import fft
 from scipy.signal.windows import hann
 from scipy.ndimage import maximum_filter, minimum_filter
-from skimage.restoration import unwrap_phase
+# from skimage.restoration import unwrap_phase
 
 _cupy_available = True
 try:
@@ -267,7 +270,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.channel_comboBox.currentTextChanged.connect(self._refresh_mode_options)
         self.set_channel_Button.clicked.connect(self.set_channel_and_mode)
         # self.set_channel_Button.clicked.connect(self._on_channel_changed)  # update daq display also
-        self.pattern_time_SpinBox.setValue(0.105) # DMD pattern time
+        self.pattern_time_SpinBox.setValue(0.105)  # DMD pattern time
 
         #  image processing
         proc_modes = ["normal", "fft", "hologram"]
@@ -313,7 +316,6 @@ class MainWindow(QtW.QWidget, _MainUI):
                                                      self.phcam,
                                                      configuration=self.cfg_data)
         self.tabWidget.addTab(self.peak_tracker_widget, "Peak Tracker")
-
 
     def _show_prop_browser(self):
         mode = self.configuration_selector_comboBox.currentText()
@@ -509,7 +511,7 @@ class MainWindow(QtW.QWidget, _MainUI):
             try:
                 modes = list(self.dmd.presets[chan].keys())
                 self.mode_comboBox.addItems(modes)
-                self.mode_comboBox.setCurrentText("default") # note: modes are required to have a mode named "default"
+                self.mode_comboBox.setCurrentText("default")  # note: modes are required to have a mode named "default"
             except KeyError:
                 pass
 
@@ -565,7 +567,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         except RuntimeError as e:
             print(e)
 
-        # todo: for some reason with the MadCity stage doesn't update without this code even though the on_xy_stage_changed signal should be connected...
+        # todo: for some reason with the MadCity stage doesn't update without this code even though the
+        #  on_xy_stage_changed signal should be connected...
         x, y = self._mmc.getXPosition(), self._mmc.getYPosition()
         self._on_xy_stage_position_changed(self._mmc.getXYStageDevice(), x, y)
 
@@ -635,28 +638,20 @@ class MainWindow(QtW.QWidget, _MainUI):
         layers_select = list(self.viewer.layers.selection)
 
         # only scale the visible layer, which is the first layer which is not hidden
-        # todo: this doesn't always work ... how to figure out which layer is "on top"
-        # for l in reversed(self.viewer.layers):
-        #     if l.visible:
-                # get slider position and only scale for the visible slice
-                # channel_dim = 4
-                # current_step = list(self.viewer.dims.current_step[:-2])
-                # current_step.pop(channel_dim)
-
         for l in layers_select:
-                # don't let this code breaking crash the program...
-                try:
-                    # todo: think this only works if don't have scale = dxy set
-                    current_slice = l.world_to_data(self.viewer.dims.current_step)[:-2]
-                    current_slice = tuple([int(c) for c in current_slice])
+            # don't let this code breaking crash the program...
+            try:
+                # todo: think this only works if don't have scale = dxy set
+                current_slice = l.world_to_data(self.viewer.dims.current_step)[:-2]
+                current_slice = tuple([int(c) for c in current_slice])
 
-                    vmin = np.percentile(l.data[tuple(current_slice)].ravel(), min_p)
-                    vmax = np.percentile(l.data[tuple(current_slice)].ravel(), max_p)
+                vmin = np.percentile(l.data[tuple(current_slice)].ravel(), min_p)
+                vmax = np.percentile(l.data[tuple(current_slice)].ravel(), max_p)
 
-                    # converting to float will force dask to compute
-                    l.contrast_limits = (float(vmin), float(vmax))
-                except Exception as e:
-                    print(e)
+                # converting to float will force dask to compute
+                l.contrast_limits = (float(vmin), float(vmax))
+            except Exception as e:
+                print(e)
 
     def update_viewer(self, data=None):
 
@@ -675,37 +670,39 @@ class MainWindow(QtW.QWidget, _MainUI):
         # different layers for different cameras and modes
         cam_name = self._mmc_cam.getCameraDevice()
 
-        use_affine = self.use_affine_xform_checkBox.isChecked() and mode == "normal" and cam_name != self._mmcores[0].getCameraDevice()
+        use_affine = self.use_affine_xform_checkBox.isChecked() and \
+                     mode == "normal" and \
+                     cam_name != self._mmcores[0].getCameraDevice()
 
         if mode == "normal":
             pass
-        elif mode == "fft"or mode == "hologram":
-            wx = np.expand_dims(hann(nx), axis=0)
-            wy = np.expand_dims(hann(ny), axis=1)
-
+        elif mode == "fft" or mode == "hologram":
             if _cupy_available:
-                ft = cp.fft.fftshift(cp.fft.fft2(cp.fft.ifftshift(cp.array(data) * cp.array(wx) * cp.array(wy)))).get()
-                data_ft = np.abs(ft)
-                data_phase = np.angle(ft)
+                xp = cp
             else:
-                ft = fft.fftshift(fft.fft2(fft.ifftshift(data * wx * wy)))
-                data_ft = np.abs(ft)
-                data_phase = np.angle(ft)
+                warnings.warn("CuPy was not available. Install CuPy for fast hologram viewing.")
+                xp = np
 
+            window = xp.outer(xp.asarray(hann(ny)),
+                              xp.asarray(hann(nx)))
+
+            ft = ft2(xp.asarray(data) * window)
+            data_ft = to_cpu(xp.abs(ft))
+            data_phase = to_cpu(xp.angle(ft))
 
             if mode == "hologram":
                 # todo: grab these values from configuration file
                 # todo: could display in some nicer way...but...
                 dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
-                fmax = self.cfg_data["camera_settings_phantom"]["na_detection"] / 0.785
+                fmax = self.cfg_data["camera_settings_phantom"]["na_detection"] / self.cfg_data["excitation_wavelengths"]["odt"]
 
                 # get frequency coordinates
-                fx = fft.fftshift(fft.fftfreq(nx, dxy))
-                fy = fft.fftshift(fft.fftfreq(ny, dxy))
-                fxfx, fyfy = np.meshgrid(fx, fy)
-                ff = np.sqrt(fxfx**2 + fyfy**2)
-                dfx = fx[1] - fx[0]
-                dfy = fy[1] - fy[0]
+                fx = xp.asarray(fft.fftshift(fft.fftfreq(nx, dxy)))
+                fy = xp.asarray(fft.fftshift(fft.fftfreq(ny, dxy)))
+                fxfx, fyfy = xp.meshgrid(fx, fy)
+                ff = xp.sqrt(fxfx**2 + fyfy**2)
+                dfx = float(fx[1] - fx[0])
+                dfy = float(fy[1] - fy[0])
 
                 # convert from pixels in image to real units
                 holo_frq = np.array([dfx * (self.fx_doubleSpinBox.value() - nx // 2),
@@ -714,22 +711,25 @@ class MainWindow(QtW.QWidget, _MainUI):
                 # instead multiply by expected phase ramp
                 ft_xlated = mctools.translate_ft(ft, -holo_frq[0], -holo_frq[1], drs=[dxy, dxy])
                 ft_xlated[ff > fmax] = 0
-                im_holo = fft.fftshift(fft.ifft2(fft.ifftshift(ft_xlated)))
+                im_holo = ift2(ft_xlated)
 
                 # mask
                 threshold = self.threshold_SpinBox.value()
-                mask = np.abs(im_holo) > threshold
+                mask = xp.abs(im_holo) > threshold
 
                 # todo: could also display amplitude data...
-                holo_amp = np.abs(im_holo)
-                # holo_angle = np.angle(im_holo)
-                holo_angle = unwrap_phase(np.angle(im_holo))
+                holo_amp = xp.abs(im_holo)
+                holo_angle = xp.angle(im_holo)
+                # holo_angle = unwrap_phase(xp.angle(im_holo))
+                # holo_angle = phase_unwrap(xp.angle(im_holo))
 
                 # don't show masked parts
                 # add center value back
-                holo_angle -= np.mean(holo_angle[mask])
+                holo_angle -= xp.mean(holo_angle[mask])
                 holo_angle[holo_amp < threshold] = np.nan
 
+                holo_amp = to_cpu(holo_amp)
+                holo_angle = to_cpu(holo_angle)
         else:
             raise ValueError(f"mode must be 'normal', 'fft', or 'hologram' but was '{mode:s}'")
 
@@ -740,7 +740,8 @@ class MainWindow(QtW.QWidget, _MainUI):
             xnow = self._mmc.getXPosition()
             ynow = self._mmc.getYPosition()
             dxy_um = self.cfg_data["camera_settings_1"]["dxy"]
-            translation = [-(self.affine_ref[1] - ynow) / dxy_um, -(self.affine_ref[0] - xnow) / dxy_um]
+            translation = [-(self.affine_ref[1] - ynow) / dxy_um,
+                           -(self.affine_ref[0] - xnow) / dxy_um]
             layer_name += f"x={xnow:.0f}, y={ynow:.0f}"
         else:
             translation = [0, 0]
@@ -750,12 +751,18 @@ class MainWindow(QtW.QWidget, _MainUI):
             preview_layer.data = data
         except KeyError:
             if use_affine:
-                preview_layer = self.viewer.add_image(data, name=layer_name, affine=self.cam_affine_xform_napari_cam2_to_cam1)
+                preview_layer = self.viewer.add_image(data,
+                                                      name=layer_name,
+                                                      affine=self.cam_affine_xform_napari_cam2_to_cam1)
             else:
-                preview_layer = self.viewer.add_image(data, name=layer_name, translate=translation)
+                preview_layer = self.viewer.add_image(data,
+                                                      name=layer_name,
+                                                      translate=translation)
 
                 if self.track_affine_checkBox.isChecked():
-                    self.viewer.camera.center = (0, translation[0] + data.shape[0]//2, translation[1] + data.shape[0]//2)
+                    self.viewer.camera.center = (0,
+                                                 translation[0] + data.shape[0]//2,
+                                                 translation[1] + data.shape[0]//2)
                     self.autoscale_active_layer()
 
         # make our most recent snapped image the only visible layer
@@ -781,10 +788,10 @@ class MainWindow(QtW.QWidget, _MainUI):
                 phase_layer.data = data_phase
             except KeyError:
                 phase_layer = self.viewer.add_image(data_phase,
-                                                      name=layer_name_ft_phase,
-                                                      translate=[0, nx],
-                                                      contrast_limits=[-np.pi, np.pi],
-                                                      colormap="twilight_shifted")
+                                                    name=layer_name_ft_phase,
+                                                    translate=[0, nx],
+                                                    contrast_limits=[-np.pi, np.pi],
+                                                    colormap="twilight_shifted")
             # amplitude
             layer_name_ft = f"{cam_name:s} fft"
             try:
@@ -805,8 +812,11 @@ class MainWindow(QtW.QWidget, _MainUI):
                 point_layer = self.viewer.layers[point_layer_name]
                 point_layer.data = pts
             except KeyError:
-                point_layer = self.viewer.add_points(pts, name=point_layer_name,
-                                                     face_color=[0, 0, 0, 0], edge_color="red", size=10)
+                point_layer = self.viewer.add_points(pts,
+                                                     name=point_layer_name,
+                                                     face_color=[0, 0, 0, 0],
+                                                     edge_color="red",
+                                                     size=10)
 
             # hologram phase
             layer_name_holo_phase = f"{cam_name:s} {mode:s} phase"
@@ -817,8 +827,11 @@ class MainWindow(QtW.QWidget, _MainUI):
             except KeyError:
                 lims = [-2*np.pi, 2*np.pi]
 
-                preview_layer = self.viewer.add_image(holo_angle, name=layer_name_holo_phase, translate=[ny, 0],
-                                                      colormap="twilight_shifted", contrast_limits=lims)
+                preview_layer = self.viewer.add_image(holo_angle,
+                                                      name=layer_name_holo_phase,
+                                                      translate=[ny, 0],
+                                                      colormap="twilight_shifted",
+                                                      contrast_limits=lims)
 
             # hologram amplitude
             layer_name_holo_amp = f"{cam_name:s} {mode:s} amp"
@@ -826,7 +839,9 @@ class MainWindow(QtW.QWidget, _MainUI):
                 preview_layer = self.viewer.layers[layer_name_holo_amp]
                 preview_layer.data = holo_amp
             except KeyError:
-                preview_layer = self.viewer.add_image(holo_amp, name=layer_name_holo_amp, translate=[ny, nx])
+                preview_layer = self.viewer.add_image(holo_amp,
+                                                      name=layer_name_holo_amp,
+                                                      translate=[ny, nx])
 
     def guess_holo_frq(self):
         """
@@ -842,7 +857,7 @@ class MainWindow(QtW.QWidget, _MainUI):
             ny, nx = img_ft.shape
 
             dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
-            fmax_int = 2 * self.cfg_data["camera_settings_phantom"]["na_detection"] / 0.785
+            fmax_int = 2 * self.cfg_data["camera_settings_phantom"]["na_detection"] / self.cfg_data["excitation_wavelengths"]["odt"]
 
             fxs = fft.fftshift(fft.fftfreq(nx, dxy))
             dfx = fxs[1] - fxs[0]
@@ -853,8 +868,8 @@ class MainWindow(QtW.QWidget, _MainUI):
             ff_perp = np.sqrt(fxfx ** 2 + fyfy ** 2)
 
             # exclude points along lines
-            guess_mask = np.logical_and.reduce((np.abs(fxfx) > dfx, # not along x=0
-                                               np.abs(fyfy) > dfy, # not along y=0
+            guess_mask = np.logical_and.reduce((np.abs(fxfx) > dfx,  # not along x=0
+                                               np.abs(fyfy) > dfy,  # not along y=0
                                                fyfy <= 0,
                                                ff_perp > fmax_int))
 
@@ -880,19 +895,19 @@ class MainWindow(QtW.QWidget, _MainUI):
             ny, nx = img_ft.shape
 
             dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
-            fmax_int = 2 * self.cfg_data["camera_settings_phantom"]["na_detection"] / 0.785
 
             fxs = fft.fftshift(fft.fftfreq(nx, dxy))
             dfx = fxs[1] - fxs[0]
             fys = fft.fftshift(fft.fftfreq(ny, dxy))
             dfy = fys[1] - fys[0]
 
-            # fxfx, fyfy = np.meshgrid(fxs, fys)
-
             frq_guess = np.array([dfx * (self.fx_doubleSpinBox.value() - nx // 2),
                                   dfy * (self.fy_doubleSpinBox.value() - ny // 2)])
 
-            frq_fit, mask, _ = fit_modulation_frq(img_ft, img_ft, dxy, frq_guess=frq_guess,
+            frq_fit, mask, _ = fit_modulation_frq(img_ft,
+                                                  img_ft,
+                                                  dxy,
+                                                  frq_guess=frq_guess,
                                                   max_frq_shift=10 * dfy)
 
             indx_fit = frq_fit[0] / dfx + nx // 2
@@ -923,10 +938,7 @@ class MainWindow(QtW.QWidget, _MainUI):
 
             # get frequency data
             dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
-            fmax_int = 2 * self.cfg_data["camera_settings_phantom"]["na_detection"] / 0.785
-            fxs = fft.fftshift(fft.fftfreq(nx, dxy))
-            fys = fft.fftshift(fft.fftfreq(ny, dxy))
-            k = 2 * np.pi / 0.785
+            k = 2 * np.pi / self.cfg_data["excitation_wavelengths"]["odt"]
 
             # fit mask
             # fit defocus
@@ -966,7 +978,6 @@ class MainWindow(QtW.QWidget, _MainUI):
                 dyrot_dp2 = np.sin(p[5])
                 dyrot_dp3 = -np.cos(p[5])
                 dyrot_dp5 = -(x - p[2]) * np.cos(p[5]) + (y - p[3]) * (-np.sin(p[5]))
-
 
                 j = [0.5 * xrot ** 2,
                      0.5 * yrot ** 2,
@@ -1039,7 +1050,6 @@ class MainWindow(QtW.QWidget, _MainUI):
                                                       translate=translate,
                                                       colormap="twilight_shifted",
                                                       contrast_limits=lims)
-
 
             pts_layer_name = f"phase fit center"
             shapes_layer_name = f"shape fit center"
@@ -1125,7 +1135,7 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         try:
             self._mmc_cam.setROI(xstart, ystart, sx, sy)
-        except Exception as e: # todo
+        except Exception as e:  # todo: catch specific exception types
             print(e)
 
     def reset_crop(self):
@@ -1162,7 +1172,6 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         if self.daq_shutter_checkBox.isChecked():
             self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["sim_shutter"])
-
 
         if self.streaming_timer is not None:
             self.streaming_timer.stop()
@@ -1225,18 +1234,6 @@ class MainWindow(QtW.QWidget, _MainUI):
                                               )
         self.upload_thread.start()
 
-
-        # set dmd
-        # self.dmd.program_dmd_seq(mode, channel,
-        #                          nrepeats=1,
-        #                          noff_before=0,
-        #                          noff_after=0,
-        #                          exp_time_us=frame_time_us,
-        #                          triggered=False,
-        #                          clear_pattern_after_trigger=False,
-        #                          verbose=True)
-
-
     def _on_dmd_firmware_pattern_updated(self):
 
         if self.dmd_update_immediately_checkBox.isChecked():
@@ -1262,17 +1259,6 @@ class MainWindow(QtW.QWidget, _MainUI):
             self.upload_thread.join()
 
         self.dmd.start_stop_sequence('stop')
-
-
-        # self.dmd.set_pattern_sequence([pic_ind],
-        #                               [bit_ind],
-        #                               exp_times=105,
-        #                               dark_times=0,
-        #                               triggered=False,
-        #                               clear_pattern_after_trigger=False,
-        #                               bit_depth=1,
-        #                               num_repeats=0,
-        #                               mode='pre-stored')
 
         self.upload_thread = threading.Thread(target=self.dmd.set_pattern_sequence,
                                               args=([pic_ind], [bit_ind]),
@@ -1314,9 +1300,6 @@ class MainWindow(QtW.QWidget, _MainUI):
         else:
             raise ValueError("DMD is not loaded with firmware pattern data")
 
-
-
-
     def _browse_dmd_pattern(self):
         self.dmd_pattern_fnames = QtW.QFileDialog.getOpenFileNames(self, "", "select DMD patterns", "png(*.png)")[0]
         self.dmd_pattern_lineEdit.setText("; ".join(self.dmd_pattern_fnames))
@@ -1356,17 +1339,17 @@ class MainWindow(QtW.QWidget, _MainUI):
         # put in different thread so don't block GUI
         # still printing to the terminal and not bothering to acquire a lock
         self.upload_thread = threading.Thread(target=self.dmd.upload_pattern_sequence,
-                                         args=(patterns,),
-                                         kwargs={"exp_times": pattern_time_us,
-                                                 "dark_times": 0,
-                                                 "triggered": False,
-                                                 "clear_pattern_after_trigger": False,
-                                                 "bit_depth": 1,
-                                                 "num_repeats": 0,
-                                                 "compression_mode": "erle",
-                                                 "combine_images": True
-                                                }
-                                         )
+                                              args=(patterns,),
+                                              kwargs={"exp_times": pattern_time_us,
+                                                      "dark_times": 0,
+                                                      "triggered": False,
+                                                      "clear_pattern_after_trigger": False,
+                                                      "bit_depth": 1,
+                                                      "num_repeats": 0,
+                                                      "compression_mode": "erle",
+                                                      "combine_images": True
+                                                      }
+                                              )
         self.upload_thread.start()
 
     def _set_uploaded_dmd_pattern(self):
@@ -1402,7 +1385,6 @@ class MainWindow(QtW.QWidget, _MainUI):
             # raise ValueError("DMD is not loaded with on-the-fly pattern data")
             print("DMD is not loaded with on-the-fly pattern data")
             return
-
 
         layer_name = f"DMD on-the-fly patterns"
 
@@ -1500,7 +1482,6 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.daq_channel_tableWidget.clearContents()
         self.daq_channel_tableWidget.setRowCount(0)
 
-
     def _on_daq_setting_change(self, row_index=None):
         # grab analog/digital lines from channels
         digital_channels = list(self.daq.digital_line_names.keys())
@@ -1523,7 +1504,6 @@ class MainWindow(QtW.QWidget, _MainUI):
                 an_ch_now.update({ch_name: val})
             else:
                 raise ValueError(f"channel `{ch_name}` was not present in digital or analog channels")
-
 
         if dig_ch_now != {}:
             # unpack dictionaries to lists
