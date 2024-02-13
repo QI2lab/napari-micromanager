@@ -59,6 +59,7 @@ def parse_time(dt: float,
 
     return (days, hours, mins, secs), str
 
+
 @dataclass
 class SequenceMeta:
     mode: Literal["mda"] | Literal["explorer"] = ""
@@ -116,7 +117,7 @@ class _MultiDUI:
     odt_exposure_SpinBox: QtW.QDoubleSpinBox
     odt_frametime_SpinBox: QtW.QDoubleSpinBox
     odt_circbuff_SpinBox: QtW.QDoubleSpinBox
-    sim_circbuf_doubleSpinBox : QtW.QDoubleSpinBox
+    sim_circbuf_doubleSpinBox: QtW.QDoubleSpinBox
     daq_dt_doubleSpinBox: QtW.QDoubleSpinBox
     shutter_delay_doubleSpinBox: QtW.QDoubleSpinBox
     odt_warmup_doubleSpinBox: QtW.QDoubleSpinBox
@@ -143,7 +144,6 @@ class _MultiDUI:
     add_parameter_pushButton: QtW.QPushButton
     remove_parameter_pushButton: QtW.QPushButton
     clear_parameter_pushButton: QtW.QPushButton
-
 
     def setup_ui(self):
         uic.loadUi(self.UI_FILE, self)  # load QtDesigner .ui file
@@ -226,7 +226,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # lock for printing while multithreading
         self.print_lock = threading.Lock()
 
-
     def set_cfg(self):
         defaults = self.configuration["sim_odt_program_defaults"]
 
@@ -284,7 +283,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             range = self.z_range_abovebelow_doubleSpinBox.value()
 
         self.n_images_label.setText(f"{round((range / step) + 1)}")
-
 
     # add, remove, clear channel table
     def add_channel(self):
@@ -1346,6 +1344,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             # ##############################
             # stage movement logic
+            # todo: how precise is this timing for long time-lapses?
             # ##############################
             for tt in range(ntimes):
                 tstart_time = time.perf_counter()
@@ -1356,7 +1355,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         mmc1.setXYPosition(xy_positions[pp][0], xy_positions[pp][1])
 
                         # todo: maybe want to do this every time and save all?
+                        # todo: should I wait some time here for stage to settle before measuring?
+                        # todo: or be measuring in separate thread?
                         if tt == 0:
+                            # todo: does this actually store?
                             img_data.attrs["xy_position_um_real"][pp] = [float(self._mmc.getXPosition()),
                                                                          float(self._mmc.getYPosition())]
 
@@ -1407,7 +1409,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             if cam_is_phantom and not self.cancel_sequence:
                 if gui_settings["quiet_fan"]:
-                    mmc2.quiet_fan(False) # turn fan back on
+                    mmc2.quiet_fan(False)  # turn fan back on
 
                 if cam2_acq_modes != [] and gui_settings["saving"]:
                     # todo: is it possible to grab pictures as they come in on the phantom?
@@ -1556,8 +1558,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
                         except Exception as e:
                             print(f"while plotting channels: {e}")
-
-
 
 
 if __name__ == "__main__":
