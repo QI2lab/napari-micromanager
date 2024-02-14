@@ -42,6 +42,7 @@ import mcsim.analysis.analysis_tools as mctools
 from mcsim.analysis.sim_reconstruction import fit_modulation_frq
 from mcsim.analysis.fft import ft2, ift2
 from mcsim.analysis.optimize import to_cpu
+from mcsim.analysis.field_prop import propagate_homogeneous
 from localize_psf import fit
 from numpy import fft
 from scipy.signal.windows import hann
@@ -111,6 +112,8 @@ class _MainUI:
     fit_holo_curvature_Button: QtW.QPushButton
     set_affine_ref_Button: QtW.QPushButton
     track_affine_checkBox: QtW.QCheckBox
+    holo_nz_spinBox: QtW.QSpinBox
+    holo_dz_doubleSpinBox: QtW.QDoubleSpinBox
 
     # image preview
     snap_Button: QtW.QPushButton
@@ -273,7 +276,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.pattern_time_SpinBox.setValue(0.105)  # DMD pattern time
 
         #  image processing
-        proc_modes = ["normal", "fft", "hologram"]
+        proc_modes = ["normal", "fft", "hologram", "hologram volume"]
         self.image_proc_mode_comboBox.addItems(proc_modes)
         self.snap_channel_comboBox.setCurrentText(proc_modes[0])
         self.guess_holo_frq_Button.clicked.connect(self.guess_holo_frq)
@@ -284,6 +287,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.exp_spinBox.setKeyboardTracking(False)
         self.fx_doubleSpinBox.setValue(1600.)
         self.fy_doubleSpinBox.setValue(1400.)
+        self.holo_nz_spinBox.setValue(11)
+        self.holo_dz_doubleSpinBox.setValue(0.5)
 
         # refresh options in case a config is already loaded by another remote
         self._refresh_options()
@@ -676,7 +681,7 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         if mode == "normal":
             pass
-        elif mode == "fft" or mode == "hologram":
+        elif mode == "fft" or mode == "hologram" or mode == "hologram volume":
             if _cupy_available:
                 xp = cp
             else:
@@ -690,7 +695,7 @@ class MainWindow(QtW.QWidget, _MainUI):
             data_ft = to_cpu(xp.abs(ft))
             data_phase = to_cpu(xp.angle(ft))
 
-            if mode == "hologram":
+            if mode == "hologram" or mode == "hologram volume":
                 # todo: grab these values from configuration file
                 # todo: could display in some nicer way...but...
                 dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
@@ -713,6 +718,21 @@ class MainWindow(QtW.QWidget, _MainUI):
                 ft_xlated[ff > fmax] = 0
                 im_holo = ift2(ft_xlated)
 
+                scale_holo = (1, 1)
+                if mode == "hologram volume":
+                    nz = int(self.holo_nz_spinBox.value())
+                    dz = float(self.holo_dz_doubleSpinBox.value())
+                    zs = (np.arange(nz) - nz // 2) * dz
+
+                    im_holo = propagate_homogeneous(im_holo,
+                                                    zs,
+                                                    1.333,
+                                                    (dxy, dxy),
+                                                    self.cfg_data["excitation_wavelengths"]["odt"])
+
+                    scale_holo = (dz/dxy, 1, 1)
+
+
                 # mask
                 threshold = self.threshold_SpinBox.value()
                 mask = xp.abs(im_holo) > threshold
@@ -730,8 +750,9 @@ class MainWindow(QtW.QWidget, _MainUI):
 
                 holo_amp = to_cpu(holo_amp)
                 holo_angle = to_cpu(holo_angle)
+
         else:
-            raise ValueError(f"mode must be 'normal', 'fft', or 'hologram' but was '{mode:s}'")
+            raise ValueError(f"mode must be one of 'normal', 'fft', or 'hologram' but was '{mode:s}'")
 
         # display image
         layer_name = f"{cam_name:s}"
@@ -804,7 +825,7 @@ class MainWindow(QtW.QWidget, _MainUI):
                                                       contrast_limits=[0, np.percentile(np.abs(data_ft), 99.9)],
                                                       gamma=0.1)
 
-        if mode == "hologram":
+        if mode == "hologram" or mode == "hologram volume":
             # points layer
             point_layer_name = f"{cam_name:s} fft holo reference"
             pts = np.array([[self.fy_doubleSpinBox.value(), self.fx_doubleSpinBox.value() + nx]])
@@ -831,7 +852,9 @@ class MainWindow(QtW.QWidget, _MainUI):
                                                       name=layer_name_holo_phase,
                                                       translate=[ny, 0],
                                                       colormap="twilight_shifted",
-                                                      contrast_limits=lims)
+                                                      contrast_limits=lims,
+                                                      scale=scale_holo
+                                                      )
 
             # hologram amplitude
             layer_name_holo_amp = f"{cam_name:s} {mode:s} amp"
@@ -841,7 +864,9 @@ class MainWindow(QtW.QWidget, _MainUI):
             except KeyError:
                 preview_layer = self.viewer.add_image(holo_amp,
                                                       name=layer_name_holo_amp,
-                                                      translate=[ny, nx])
+                                                      translate=[ny, nx],
+                                                      scale=scale_holo
+                                                      )
 
     def guess_holo_frq(self):
         """
