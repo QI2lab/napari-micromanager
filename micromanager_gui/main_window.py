@@ -114,6 +114,7 @@ class _MainUI:
     track_affine_checkBox: QtW.QCheckBox
     holo_nz_spinBox: QtW.QSpinBox
     holo_dz_doubleSpinBox: QtW.QDoubleSpinBox
+    ri_doubleSpinBox: QtW.QDoubleSpinBox
 
     # image preview
     snap_Button: QtW.QPushButton
@@ -289,6 +290,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.fy_doubleSpinBox.setValue(1400.)
         self.holo_nz_spinBox.setValue(11)
         self.holo_dz_doubleSpinBox.setValue(0.5)
+        self.ri_doubleSpinBox.setValue(1.333)
 
         # refresh options in case a config is already loaded by another remote
         self._refresh_options()
@@ -688,18 +690,16 @@ class MainWindow(QtW.QWidget, _MainUI):
                 warnings.warn("CuPy was not available. Install CuPy for fast hologram viewing.")
                 xp = np
 
-            window = xp.outer(xp.asarray(hann(ny)),
-                              xp.asarray(hann(nx)))
-
+            # fourier transform image
+            window = xp.outer(xp.asarray(hann(ny)), xp.asarray(hann(nx)))
             ft = ft2(xp.asarray(data) * window)
             data_ft = to_cpu(xp.abs(ft))
             data_phase = to_cpu(xp.angle(ft))
 
             if mode == "hologram" or mode == "hologram volume":
-                # todo: grab these values from configuration file
-                # todo: could display in some nicer way...but...
+                wavelen = self.cfg_data["excitation_wavelengths"]["odt"]
                 dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
-                fmax = self.cfg_data["camera_settings_phantom"]["na_detection"] / self.cfg_data["excitation_wavelengths"]["odt"]
+                fmax = self.cfg_data["camera_settings_phantom"]["na_detection"] / wavelen
 
                 # get frequency coordinates
                 fx = xp.asarray(fft.fftshift(fft.fftfreq(nx, dxy)))
@@ -722,30 +722,26 @@ class MainWindow(QtW.QWidget, _MainUI):
                 if mode == "hologram volume":
                     nz = int(self.holo_nz_spinBox.value())
                     dz = float(self.holo_dz_doubleSpinBox.value())
-                    zs = (np.arange(nz) - nz // 2) * dz
+                    no = float(self.ri_doubleSpinBox.value())
+                    zs = (xp.arange(nz) - nz // 2) * dz
 
                     im_holo = propagate_homogeneous(im_holo,
                                                     zs,
-                                                    1.333,
+                                                    no,
                                                     (dxy, dxy),
-                                                    self.cfg_data["excitation_wavelengths"]["odt"])
+                                                    wavelen)
+
+                    # correct phase for expected propagation
+                    im_holo *= np.exp(-1j * 2*np.pi/wavelen * no * zs)[:, None, None]
 
                     scale_holo = (dz/dxy, 1, 1)
 
-
-                # mask
-                threshold = self.threshold_SpinBox.value()
-                mask = xp.abs(im_holo) > threshold
-
-                # todo: could also display amplitude data...
+                # split and process amp/phase
                 holo_amp = xp.abs(im_holo)
                 holo_angle = xp.angle(im_holo)
-                # holo_angle = unwrap_phase(xp.angle(im_holo))
-                # holo_angle = phase_unwrap(xp.angle(im_holo))
 
                 # don't show masked parts
-                # add center value back
-                holo_angle -= xp.mean(holo_angle[mask])
+                threshold = self.threshold_SpinBox.value()
                 holo_angle[holo_amp < threshold] = np.nan
 
                 holo_amp = to_cpu(holo_amp)
