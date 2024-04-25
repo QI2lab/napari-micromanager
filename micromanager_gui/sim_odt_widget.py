@@ -90,6 +90,9 @@ class _MultiDUI:
     interval_spinBox: QtW.QSpinBox
     time_comboBox: QtW.QComboBox
 
+    fast_time_groupBox: QtW.QGroupBox
+    fast_time_spinBox: QtW.QSpinBox
+
     stack_groupBox: QtW.QGroupBox
     z_tabWidget: QtW.QTabWidget
     step_size_doubleSpinBox: QtW.QDoubleSpinBox
@@ -251,6 +254,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         self.save_groupBox.setEnabled(enabled)
         self.channel_groupBox.setEnabled(enabled)
         self.time_groupBox.setEnabled(enabled)
+        self.fast_time_groupBox.setEnabled(enabled)
         self.stack_groupBox.setEnabled(enabled)
 
     def _set_top(self):
@@ -479,8 +483,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ###########################################
         # grab information from GUI
         # ###########################################
-        axis_list = ["position", "time", "z", "parameters", "pattern", "y", "x"]
-        axis_acquisition_order = ['time', 'position', 'parameter', 'z', 'channel', 'pattern']
+        axis_list = ["time (fast)", "position", "time", "z", "parameters", "pattern", "y", "x"]
+        axis_acquisition_order = ['time', 'position', 'time (fast)', 'parameter', 'z', 'channel', 'pattern']
 
         gui_settings = {"quiet_fan": self.fan_checkBox.isChecked(),
                         "fan_delay_s": self.fan_wait_doubleSpinBox.value(),
@@ -559,7 +563,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         print(start_str)
 
         # ##############################
-        # time lapse
+        # slow time lapse
         # ##############################
         if self.time_groupBox.isChecked():
             ntimes = self.timepoints_spinBox.value()
@@ -580,6 +584,14 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         else:
             ntimes = 1
             interval_ms = 0.
+
+        # ##############################
+        # fast time lapse
+        # ##############################
+        if self.fast_time_groupBox.isChecked():
+            ntimes_fast = self.fast_time_spinBox.value()
+        else:
+            ntimes_fast = 1
 
         # ##############################
         # parameter scan
@@ -851,6 +863,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                      shutter_delay_time=gui_settings["shutter_delay_time_ms"] * 1e-3,
                                      sim_readout_time=gui_settings["sim_readout_time_ms"] * 1e-3,
                                      n_xy_positions=nxy_positions,
+                                     n_times_fast=ntimes_fast,
                                      stage_delay_time=gui_settings["stage_delay_ms"] * 1e-3,
                                      z_voltages=z_volts,
                                      use_dmd_as_odt_shutter=False,
@@ -983,8 +996,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             # create dataset and add attributes
             ds = g1.create_dataset(name_final,
-                                   shape=(nxy_positions, ntimes, nz, nparams, am["nimages"], ny_cam1, nx_cam1),
-                                   chunks=(1, 1, 1, 1, 1, ny_cam1, nx_cam1),
+                                   shape=(ntimes_fast, nxy_positions, ntimes, nz, nparams, am["nimages"], ny_cam1, nx_cam1),
+                                   chunks=(1, 1, 1, 1, 1, 1, ny_cam1, nx_cam1),
                                    dtype="uint16",
                                    compressor="none")
             ds.attrs["acquisition_mode"] = am
@@ -1057,8 +1070,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
             # create dataset and add attributes
             ds = g2.create_dataset(name_final,
-                                   shape=(nxy_positions, ntimes, nz, nparams, am["nimages"], ny_cam2, nx_cam2),
-                                   chunks=(1, 1, 1, 1, 1, ny_cam2, nx_cam2),
+                                   shape=(ntimes_fast, nxy_positions, ntimes, nz, nparams, am["nimages"], ny_cam2, nx_cam2),
+                                   chunks=(1, 1, 1, 1, 1, 1, ny_cam2, nx_cam2),
                                    dtype="uint16",
                                    compressor=numcodecs.Zlib()
                                    )
@@ -1121,11 +1134,16 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         g_daq.analog_input.attrs["dimensions"] = ["position", "time/z", "analog channel"]
 
         # total number of pictures for cameras per position
-        n_cam1_pics = ntimes * nxy_positions * nparams * nz * int(np.sum([am["nimages"] for am in cam1_acq_modes]))
-        n_cam2_pics = ntimes * nxy_positions * nparams * nz * int(np.sum([am["nimages"] for am in cam2_acq_modes]))
+        n_cam1_pics = ntimes * nxy_positions * ntimes_fast * nparams * nz * int(np.sum([am["nimages"] for am in cam1_acq_modes]))
+        n_cam2_pics = ntimes * nxy_positions * ntimes_fast * nparams * nz * int(np.sum([am["nimages"] for am in cam2_acq_modes]))
 
         def single_index2multi(ii, npatterns_channel):
-            # order from slowest to fastest: ['position', 'time', 'parameters', 'z', 'channel', 'pattern']
+            """
+            Convert single-index into multiindex
+            acuisition order from slowest to fastest:
+            ['time', 'position', 'time (fast)', 'parameters', 'z', 'channel', 'pattern']
+            """
+
             npatterns_all_channels = np.sum(npatterns_channel)
             npatterns_cumsum = np.cumsum(npatterns_channel)
 
@@ -1138,11 +1156,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             # other indices are easy
             iz = (ii // (npatterns_all_channels)) % nz
             iparam = (ii // (npatterns_all_channels * nz)) % nparams
-            iposition = (ii // (npatterns_all_channels * nparams * nz)) % nxy_positions
-            it = (ii // (npatterns_all_channels * nparams * nz * nxy_positions)) % ntimes
-            # it = (ii // (npatterns_all_channels * nparams * nz)) % ntimes
+            it_fast = (ii // (npatterns_all_channels * nz * nparams)) % ntimes_fast
+            iposition = (ii // (npatterns_all_channels * nz * nparams * ntimes_fast)) % nxy_positions
+            it = (ii // (npatterns_all_channels * nz * nparams * ntimes_fast * nxy_positions)) % ntimes
 
-            return (it, iposition, iparam, iz, ic, ipattern)
+            return (it_fast, it, iposition, iparam, iz, ic, ipattern)
 
         def read_cam(tstart, timeout, mmc, dsets, cam_acq_modes, ncam_pics, desc=""):
             # order from slowest to fastest
@@ -1168,15 +1186,15 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
                 # get index to assign picture
                 inds = single_index2multi(ii_acquired, npatterns_channel)
-                it, ixy, iparam, iz, ic, ipatt = inds
-                dsets[ic][ixy, it, iz, iparam, ipatt] = mmc.popNextImage()
+                it_fast, it, ixy, iparam, iz, ic, ipatt = inds
+                dsets[ic][it_fast, ixy, it, iz, iparam, ipatt] = mmc.popNextImage()
 
                 # print in threadsafe way
                 if ipatt == 0:
                     with self.print_lock:
                         print(f"{desc:s} image {ii_acquired + 1:05d}/{ncam_pics:05d}, "
-                              f" (time, position, param, z, chann, patt) = "
-                              f"{inds}/{(ntimes, nxy_positions, nparams, nz, ncam_channels, 0)},"
+                              f" time (fast), (time (slow), position, param, z, chann, patt) = "
+                              f"{inds}/{(ntimes_fast, ntimes, nxy_positions, nparams, nz, ncam_channels, 0)},"
                               f" elapsed time = {parse_time(time.perf_counter() - tstart)[1]}")
 
             return ii_acquired
@@ -1299,6 +1317,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             if cam_is_phantom:
                 self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam_enable"])
 
+            # todo: make this settable somewhere
             # let lasers warmup
             time.sleep(5)
 
@@ -1441,11 +1460,12 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         # reshape must use acquisition order
                         npatterns_ch_2 = np.array([am["nimages"] for am in cam2_acq_modes], dtype=int)
                         npatterns2_all = np.sum(npatterns_ch_2)  # number of combined patterns for all channels
-                        dask_shape = (ntimes, nxy_positions, nparams, nz, npatterns2_all, ny_cam2, nx_cam2)
-                        chunk_size = (1, 1, 1, 1, 1, nx_cam2, nx_cam2)
+                        # acquisition order
+                        dask_shape = (ntimes, nxy_positions, ntimes_fast, nparams, nz, npatterns2_all, ny_cam2, nx_cam2)
+                        chunk_size = (1, 1, 1, 1, 1, 1, nx_cam2, nx_cam2)
                         imgs_cine = imgs_cine.reshape(dask_shape).rechunk(chunk_size)
-                        # convert from acquisition order to ("position", "time", "z", "parameters", "pattern", "y", "x")
-                        imgs_cine = da.transpose(imgs_cine, axes=(1, 0, 3, 2, 4, 5, 6))
+                        # convert from acquisition order to ("time (fast)", "position", "time", "z", "parameters", "pattern", "y", "x")
+                        imgs_cine = da.transpose(imgs_cine, axes=(2, 1, 0, 4, 3, 5, 6, 7))
 
                         # save header data
                         g2.attrs["cine_metadata"] = md["header_data"]
