@@ -37,7 +37,8 @@ import threading
 from PIL import Image
 import json
 import re
-from mcsim.expt_ctrl import dlp6500, daq, phantom_cam
+from mcsim.expt_ctrl import dlp6500, daq
+from mcsim.expt_ctrl.phantom_cam import phantom_cam
 from mcsim.analysis.sim_reconstruction import fit_modulation_frq
 from mcsim.analysis.fft import ft2, ift2, translate_ft
 from mcsim.analysis.optimize import to_cpu
@@ -182,7 +183,9 @@ class _MainUI:
 
 
 class MainWindow(QtW.QWidget, _MainUI):
-    def __init__(self, viewer: napari.viewer.Viewer, remote=False):
+    def __init__(self,
+                 viewer: napari.viewer.Viewer,
+                 remote=False):
         super().__init__()
         self.setup_ui()
         self.viewer = viewer
@@ -195,7 +198,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         # keep track of the core used for snapping images. This can be changed
         self._mmc_cam = self._mmcores[1]
         # placeholders: since these are passed through to the other widgets, they can be updated but not reassigned
-        self.phcam = phantom_cam.phantom_cam()
+        self.phcam = phantom_cam()
         self.dmd = dlp6500.dlp6500win(initialize=False)
         self.daq = daq.nidaq(initialize=False)
         self.cfg_data = {}

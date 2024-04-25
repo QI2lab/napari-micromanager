@@ -29,7 +29,7 @@ import threading
 # custom code
 from localize_psf import affine
 # daq and dmd
-import mcsim.expt_ctrl.daq
+from mcsim.expt_ctrl.daq import nidaq
 from mcsim.expt_ctrl.program_sim_odt import get_sim_odt_sequence
 from mcsim.expt_ctrl import dlp6500
 import mcsim.expt_ctrl.phantom_cam as phc
@@ -157,8 +157,14 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
     # metadata associated with a given experiment
     SEQUENCE_META: dict[MDASequence, SequenceMeta] = {}
 
-    def __init__(self, mmcores: list[RemoteMMCore], daq: mcsim.expt_ctrl.daq.daq, dmd: dlp6500,
-                 viewer, phcam, parent=None, configuration=None):
+    def __init__(self,
+                 mmcores: list[RemoteMMCore],
+                 daq: nidaq,
+                 dmd: dlp6500,
+                 viewer,
+                 phcam: phc.phantom_cam,
+                 parent=None,
+                 configuration: dict = None):
 
         self._mmcores = mmcores
         self._mmc = self._mmcores[0]
@@ -469,6 +475,33 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         self.parameter_tableWidget.clearContents()
         self.parameter_tableWidget.setRowCount(0)
 
+    def _get_next_data_dir(self,
+                           main_dir: Path,
+                           subdir: Path):
+        """
+        ensure subdirs are of the form and numbes are correctly ordered 000_...
+        """
+        # test other subdirs and get their numbers
+        path_exp = "(\d{3})_.*"
+        other_nums = [int(re.match(path_exp, n.name).group(1)) for n in main_dir.glob("*") if
+                      re.match(path_exp, n.name)]
+
+        # number for new subdir should be larger than all old ones
+        if other_nums != []:
+            new_num = int(np.max(other_nums)) + 1
+        else:
+            new_num = 1
+
+        # test if subdir matches pattern ... if so trim the number off the beginning
+        m = re.match("(\d+_).*", subdir.name)
+
+        if m:
+            subdir_final = Path(f"{new_num:03d}_{subdir.name[len(m.group(1)):]}")
+        else:
+            subdir_final = Path(f"{new_num:03d}_{subdir.name}")
+
+        return subdir_final
+
     def _on_run_clicked(self):
         """
         Run hardware triggered SIM/DMD sequence
@@ -483,8 +516,24 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # ###########################################
         # grab information from GUI
         # ###########################################
+        # todo: use more flexible datatype to store this info?
         axis_list = ["time (fast)", "position", "time", "z", "parameters", "pattern", "y", "x"]
         axis_acquisition_order = ['time', 'position', 'time (fast)', 'parameter', 'z', 'channel', 'pattern']
+        # axis_data = [{"name": "time",
+        #               "save_order": 2},
+        #              {"name": "position",
+        #               "save_order": 1},
+        #              {"name": "time (fast)",
+        #               "save_order": 0},
+        #              {"name": "parameters",
+        #               "save_order": 4},
+        #              {"name": "z",
+        #               "save_order": 3},
+        #              {"name": "channel",
+        #               "save_order": None},
+        #              {"name": "pattern",
+        #               "save_order": 5},
+        #              ]
 
         gui_settings = {"quiet_fan": self.fan_checkBox.isChecked(),
                         "fan_delay_s": self.fan_wait_doubleSpinBox.value(),
@@ -513,42 +562,22 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             mmc2.stopSequenceAcquisition()
 
         # saving
-        if gui_settings["saving"] and not (self.fname_lineEdit.text() and Path(self.dir_lineEdit.text()).is_dir()):
+        if gui_settings["saving"] and not (self.fname_lineEdit.text() and
+                                           Path(self.dir_lineEdit.text()).is_dir()):
             print("Select a filename and a valid directory.")
             return
 
         if gui_settings["saving"]:
-            # grab values form GUI
             main_dir = Path(self.dir_lineEdit.text())
-            subdir = Path(self.fname_lineEdit.text())
 
-            # ##############################
-            # ensure subdirs are of the form and numbes are correctly ordered 000_...
-            # ##############################
-
-            # test other subdirs and get their numbers
-            path_exp = "(\d{3})_.*"
-            other_nums = [int(re.match(path_exp, n.name).group(1)) for n in main_dir.glob("*") if re.match(path_exp, n.name)]
-
-            # number for new subdir should be larger than all old ones
-            if other_nums != []:
-                new_num = int(np.max(other_nums)) + 1
-            else:
-                new_num = 1
-
-            # test if subdir matches pattern ... if so trim the number off the beginning
-            m = re.match("(\d+_).*", subdir.name)
-
-            if m:
-                subdir_final = Path(f"{new_num:03d}_{subdir.name[len(m.group(1)):]}")
-            else:
-                subdir_final = Path(f"{new_num:03d}_{subdir.name}")
-
+            # get next subdirectory
+            subdir = self._get_next_data_dir(main_dir,
+                                             Path(self.fname_lineEdit.text()))
             # reset the GUI with the correct name
-            self.fname_lineEdit.setText(subdir_final.name)
+            self.fname_lineEdit.setText(subdir.name)
 
             # ensure save path does not already exist
-            save_path = main_dir / subdir_final / "sim_odt.zarr"
+            save_path = main_dir / subdir / "sim_odt.zarr"
 
             if save_path.exists():
                 raise ValueError(f"save path {str(save_path):s} already exists")
@@ -579,8 +608,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 raise ValueError(f"time_unit={time_unit:s} is not supported")
 
             interval_ms = (requested_interval_ms * 1e-3 // gui_settings["dt"]) * gui_settings["dt"] * 1e3
-            print(f"rounded requested interval {requested_interval_ms:.3f}ms to {interval_ms:.3f}ms to be commensurate with sampling rate")
-
+            print(f"rounded requested interval {requested_interval_ms:.3f}ms to "
+                  f"{interval_ms:.3f}ms to be commensurate with sampling rate")
         else:
             ntimes = 1
             interval_ms = 0.
@@ -648,12 +677,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         # ##############################
         # zstack
-        # ##############################
-        # get current z-position info
-        z_now = mmc1.getZPosition()
         # todo: note this will not work if you have restarted the program ... because the daq only remembers
         #  the values you have set since it was instantiated
-        #  would like to read the line value ...but not sure how to do this right now
+        # ##############################
+        z_now = mmc1.getZPosition()
         z_volts_start = self.daq.last_known_analog_val[self.daq.analog_line_names["z_stage"]]
 
         if self.stack_groupBox.isChecked():
@@ -721,7 +748,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                       "patterns": self.channel_tableWidget.cellWidget(c, 1).currentText(),
                       "pattern_mode": self.channel_tableWidget.cellWidget(c, 2).currentText(),
                       "camera": self.channel_tableWidget.cellWidget(c, 3).currentText(),
-                      "dmd_on_time": self.channel_tableWidget.cellWidget(c, 4).value() * 1e-3, # convert to s
+                      "dmd_on_time": self.channel_tableWidget.cellWidget(c, 4).value() * 1e-3,  # convert to s
                       "npatterns": 0,
                       "nimages": 0}
                      for c in range(self.channel_tableWidget.rowCount())]
@@ -772,19 +799,15 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             mmc2 = self.phcam
 
             try:
-                # set up cine: only need one
                 cine_no = 1  # cine indexing starts at 1
                 mmc2.set_cines(1)
                 # setting cine also seems to clear CSR, so do CSR
                 try:
                     mmc2.set_black_reference()
                 except Exception as e:
-                    # catch b'Current session Reference was done in camera'
                     print(f"during camera CSR:{e}")
 
-                # get current parameters
                 params = mmc2.get_params(cine_no)
-
                 params_out = mmc2.setAcqParams(cine_no=cine_no,
                                                Exposure=int(np.round(gui_settings["exposure_tms_odt"] * 1e6)), # in ns
                                                dFrameRate=50., # need fps to be a bit slower ... can set to 50
@@ -810,8 +833,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # set external triggering
         mmc1.setProperty(cam1, "TRIGGER SOURCE", "EXTERNAL")
         mmc1.setProperty(cam1, "TriggerPolarity", "POSITIVE")
-
-        # set output signals
         # line 1 trigger ready
         mmc1.setProperty(cam1, "OUTPUT TRIGGER KIND[0]", "EXPOSURE")
         mmc1.setProperty(cam1, "OUTPUT TRIGGER POLARITY[0]", "POSITIVE")
@@ -1193,8 +1214,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 if ipatt == 0:
                     with self.print_lock:
                         print(f"{desc:s} image {ii_acquired + 1:05d}/{ncam_pics:05d}, "
-                              f" time (fast), (time (slow), position, param, z, chann, patt) = "
-                              f"{inds}/{(ntimes_fast, ntimes, nxy_positions, nparams, nz, ncam_channels, 0)},"
+                              f" time (slow), position, time (fast), param, z, chann, patt) = "
+                              f"{(it, ixy, it_fast, iparam, iz, ic, ipatt)}/"
+                              f"{(ntimes, nxy_positions, ntimes_fast, nparams, nz, ncam_channels, 0)},"
                               f" elapsed time = {parse_time(time.perf_counter() - tstart)[1]}")
 
             return ii_acquired
@@ -1572,7 +1594,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                             self.viewer.add_image(img_to_show,
                                                   name=layer_name,
                                                   colormap=cmap,
-                                                  scale=scale)
+                                                  scale=scale,
+                                                  blending="additive")
 
                             self.viewer.dims.axis_labels = dim_names
 
