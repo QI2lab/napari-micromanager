@@ -3,8 +3,6 @@ Launch application
 
 useful place to call other startup commands that don't want hardcoded in plugin
 """
-import matplotlib
-matplotlib.use("TkAgg")
 from pathlib import Path
 import napari
 

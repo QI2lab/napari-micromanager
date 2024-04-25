@@ -26,8 +26,8 @@ import threading
 # custom code
 from localize_psf import affine, fit, rois
 # daq and dmd
+from mcsim.analysis.sim_reconstruction import get_peak_value
 import mcsim.expt_ctrl.daq
-import mcsim.analysis.analysis_tools as tools
 from mcsim.expt_ctrl import dlp6500
 import matplotlib
 import matplotlib.pyplot as plt
@@ -250,7 +250,7 @@ class PeakTrackerWidget(QtW.QWidget, _PeakTrackerDUI):
             if use_phase:
                 phases_roi = rois.cut_roi(roi, phase_layer_list[0].data)[0]
                 try:
-                    phase = tools.get_peak_value(phases_roi, xx_roi[0, :], yy_roi[:, 0], np.array([fit_params[ind_x], fit_params[ind_y]]))
+                    phase = get_peak_value(phases_roi, xx_roi[0, :], yy_roi[:, 0], np.array([fit_params[ind_x], fit_params[ind_y]]))
                 except:
                     phase = np.nan
             else:

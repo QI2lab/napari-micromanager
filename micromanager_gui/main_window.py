@@ -38,9 +38,8 @@ from PIL import Image
 import json
 import re
 from mcsim.expt_ctrl import dlp6500, daq, phantom_cam
-import mcsim.analysis.analysis_tools as mctools
 from mcsim.analysis.sim_reconstruction import fit_modulation_frq
-from mcsim.analysis.fft import ft2, ift2
+from mcsim.analysis.fft import ft2, ift2, translate_ft
 from mcsim.analysis.optimize import to_cpu
 from mcsim.analysis.field_prop import propagate_homogeneous
 from localize_psf import fit
@@ -714,7 +713,7 @@ class MainWindow(QtW.QWidget, _MainUI):
                                      dfy * (self.fy_doubleSpinBox.value() - ny // 2)])
 
                 # instead multiply by expected phase ramp
-                ft_xlated = mctools.translate_ft(ft, -holo_frq[0], -holo_frq[1], drs=[dxy, dxy])
+                ft_xlated = translate_ft(ft, -holo_frq[0], -holo_frq[1], drs=[dxy, dxy])
                 ft_xlated[ff > fmax] = 0
                 im_holo = ift2(ft_xlated)
 
