@@ -554,14 +554,18 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         }
 
         # ##############################
-        # turn off live mode if on
+        # turn off cameras/lasers, if running
         # ##############################
         if mmc1.isSequenceRunning():
             mmc1.stopSequenceAcquisition()
         if mmc2.isSequenceRunning():
             mmc2.stopSequenceAcquisition()
 
+        self.daq.set_preset("off")
+
+        # ##############################
         # saving
+        # ##############################
         if gui_settings["saving"] and not (self.fname_lineEdit.text() and
                                            Path(self.dir_lineEdit.text()).is_dir()):
             print("Select a filename and a valid directory.")
