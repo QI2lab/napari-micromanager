@@ -279,9 +279,9 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.pattern_time_SpinBox.setValue(0.105)  # DMD pattern time
 
         #  image processing
-        proc_modes = ["normal", "fft", "hologram", "hologram volume"]
-        self.image_proc_mode_comboBox.addItems(proc_modes)
-        self.snap_channel_comboBox.setCurrentText(proc_modes[0])
+        self.image_processing_modes = ["normal", "fft", "hologram", "hologram volume"]
+        self.image_proc_mode_comboBox.addItems(self.image_processing_modes)
+        self.snap_channel_comboBox.setCurrentText(self.image_processing_modes[0])
         self.guess_holo_frq_Button.clicked.connect(self.guess_holo_frq)
         self.fit_holo_frq_Button.clicked.connect(self.fit_holo_frq)
         self.fit_holo_curvature_Button.clicked.connect(self.fit_holo_curvature)
@@ -558,6 +558,9 @@ class MainWindow(QtW.QWidget, _MainUI):
         exposure_ms = self._mmc_cam.getExposure()
 
         self._on_exp_change("", exposure_ms)
+
+        # reset processing mode
+        self.image_proc_mode_comboBox.setCurrentText(self.image_processing_modes[0])
 
     def _set_affine_ref(self):
         self.affine_ref = [self._mmc.getXPosition(), self._mmc.getYPosition()]

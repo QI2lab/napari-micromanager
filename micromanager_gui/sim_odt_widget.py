@@ -217,7 +217,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         self.z_range_abovebelow_doubleSpinBox.valueChanged.connect(self._update_n_images)
         self.zrange_spinBox.valueChanged.connect(self._update_n_images)
         self.z_range_topbottom_doubleSpinBox.valueChanged.connect(self._update_n_images)
+
         self.step_size_doubleSpinBox.valueChanged.connect(self._update_n_images)
+        self.step_size_doubleSpinBox.setValue(0.25)
+
         self.z_tabWidget.currentChanged.connect(self._update_n_images)
         self.stack_groupBox.toggled.connect(self._update_n_images)
 
