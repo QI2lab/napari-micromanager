@@ -1147,19 +1147,28 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         g_daq = img_data.create_group("daq")
         g_daq.attrs["dt"] = gui_settings["dt"]
 
-        g_daq.array("digital_program", digital_program, dtype='int8', compressor="none")
+        # todo: check this
+        g_daq.array("digital_program",
+                    digital_program.astype(bool),
+                    dtype=bool,
+                    chunks=digital_program.shape,
+                    compressor=numcodecs.packbits.PackBits(),
+                    )
+
         g_daq.digital_program.attrs["dimensions"] = ["time", "channel"]
         g_daq.digital_program.attrs["channel_map"] = self.daq.digital_line_names
 
-        g_daq.array("analog_program", analog_program, dtype='float32', compressor="none")
+        g_daq.array("analog_program",
+                    analog_program,
+                    dtype=analog_program.dtype)
         g_daq.analog_program.attrs["dimensions"] = ["time", "channel"]
         g_daq.analog_program.attrs["channel_map"] = self.daq.analog_line_names
 
-        g_daq.create_dataset("analog_input",
-                                shape=(nxy_positions, digital_program.shape[0] * ntimes * nz, self.daq.n_analog_inputs),
-                                dtype="float",
-                                compressor="none")
-        g_daq.analog_input.attrs["dimensions"] = ["position", "time/z", "analog channel"]
+        # g_daq.create_dataset("analog_input",
+        #                         shape=(nxy_positions, digital_program.shape[0] * ntimes * nz, self.daq.n_analog_inputs),
+        #                         dtype="float",
+        #                         compressor=numcodecs.Zlib())
+        # g_daq.analog_input.attrs["dimensions"] = ["position", "time/z", "analog channel"]
 
         # total number of pictures for cameras per position
         n_cam1_pics = ntimes * nxy_positions * ntimes_fast * nparams * nz * int(np.sum([am["nimages"] for am in cam1_acq_modes]))
@@ -1439,10 +1448,10 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_enable"])
             self.daq.set_digital_lines_by_name(np.array([0], dtype=np.uint8), ["odt_cam_sync"])
 
-            try:
-                img_data.daq.analog_input[pp] = self.daq.read_ai(img_data.daq.analog_input.shape[1])
-            except Exception as e:
-                print(f"while storing analog in voltages: {e}")
+            # try:
+            #     img_data.daq.analog_input[pp] = self.daq.read_ai(img_data.daq.analog_input.shape[1])
+            # except Exception as e:
+            #     print(f"while storing analog in voltages: {e}")
 
             # stop recording
             if mmc1.isSequenceRunning():
