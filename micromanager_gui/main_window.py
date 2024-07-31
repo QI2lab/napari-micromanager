@@ -1373,7 +1373,6 @@ class MainWindow(QtW.QWidget, _MainUI):
                                                       "bit_depth": 1,
                                                       "num_repeats": 0,
                                                       "compression_mode": "erle",
-                                                      "combine_images": True
                                                       }
                                               )
         self.upload_thread.start()
