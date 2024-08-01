@@ -1406,29 +1406,10 @@
              <string>set illumination mode</string>
             </property>
             <layout class="QGridLayout" name="gridLayout_5">
-             <item row="3" column="2" colspan="2">
-              <widget class="QComboBox" name="mode_comboBox"/>
-             </item>
-             <item row="4" column="2">
-              <widget class="QDoubleSpinBox" name="pattern_time_SpinBox">
-               <property name="decimals">
-                <number>3</number>
-               </property>
-               <property name="maximum">
-                <double>10000.000000000000000</double>
-               </property>
-              </widget>
-             </item>
-             <item row="4" column="1">
-              <widget class="QLabel" name="label_14">
-               <property name="minimumSize">
-                <size>
-                 <width>100</width>
-                 <height>0</height>
-                </size>
-               </property>
+             <item row="3" column="0">
+              <widget class="QPushButton" name="set_channel_Button">
                <property name="text">
-                <string>pattern time (ms)</string>
+                <string>set</string>
                </property>
               </widget>
              </item>
@@ -1445,8 +1426,12 @@
                </property>
               </widget>
              </item>
-             <item row="1" column="2" colspan="2">
-              <widget class="QComboBox" name="channel_comboBox"/>
+             <item row="0" column="1">
+              <widget class="QLabel" name="label_12">
+               <property name="text">
+                <string>MM channel</string>
+               </property>
+              </widget>
              </item>
              <item row="3" column="1">
               <widget class="QLabel" name="label_15">
@@ -1461,19 +1446,34 @@
                </property>
               </widget>
              </item>
-             <item row="3" column="0">
-              <widget class="QPushButton" name="set_channel_Button">
+             <item row="1" column="2" colspan="2">
+              <widget class="QComboBox" name="channel_comboBox"/>
+             </item>
+             <item row="4" column="1">
+              <widget class="QLabel" name="label_14">
+               <property name="minimumSize">
+                <size>
+                 <width>100</width>
+                 <height>0</height>
+                </size>
+               </property>
                <property name="text">
-                <string>set</string>
+                <string>pattern time (ms)</string>
                </property>
               </widget>
              </item>
-             <item row="0" column="1">
-              <widget class="QLabel" name="label_12">
-               <property name="text">
-                <string>MM channel</string>
+             <item row="4" column="2">
+              <widget class="QDoubleSpinBox" name="pattern_time_SpinBox">
+               <property name="decimals">
+                <number>3</number>
+               </property>
+               <property name="maximum">
+                <double>10000.000000000000000</double>
                </property>
               </widget>
+             </item>
+             <item row="3" column="2" colspan="2">
+              <widget class="QComboBox" name="mode_comboBox"/>
              </item>
              <item row="0" column="2" colspan="2">
               <widget class="QComboBox" name="snap_channel_comboBox">
@@ -1492,126 +1492,210 @@
            </widget>
           </item>
           <item>
-           <widget class="QGroupBox" name="groupBox_6">
-            <property name="maximumSize">
-             <size>
-              <width>16777215</width>
-              <height>100</height>
-             </size>
+           <widget class="QTabWidget" name="tabWidget_2">
+            <property name="currentIndex">
+             <number>2</number>
             </property>
-            <property name="title">
-             <string>set DMD firmware pattern</string>
-            </property>
-            <property name="checkable">
-             <bool>false</bool>
-            </property>
-            <layout class="QGridLayout" name="gridLayout_2">
-             <item row="0" column="4">
-              <widget class="QSpinBox" name="bit_index_spinBox"/>
-             </item>
-             <item row="0" column="1" alignment="Qt::AlignRight">
-              <widget class="QLabel" name="label_11">
-               <property name="text">
-                <string>picture</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="3" alignment="Qt::AlignRight">
-              <widget class="QLabel" name="label_13">
-               <property name="text">
-                <string>bit</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="2">
-              <widget class="QSpinBox" name="pic_index_spinBox"/>
-             </item>
-             <item row="2" column="2">
-              <widget class="QCheckBox" name="dmd_update_immediately_checkBox">
-               <property name="text">
-                <string>update immediately</string>
-               </property>
-              </widget>
-             </item>
-             <item row="2" column="4">
-              <widget class="QCheckBox" name="dmd_snap_checkBox">
-               <property name="text">
-                <string>snap on change</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="0">
-              <widget class="QPushButton" name="set_dmd_pattern_index_pushButton">
-               <property name="text">
-                <string>set</string>
-               </property>
-              </widget>
-             </item>
-             <item row="2" column="0">
-              <widget class="QPushButton" name="show_dmd_firmware_pattern_pushButton">
-               <property name="text">
-                <string>show</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </widget>
-          </item>
-          <item>
-           <widget class="QGroupBox" name="groupBox_2">
-            <property name="title">
-             <string>upload DMD patterns</string>
-            </property>
-            <layout class="QGridLayout" name="gridLayout_3">
-             <item row="2" column="2">
-              <widget class="QPushButton" name="upload_dmd_pattern_pushButton">
-               <property name="text">
-                <string>upload</string>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="4">
-              <widget class="QDoubleSpinBox" name="dmd_set_file_pattern_time_doubleSpinBox">
-               <property name="decimals">
-                <number>3</number>
-               </property>
-               <property name="maximum">
-                <double>10000000000000.000000000000000</double>
-               </property>
-              </widget>
-             </item>
-             <item row="2" column="4">
-              <widget class="QPushButton" name="set_uploaded_dmd_pattern_pushButton">
-               <property name="text">
-                <string>set</string>
-               </property>
-              </widget>
-             </item>
-             <item row="2" column="0">
-              <widget class="QPushButton" name="dmd_pattern_find_pushButton">
-               <property name="text">
-                <string>...</string>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="2">
-              <widget class="QLabel" name="label_23">
-               <property name="text">
-                <string>pattern time (ms)</string>
-               </property>
-              </widget>
-             </item>
-             <item row="2" column="1">
-              <widget class="QPushButton" name="show_dmd_upload_pattern_pushButton">
-               <property name="text">
-                <string>show</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="0" rowspan="2" colspan="2">
-              <widget class="QLineEdit" name="dmd_pattern_lineEdit"/>
-             </item>
-            </layout>
+            <widget class="QWidget" name="tab">
+             <attribute name="title">
+              <string>DMD firmware</string>
+             </attribute>
+             <layout class="QHBoxLayout" name="horizontalLayout">
+              <item>
+               <widget class="QGroupBox" name="groupBox_6">
+                <property name="maximumSize">
+                 <size>
+                  <width>16777215</width>
+                  <height>100</height>
+                 </size>
+                </property>
+                <property name="title">
+                 <string>set DMD firmware pattern</string>
+                </property>
+                <property name="checkable">
+                 <bool>false</bool>
+                </property>
+                <layout class="QGridLayout" name="gridLayout_2">
+                 <item row="2" column="0">
+                  <widget class="QCheckBox" name="dmd_snap_checkBox">
+                   <property name="text">
+                    <string>snap on change</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="4">
+                  <widget class="QSpinBox" name="bit_index_spinBox"/>
+                 </item>
+                 <item row="0" column="1" alignment="Qt::AlignRight">
+                  <widget class="QLabel" name="label_11">
+                   <property name="text">
+                    <string>picture</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="2">
+                  <widget class="QSpinBox" name="pic_index_spinBox"/>
+                 </item>
+                 <item row="0" column="3" alignment="Qt::AlignRight">
+                  <widget class="QLabel" name="label_13">
+                   <property name="text">
+                    <string>bit</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="0">
+                  <widget class="QCheckBox" name="dmd_update_immediately_checkBox">
+                   <property name="text">
+                    <string>update immediately</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="2" column="4">
+                  <widget class="QPushButton" name="show_dmd_firmware_pattern_pushButton">
+                   <property name="text">
+                    <string>show</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="2" column="2">
+                  <widget class="QPushButton" name="set_dmd_pattern_index_pushButton">
+                   <property name="text">
+                    <string>set</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+            <widget class="QWidget" name="tab_2">
+             <attribute name="title">
+              <string>DMD upload</string>
+             </attribute>
+             <layout class="QHBoxLayout" name="horizontalLayout_2">
+              <item>
+               <widget class="QGroupBox" name="groupBox_2">
+                <property name="title">
+                 <string>upload DMD patterns</string>
+                </property>
+                <layout class="QGridLayout" name="gridLayout_3">
+                 <item row="1" column="3">
+                  <widget class="QLabel" name="label_23">
+                   <property name="text">
+                    <string>pattern time (ms)</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="5">
+                  <widget class="QDoubleSpinBox" name="dmd_set_file_pattern_time_doubleSpinBox">
+                   <property name="decimals">
+                    <number>3</number>
+                   </property>
+                   <property name="maximum">
+                    <double>10000000000000.000000000000000</double>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="2" column="0">
+                  <widget class="QPushButton" name="dmd_pattern_find_pushButton">
+                   <property name="text">
+                    <string>...</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="2" column="1">
+                  <widget class="QPushButton" name="upload_dmd_pattern_pushButton">
+                   <property name="text">
+                    <string>upload</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="0" rowspan="2" colspan="2">
+                  <widget class="QLineEdit" name="dmd_pattern_lineEdit"/>
+                 </item>
+                 <item row="2" column="5">
+                  <widget class="QPushButton" name="show_dmd_upload_pattern_pushButton">
+                   <property name="text">
+                    <string>show</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="2" column="3">
+                  <widget class="QPushButton" name="set_uploaded_dmd_pattern_pushButton">
+                   <property name="text">
+                    <string>set</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+            <widget class="QWidget" name="tab_3">
+             <attribute name="title">
+              <string>DMD select</string>
+             </attribute>
+             <layout class="QGridLayout" name="gridLayout_11">
+              <item row="1" column="1">
+               <spacer name="horizontalSpacer">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item row="1" column="0">
+               <widget class="QComboBox" name="select_dmd_comboBox">
+                <property name="minimumSize">
+                 <size>
+                  <width>100</width>
+                  <height>0</height>
+                 </size>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="label_31">
+                <property name="text">
+                 <string>select DMD</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <spacer name="verticalSpacer_2">
+                <property name="orientation">
+                 <enum>Qt::Vertical</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>40</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item row="2" column="1">
+               <spacer name="verticalSpacer">
+                <property name="orientation">
+                 <enum>Qt::Vertical</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>40</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </widget>
            </widget>
           </item>
           <item>
@@ -1647,6 +1731,13 @@
              <property name="bottomMargin">
               <number>7</number>
              </property>
+             <item row="4" column="1">
+              <widget class="QCheckBox" name="daq_update_immediately_checkBox">
+               <property name="text">
+                <string>update immediately</string>
+               </property>
+              </widget>
+             </item>
              <item row="0" column="1">
               <widget class="QPushButton" name="add_ch_Button">
                <property name="minimumSize">
@@ -1663,6 +1754,58 @@
                </property>
                <property name="text">
                 <string>Add</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QPushButton" name="clear_ch_Button">
+               <property name="minimumSize">
+                <size>
+                 <width>90</width>
+                 <height>0</height>
+                </size>
+               </property>
+               <property name="maximumSize">
+                <size>
+                 <width>90</width>
+                 <height>16777215</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>Clear</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <widget class="QCheckBox" name="daq_snap_checkBox">
+               <property name="text">
+                <string>snap on change</string>
+               </property>
+              </widget>
+             </item>
+             <item row="8" column="0" colspan="2">
+              <widget class="QPushButton" name="daq_update_pushButton">
+               <property name="text">
+                <string>update</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QPushButton" name="remove_ch_Button">
+               <property name="minimumSize">
+                <size>
+                 <width>90</width>
+                 <height>0</height>
+                </size>
+               </property>
+               <property name="maximumSize">
+                <size>
+                 <width>90</width>
+                 <height>16777215</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>Remove</string>
                </property>
               </widget>
              </item>
@@ -1725,65 +1868,6 @@
                  <string>Digits</string>
                 </property>
                </column>
-              </widget>
-             </item>
-             <item row="8" column="0" colspan="2">
-              <widget class="QPushButton" name="daq_update_pushButton">
-               <property name="text">
-                <string>update</string>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="1">
-              <widget class="QPushButton" name="remove_ch_Button">
-               <property name="minimumSize">
-                <size>
-                 <width>90</width>
-                 <height>0</height>
-                </size>
-               </property>
-               <property name="maximumSize">
-                <size>
-                 <width>90</width>
-                 <height>16777215</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>Remove</string>
-               </property>
-              </widget>
-             </item>
-             <item row="2" column="1">
-              <widget class="QPushButton" name="clear_ch_Button">
-               <property name="minimumSize">
-                <size>
-                 <width>90</width>
-                 <height>0</height>
-                </size>
-               </property>
-               <property name="maximumSize">
-                <size>
-                 <width>90</width>
-                 <height>16777215</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>Clear</string>
-               </property>
-              </widget>
-             </item>
-             <item row="3" column="1">
-              <widget class="QCheckBox" name="daq_snap_checkBox">
-               <property name="text">
-                <string>snap on change</string>
-               </property>
-              </widget>
-             </item>
-             <item row="4" column="1">
-              <widget class="QCheckBox" name="daq_update_immediately_checkBox">
-               <property name="text">
-                <string>update immediately</string>
-               </property>
               </widget>
              </item>
             </layout>
@@ -1852,18 +1936,11 @@
   <tabstop>set_channel_Button</tabstop>
   <tabstop>mode_comboBox</tabstop>
   <tabstop>pattern_time_SpinBox</tabstop>
-  <tabstop>set_dmd_pattern_index_pushButton</tabstop>
   <tabstop>pic_index_spinBox</tabstop>
   <tabstop>bit_index_spinBox</tabstop>
-  <tabstop>show_dmd_firmware_pattern_pushButton</tabstop>
-  <tabstop>dmd_update_immediately_checkBox</tabstop>
-  <tabstop>dmd_snap_checkBox</tabstop>
   <tabstop>dmd_pattern_lineEdit</tabstop>
   <tabstop>dmd_set_file_pattern_time_doubleSpinBox</tabstop>
   <tabstop>dmd_pattern_find_pushButton</tabstop>
-  <tabstop>show_dmd_upload_pattern_pushButton</tabstop>
-  <tabstop>upload_dmd_pattern_pushButton</tabstop>
-  <tabstop>set_uploaded_dmd_pattern_pushButton</tabstop>
   <tabstop>daq_channel_tableWidget</tabstop>
   <tabstop>add_ch_Button</tabstop>
   <tabstop>remove_ch_Button</tabstop>

@@ -153,6 +153,9 @@ class _MainUI:
     set_uploaded_dmd_pattern_pushButton: QtW.QPushButton
     dmd_set_file_pattern_time_doubleSpinBox: QtW.QDoubleSpinBox
 
+    # dmd select
+    select_dmd_comboBox: QtW.QComboBox
+
     # daq
     daq_channel_groupBox: QtW.QGroupBox
     daq_channel_tableWidget: QtW.QTableWidget
@@ -200,6 +203,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         # placeholders: since these are passed through to the other widgets, they can be updated but not reassigned
         self.phcam = phantom_cam()
         self.dmd = dlp6500.dlp6500win(initialize=False)
+        self.dmd2 = dlp6500.dlp6500win(initialize=False) # todo: pass through to other things...
         self.daq = daq.nidaq(initialize=False)
         self.cfg_data = {}
         self.cam_affine_xform_napari_cam2_to_cam1 = None
@@ -277,6 +281,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.set_channel_Button.clicked.connect(self.set_channel_and_mode)
         # self.set_channel_Button.clicked.connect(self._on_channel_changed)  # update daq display also
         self.pattern_time_SpinBox.setValue(0.105)  # DMD pattern time
+
+        self.select_dmd_comboBox.addItems(["0", "1"])
 
         #  image processing
         self.image_processing_modes = ["normal", "fft", "hologram", "hologram volume"]
@@ -428,8 +434,10 @@ class MainWindow(QtW.QWidget, _MainUI):
                         self._mmcores[1].setConfig("System", "Startup")
 
             elif mode == "DMD":
-                fname_dmd_config = Path(path)
-                self.dmd.initialize(debug=True, config_file=fname_dmd_config)
+                self.dmd.initialize(debug=True, config_file=Path(path), )
+
+            elif mode == "DMD 2":
+                self.dmd2.initialize(debug=True, dmd_index=1, config_file=Path(path))
 
             elif mode == "DAQ":
                 self.daq.initialize(dev_name="Dev1",
@@ -514,6 +522,7 @@ class MainWindow(QtW.QWidget, _MainUI):
     def _refresh_mode_options(self):
         self.mode_comboBox.clear()
 
+        # todo: how to deal with 2 DMD's? Check for both?
         if self.dmd.initialized:
             chan = self.channel_comboBox.currentText()
 
@@ -1247,7 +1256,15 @@ class MainWindow(QtW.QWidget, _MainUI):
         # time to display DMD pattern before moving to the next
         frame_time_us = int(np.round(self.pattern_time_SpinBox.value() * 1000))
 
-        self.upload_thread = threading.Thread(target=self.dmd.program_dmd_seq,
+        # check DMD
+        if self.select_dmd_comboBox.currentText() == "0":
+            dmd = self.dmd
+        elif self.select_dmd_comboBox.currentText() == "1":
+            dmd = self.dmd2
+        else:
+            raise ValueError()
+
+        self.upload_thread = threading.Thread(target=dmd.program_dmd_seq,
                                               args=(mode, channel),
                                               kwargs={"nrepeats": 1,
                                                       "noff_before": 0,
@@ -1284,9 +1301,16 @@ class MainWindow(QtW.QWidget, _MainUI):
         if self.upload_thread is not None:
             self.upload_thread.join()
 
-        self.dmd.start_stop_sequence('stop')
+        if self.select_dmd_comboBox.currentText() == "0":
+            dmd = self.dmd
+        elif self.select_dmd_comboBox.currentText() == "1":
+            dmd = self.dmd2
+        else:
+            raise ValueError()
 
-        self.upload_thread = threading.Thread(target=self.dmd.set_pattern_sequence,
+        dmd.start_stop_sequence('stop')
+
+        self.upload_thread = threading.Thread(target=dmd.set_pattern_sequence,
                                               args=([pic_ind], [bit_ind]),
                                               kwargs={"exp_times": 105,
                                                       "dark_times": 0,
@@ -1308,9 +1332,16 @@ class MainWindow(QtW.QWidget, _MainUI):
         bit_ind = self.bit_index_spinBox.value()
         combined_ind = dlp6500.pic_bit_ind_2firmware_ind(pic_ind, bit_ind)
 
-        if self.dmd.firmware_patterns is not None:
+        if self.select_dmd_comboBox.currentText() == "0":
+            dmd = self.dmd
+        elif self.select_dmd_comboBox.currentText() == "1":
+            dmd = self.dmd2
+        else:
+            raise ValueError()
+
+        if dmd.firmware_patterns is not None:
             try:
-                firmware_pattern = self.dmd.firmware_patterns[combined_ind]
+                firmware_pattern = dmd.firmware_patterns[combined_ind]
 
                 layer_name = f"DMD firmware pic={pic_ind:d}, bit={bit_ind:d}, combined index={combined_ind:d}"
 
@@ -1338,6 +1369,14 @@ class MainWindow(QtW.QWidget, _MainUI):
         if self.upload_thread is not None:
             self.upload_thread.join()
 
+        # select DMD
+        if self.select_dmd_comboBox.currentText() == "0":
+            dmd = self.dmd
+        elif self.select_dmd_comboBox.currentText() == "1":
+            dmd = self.dmd2
+        else:
+            raise ValueError()
+
         # load patterns
         patterns = []
         for f in self.dmd_pattern_fnames:
@@ -1351,20 +1390,20 @@ class MainWindow(QtW.QWidget, _MainUI):
         ny = patterns.shape[1]
         nx = patterns.shape[2]
 
-        if ny != self.dmd.height or nx != self.dmd.width:
+        if ny != dmd.height or nx != dmd.width:
             raise ValueError("pattern sizes did not match DMD size")
 
         # grab pattern time
         pattern_time_us = int(np.round(self.dmd_set_file_pattern_time_doubleSpinBox.value() * 1e3))
 
         # set patterns
-        self.dmd.start_stop_sequence('stop')
+        dmd.start_stop_sequence('stop')
         self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
                                            ["dmd_enable", "dmd_advance"])
 
         # put in different thread so don't block GUI
         # still printing to the terminal and not bothering to acquire a lock
-        self.upload_thread = threading.Thread(target=self.dmd.upload_pattern_sequence,
+        self.upload_thread = threading.Thread(target=dmd.upload_pattern_sequence,
                                               args=(patterns,),
                                               kwargs={"exp_times": pattern_time_us,
                                                       "dark_times": 0,
@@ -1384,15 +1423,22 @@ class MainWindow(QtW.QWidget, _MainUI):
         if self.upload_thread is not None:
             self.upload_thread.join()
 
+        if self.select_dmd_comboBox.currentText() == "0":
+            dmd = self.dmd
+        elif self.select_dmd_comboBox.currentText() == "1":
+            dmd = self.dmd2
+        else:
+            raise ValueError()
+
         # grab pattern time
         pattern_time_us = int(np.round(self.dmd_set_file_pattern_time_doubleSpinBox.value() * 1e3))
 
-        self.dmd.start_stop_sequence('stop')
+        dmd.start_stop_sequence('stop')
         self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
                                            ["dmd_enable", "dmd_advance"])
 
         pic_inds, bit_inds = dlp6500.firmware_index_2pic_bit(list(range(len(self.dmd_pattern_fnames))))
-        self.dmd.set_pattern_sequence(pic_inds.tolist(),
+        dmd.set_pattern_sequence(pic_inds.tolist(),
                                       bit_inds.tolist(),
                                       exp_times=pattern_time_us,
                                       dark_times=0,
@@ -1404,8 +1450,15 @@ class MainWindow(QtW.QWidget, _MainUI):
 
     def _show_uploaded_dmd_pattern(self):
 
-        if self.dmd.on_the_fly_patterns is not None:
-            patterns = self.dmd.on_the_fly_patterns
+        if self.select_dmd_comboBox.currentText() == "0":
+            dmd = self.dmd
+        elif self.select_dmd_comboBox.currentText() == "1":
+            dmd = self.dmd2
+        else:
+            raise ValueError()
+
+        if dmd.on_the_fly_patterns is not None:
+            patterns = dmd.on_the_fly_patterns
         else:
             # raise ValueError("DMD is not loaded with on-the-fly pattern data")
             print("DMD is not loaded with on-the-fly pattern data")
