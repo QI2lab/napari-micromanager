@@ -166,6 +166,15 @@ class _MainUI:
     daq_update_pushButton: QtW.QPushButton
     daq_snap_checkBox: QtW.QCheckBox
 
+    # daq waveforms
+    waveform_line_comboBox: QtW.QComboBox
+    offset_doubleSpinBox: QtW.QDoubleSpinBox
+    amplitude_doubleSpinBox: QtW.QDoubleSpinBox
+    frequency_doubleSpinBox: QtW.QDoubleSpinBox
+    waveform_pushButton: QtW.QPushButton
+    waveform_stop_pushButton: QtW.QPushButton
+
+
     def setup_ui(self):
         uic.loadUi(self.UI_FILE, self)  # load QtDesigner .ui file
 
@@ -275,6 +284,12 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.daq_update_pushButton.clicked.connect(self._on_daq_setting_change)
         self.daq_update_immediately_checkBox.setChecked(True)
         self.daq_update_immediately_checkBox.clicked.connect(self._on_channel_changed)
+
+        self.amplitude_doubleSpinBox.setValue(0.1)
+        self.frequency_doubleSpinBox.setValue(1.)
+        self.offset_doubleSpinBox.setValue(0.)
+        self.waveform_pushButton.clicked.connect(self.display_waveform)
+        self.waveform_stop_pushButton.clicked.connect(self.stop_waveform)
 
         # DAQ/DMD illumination modes
         self.channel_comboBox.currentTextChanged.connect(self._refresh_mode_options)
@@ -1596,3 +1611,20 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         if self.daq_snap_checkBox.isChecked():
             self.snap()
+
+    def display_waveform(self):
+        amp = float(self.amplitude_doubleSpinBox.value())
+        frq = float(self.frequency_doubleSpinBox.value())
+        off = float(self.offset_doubleSpinBox.value())
+        _, off1, off2, off3 = self.daq.last_known_analog_val
+
+        # todo: implement line selection
+        self.daq.set_sine_wave(np.array([amp, 0., 0., 0.]),
+                               offs=np.array([off, off1, off2, off3]),
+                               frq=frq, # Hz
+                               )
+        self.daq.start_sequence()
+
+    def stop_waveform(self):
+        self.daq.stop_sequence()
+

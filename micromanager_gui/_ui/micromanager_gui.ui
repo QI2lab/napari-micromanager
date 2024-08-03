@@ -1492,9 +1492,9 @@
            </widget>
           </item>
           <item>
-           <widget class="QTabWidget" name="tabWidget_2">
+           <widget class="QTabWidget" name="dmd_tabWidget">
             <property name="currentIndex">
-             <number>2</number>
+             <number>0</number>
             </property>
             <widget class="QWidget" name="tab">
              <attribute name="title">
@@ -1516,32 +1516,25 @@
                  <bool>false</bool>
                 </property>
                 <layout class="QGridLayout" name="gridLayout_2">
-                 <item row="2" column="0">
-                  <widget class="QCheckBox" name="dmd_snap_checkBox">
-                   <property name="text">
-                    <string>snap on change</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="0" column="4">
-                  <widget class="QSpinBox" name="bit_index_spinBox"/>
-                 </item>
-                 <item row="0" column="1" alignment="Qt::AlignRight">
-                  <widget class="QLabel" name="label_11">
-                   <property name="text">
-                    <string>picture</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="0" column="2">
-                  <widget class="QSpinBox" name="pic_index_spinBox"/>
-                 </item>
                  <item row="0" column="3" alignment="Qt::AlignRight">
                   <widget class="QLabel" name="label_13">
                    <property name="text">
                     <string>bit</string>
                    </property>
                   </widget>
+                 </item>
+                 <item row="0" column="4">
+                  <widget class="QSpinBox" name="bit_index_spinBox"/>
+                 </item>
+                 <item row="2" column="2">
+                  <widget class="QPushButton" name="set_dmd_pattern_index_pushButton">
+                   <property name="text">
+                    <string>set</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="2">
+                  <widget class="QSpinBox" name="pic_index_spinBox"/>
                  </item>
                  <item row="0" column="0">
                   <widget class="QCheckBox" name="dmd_update_immediately_checkBox">
@@ -1550,17 +1543,24 @@
                    </property>
                   </widget>
                  </item>
+                 <item row="2" column="0">
+                  <widget class="QCheckBox" name="dmd_snap_checkBox">
+                   <property name="text">
+                    <string>snap on change</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="1" alignment="Qt::AlignRight">
+                  <widget class="QLabel" name="label_11">
+                   <property name="text">
+                    <string>picture</string>
+                   </property>
+                  </widget>
+                 </item>
                  <item row="2" column="4">
                   <widget class="QPushButton" name="show_dmd_firmware_pattern_pushButton">
                    <property name="text">
                     <string>show</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="2" column="2">
-                  <widget class="QPushButton" name="set_dmd_pattern_index_pushButton">
-                   <property name="text">
-                    <string>set</string>
                    </property>
                   </widget>
                  </item>
@@ -1699,178 +1699,299 @@
            </widget>
           </item>
           <item>
-           <widget class="QGroupBox" name="daq_groupBox">
-            <property name="enabled">
-             <bool>true</bool>
+           <widget class="QTabWidget" name="DAQ_tabWidget">
+            <property name="currentIndex">
+             <number>0</number>
             </property>
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>200</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>16777215</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <property name="title">
-             <string>set DAQ lines</string>
-            </property>
-            <property name="checkable">
-             <bool>false</bool>
-            </property>
-            <property name="checked">
-             <bool>false</bool>
-            </property>
-            <layout class="QGridLayout" name="gridLayout_15">
-             <property name="topMargin">
-              <number>7</number>
-             </property>
-             <property name="bottomMargin">
-              <number>7</number>
-             </property>
-             <item row="4" column="1">
-              <widget class="QCheckBox" name="daq_update_immediately_checkBox">
-               <property name="text">
-                <string>update immediately</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="1">
-              <widget class="QPushButton" name="add_ch_Button">
-               <property name="minimumSize">
-                <size>
-                 <width>90</width>
-                 <height>0</height>
-                </size>
-               </property>
-               <property name="maximumSize">
-                <size>
-                 <width>90</width>
-                 <height>16777215</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>Add</string>
-               </property>
-              </widget>
-             </item>
-             <item row="2" column="1">
-              <widget class="QPushButton" name="clear_ch_Button">
-               <property name="minimumSize">
-                <size>
-                 <width>90</width>
-                 <height>0</height>
-                </size>
-               </property>
-               <property name="maximumSize">
-                <size>
-                 <width>90</width>
-                 <height>16777215</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>Clear</string>
-               </property>
-              </widget>
-             </item>
-             <item row="3" column="1">
-              <widget class="QCheckBox" name="daq_snap_checkBox">
-               <property name="text">
-                <string>snap on change</string>
-               </property>
-              </widget>
-             </item>
-             <item row="8" column="0" colspan="2">
-              <widget class="QPushButton" name="daq_update_pushButton">
-               <property name="text">
-                <string>update</string>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="1">
-              <widget class="QPushButton" name="remove_ch_Button">
-               <property name="minimumSize">
-                <size>
-                 <width>90</width>
-                 <height>0</height>
-                </size>
-               </property>
-               <property name="maximumSize">
-                <size>
-                 <width>90</width>
-                 <height>16777215</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>Remove</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="0" rowspan="5">
-              <widget class="QTableWidget" name="daq_channel_tableWidget">
-               <property name="minimumSize">
-                <size>
-                 <width>0</width>
-                 <height>150</height>
-                </size>
-               </property>
-               <property name="editTriggers">
-                <set>QAbstractItemView::CurrentChanged</set>
-               </property>
-               <property name="tabKeyNavigation">
-                <bool>true</bool>
-               </property>
-               <property name="showDropIndicator" stdset="0">
-                <bool>false</bool>
-               </property>
-               <property name="dragDropOverwriteMode">
-                <bool>false</bool>
-               </property>
-               <property name="alternatingRowColors">
-                <bool>false</bool>
-               </property>
-               <property name="selectionBehavior">
-                <enum>QAbstractItemView::SelectRows</enum>
-               </property>
-               <property name="textElideMode">
-                <enum>Qt::ElideRight</enum>
-               </property>
-               <property name="showGrid">
-                <bool>true</bool>
-               </property>
-               <property name="gridStyle">
-                <enum>Qt::SolidLine</enum>
-               </property>
-               <property name="columnCount">
-                <number>3</number>
-               </property>
-               <attribute name="horizontalHeaderDefaultSectionSize">
-                <number>127</number>
-               </attribute>
-               <attribute name="verticalHeaderVisible">
-                <bool>false</bool>
-               </attribute>
-               <column>
-                <property name="text">
-                 <string>Channel</string>
+            <widget class="QWidget" name="tab_4">
+             <attribute name="title">
+              <string>DAQ lines</string>
+             </attribute>
+             <layout class="QGridLayout" name="gridLayout_17">
+              <item row="0" column="0">
+               <widget class="QGroupBox" name="daq_groupBox">
+                <property name="enabled">
+                 <bool>true</bool>
                 </property>
-               </column>
-               <column>
-                <property name="text">
-                 <string>Value</string>
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>200</height>
+                 </size>
                 </property>
-               </column>
-               <column>
-                <property name="text">
-                 <string>Digits</string>
+                <property name="maximumSize">
+                 <size>
+                  <width>16777215</width>
+                  <height>16777215</height>
+                 </size>
                 </property>
-               </column>
-              </widget>
-             </item>
-            </layout>
+                <property name="title">
+                 <string>set DAQ lines</string>
+                </property>
+                <property name="checkable">
+                 <bool>false</bool>
+                </property>
+                <property name="checked">
+                 <bool>false</bool>
+                </property>
+                <layout class="QGridLayout" name="gridLayout_15">
+                 <property name="topMargin">
+                  <number>7</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>7</number>
+                 </property>
+                 <item row="2" column="1">
+                  <widget class="QPushButton" name="clear_ch_Button">
+                   <property name="minimumSize">
+                    <size>
+                     <width>90</width>
+                     <height>0</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>90</width>
+                     <height>16777215</height>
+                    </size>
+                   </property>
+                   <property name="text">
+                    <string>Clear</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="3" column="1">
+                  <widget class="QCheckBox" name="daq_snap_checkBox">
+                   <property name="text">
+                    <string>snap on change</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="0" rowspan="5">
+                  <widget class="QTableWidget" name="daq_channel_tableWidget">
+                   <property name="minimumSize">
+                    <size>
+                     <width>0</width>
+                     <height>150</height>
+                    </size>
+                   </property>
+                   <property name="editTriggers">
+                    <set>QAbstractItemView::CurrentChanged</set>
+                   </property>
+                   <property name="tabKeyNavigation">
+                    <bool>true</bool>
+                   </property>
+                   <property name="showDropIndicator" stdset="0">
+                    <bool>false</bool>
+                   </property>
+                   <property name="dragDropOverwriteMode">
+                    <bool>false</bool>
+                   </property>
+                   <property name="alternatingRowColors">
+                    <bool>false</bool>
+                   </property>
+                   <property name="selectionBehavior">
+                    <enum>QAbstractItemView::SelectRows</enum>
+                   </property>
+                   <property name="textElideMode">
+                    <enum>Qt::ElideRight</enum>
+                   </property>
+                   <property name="showGrid">
+                    <bool>true</bool>
+                   </property>
+                   <property name="gridStyle">
+                    <enum>Qt::SolidLine</enum>
+                   </property>
+                   <property name="columnCount">
+                    <number>3</number>
+                   </property>
+                   <attribute name="horizontalHeaderDefaultSectionSize">
+                    <number>127</number>
+                   </attribute>
+                   <attribute name="verticalHeaderVisible">
+                    <bool>false</bool>
+                   </attribute>
+                   <column>
+                    <property name="text">
+                     <string>Channel</string>
+                    </property>
+                   </column>
+                   <column>
+                    <property name="text">
+                     <string>Value</string>
+                    </property>
+                   </column>
+                   <column>
+                    <property name="text">
+                     <string>Digits</string>
+                    </property>
+                   </column>
+                  </widget>
+                 </item>
+                 <item row="1" column="1">
+                  <widget class="QPushButton" name="remove_ch_Button">
+                   <property name="minimumSize">
+                    <size>
+                     <width>90</width>
+                     <height>0</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>90</width>
+                     <height>16777215</height>
+                    </size>
+                   </property>
+                   <property name="text">
+                    <string>Remove</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="1">
+                  <widget class="QPushButton" name="add_ch_Button">
+                   <property name="minimumSize">
+                    <size>
+                     <width>90</width>
+                     <height>0</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>90</width>
+                     <height>16777215</height>
+                    </size>
+                   </property>
+                   <property name="text">
+                    <string>Add</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="8" column="0" colspan="2">
+                  <widget class="QPushButton" name="daq_update_pushButton">
+                   <property name="text">
+                    <string>update</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="4" column="1">
+                  <widget class="QCheckBox" name="daq_update_immediately_checkBox">
+                   <property name="text">
+                    <string>update immediately</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+            <widget class="QWidget" name="tab_5">
+             <attribute name="title">
+              <string>Waveforms</string>
+             </attribute>
+             <layout class="QGridLayout" name="gridLayout_18">
+              <item row="1" column="2">
+               <widget class="QDoubleSpinBox" name="offset_doubleSpinBox">
+                <property name="decimals">
+                 <number>3</number>
+                </property>
+                <property name="minimum">
+                 <double>-100.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>100.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QComboBox" name="waveform_line_comboBox"/>
+              </item>
+              <item row="2" column="1">
+               <widget class="QLabel" name="label_32">
+                <property name="text">
+                 <string>Amplitude (V)</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="2">
+               <widget class="QDoubleSpinBox" name="frequency_doubleSpinBox">
+                <property name="minimum">
+                 <double>-100.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="2">
+               <widget class="QDoubleSpinBox" name="amplitude_doubleSpinBox">
+                <property name="decimals">
+                 <number>3</number>
+                </property>
+                <property name="minimum">
+                 <double>-100.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>100.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLabel" name="label_35">
+                <property name="text">
+                 <string>Line</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLabel" name="label_34">
+                <property name="text">
+                 <string>Offset (V)</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="1">
+               <widget class="QLabel" name="label_33">
+                <property name="text">
+                 <string>Frequency (Hz)</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="1">
+               <spacer name="verticalSpacer_3">
+                <property name="orientation">
+                 <enum>Qt::Vertical</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>40</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item row="2" column="3">
+               <widget class="QPushButton" name="waveform_pushButton">
+                <property name="text">
+                 <string>set</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="3">
+               <widget class="QPushButton" name="waveform_stop_pushButton">
+                <property name="text">
+                 <string>stop</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
            </widget>
           </item>
          </layout>
@@ -1946,7 +2067,6 @@
   <tabstop>remove_ch_Button</tabstop>
   <tabstop>clear_ch_Button</tabstop>
   <tabstop>daq_snap_checkBox</tabstop>
-  <tabstop>daq_update_immediately_checkBox</tabstop>
   <tabstop>daq_update_pushButton</tabstop>
  </tabstops>
  <resources/>
