@@ -454,16 +454,6 @@ class MainWindow(QtW.QWidget, _MainUI):
             elif mode == "DMD 2":
                 self.dmd2.initialize(debug=True, dmd_index=1, config_file=Path(path))
 
-            elif mode == "DAQ":
-                self.daq.initialize(dev_name="Dev1",
-                                    digital_lines="port0/line0:15",
-                                    analog_lines=["ao0", "ao1", "ao2", "ao3"],
-                                    config_file=path)
-
-                # populate channel combo box
-                self.channel_comboBox.clear()
-                self.channel_comboBox.addItems(list(self.daq.presets.keys()))
-
             elif mode == "microscope":
                 with open(path, "r") as f:
                     self.cfg_data.update(json.load(f))
@@ -475,6 +465,17 @@ class MainWindow(QtW.QWidget, _MainUI):
                 cam_affine_xform_cam1_to_cam2 = np.array(self.cfg_data["camera_affine_transforms"]["xform"])
                 cam_affine_xform_napari_cam1_to_cam2 = swap_xy.dot(cam_affine_xform_cam1_to_cam2.dot(swap_xy))
                 self.cam_affine_xform_napari_cam2_to_cam1 = np.linalg.inv(cam_affine_xform_napari_cam1_to_cam2)
+
+                # DAQ
+                self.daq.initialize(dev_name="Dev1",
+                                    digital_lines="port0/line0:15",
+                                    analog_lines=["ao0", "ao1", "ao2", "ao3"],
+                                    config_file=path,
+                                    component="daq_configuration")
+
+                # populate channel combo box
+                self.channel_comboBox.clear()
+                self.channel_comboBox.addItems(list(self.daq.presets.keys()))
 
             else:
                 raise ValueError(f"mode {mode:s} is not supported")
