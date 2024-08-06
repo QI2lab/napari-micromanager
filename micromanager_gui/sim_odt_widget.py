@@ -78,6 +78,7 @@ class _MultiDUI:
     fname_lineEdit: QtW.QLineEdit
     dir_lineEdit: QtW.QLineEdit
     browse_save_Button: QtW.QPushButton
+    notes_textEdit: QtW.QTextEdit
 
     channel_groupBox: QtW.QGroupBox
     channel_tableWidget: QtW.QTableWidget  # TODO: extract
@@ -933,6 +934,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             self.img_data = img_data
 
         # other metadata
+        img_data.attrs["notes"] = self.notes_textEdit.toPlainText()
         img_data.attrs["timestamp"] = datetime.datetime.now().strftime('%Y_%d_%m_%H;%M;%S')
         img_data.attrs["channels"] = acq_modes
         img_data.attrs["xy_position_um_set"] = xy_positions
