@@ -1209,6 +1209,13 @@
                </property>
               </widget>
              </item>
+             <item row="3" column="4">
+              <widget class="QCheckBox" name="scale_continuous_checkBox">
+               <property name="text">
+                <string>scale continuous</string>
+               </property>
+              </widget>
+             </item>
             </layout>
            </widget>
           </item>

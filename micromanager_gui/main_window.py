@@ -125,7 +125,9 @@ class _MainUI:
     min_label: QtW.QLabel
     max_scale_doubleSpinBox: QtW.QDoubleSpinBox
     min_scale_doubleSpinBox: QtW.QDoubleSpinBox
+    scale_continuous_checkBox: QtW.QCheckBox
     autoscale_Button: QtW.QPushButton
+
     px_size_doubleSpinBox: QtW.QDoubleSpinBox
     properties_Button: QtW.QPushButton
     snap_on_click_xy_checkBox: QtW.QCheckBox
@@ -894,6 +896,9 @@ class MainWindow(QtW.QWidget, _MainUI):
                                                       translate=[ny, nx],
                                                       scale=scale_holo
                                                       )
+
+        if self.scale_continuous_checkBox.isChecked():
+            self.autoscale_active_layer()
 
     def guess_holo_frq(self):
         """
