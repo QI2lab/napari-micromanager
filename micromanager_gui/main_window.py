@@ -144,6 +144,7 @@ class _MainUI:
     show_dmd_firmware_pattern_pushButton: QtW.QPushButton
     dmd_snap_checkBox: QtW.QCheckBox
     dmd_update_immediately_checkBox: QtW.QCheckBox
+    dmd_firmware_pattern_label: QtW.QLabel
 
     # dmd pattern
     dmd_pattern_lineEdit: QtW.QLineEdit
@@ -1313,6 +1314,7 @@ class MainWindow(QtW.QWidget, _MainUI):
     def _set_dmd_firmware_pattern(self):
         pic_ind = self.pic_index_spinBox.value()
         bit_ind = self.bit_index_spinBox.value()
+        combined_index = dlp6500.pic_bit_ind_2firmware_ind(pic_ind, bit_ind)
 
         if self.upload_thread is not None:
             self.upload_thread.join()
@@ -1325,6 +1327,22 @@ class MainWindow(QtW.QWidget, _MainUI):
             raise ValueError()
 
         dmd.start_stop_sequence('stop')
+
+        try:
+            type = dmd.firmware_pattern_info[combined_index]["type"]
+            if type == "sim":
+                a1 = dmd.firmware_pattern_info[combined_index]["a1"]
+                a2 = dmd.firmware_pattern_info[combined_index]["a2"]
+                wl = dmd.firmware_pattern_info[combined_index]["wavelength"]
+                label = f"{type:s}, a1=({a1[0]:d}, {a1[1]:d}), a2=({a2[0]:d}, {a2[1]:d}), wl={wl:.0f}nm"
+            elif type == "odt":
+                label = f"{type:s}"
+            else:
+                label = f"{type:s}"
+        except Exception as e:
+            label = ""
+
+        self.dmd_firmware_pattern_label.setText(label)
 
         self.upload_thread = threading.Thread(target=dmd.set_pattern_sequence,
                                               args=([pic_ind], [bit_ind]),

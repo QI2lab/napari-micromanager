@@ -1506,7 +1506,7 @@
                 <property name="maximumSize">
                  <size>
                   <width>16777215</width>
-                  <height>100</height>
+                  <height>120</height>
                  </size>
                 </property>
                 <property name="title">
@@ -1561,6 +1561,13 @@
                   <widget class="QPushButton" name="show_dmd_firmware_pattern_pushButton">
                    <property name="text">
                     <string>show</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="3" column="0">
+                  <widget class="QLabel" name="dmd_firmware_pattern_label">
+                   <property name="text">
+                    <string/>
                    </property>
                   </widget>
                  </item>
