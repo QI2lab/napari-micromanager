@@ -1612,15 +1612,18 @@ class MainWindow(QtW.QWidget, _MainUI):
         dig_ch_now = {}
         an_ch_now = {}
         for ii in inds:
-            ch_name = self.daq_channel_tableWidget.cellWidget(ii, 0).currentText()
-            val = self.daq_channel_tableWidget.cellWidget(ii, 1).value()
+            try:
+                ch_name = self.daq_channel_tableWidget.cellWidget(ii, 0).currentText()
+                val = self.daq_channel_tableWidget.cellWidget(ii, 1).value()
 
-            if ch_name in digital_channels:
-                dig_ch_now.update({ch_name: val})
-            elif ch_name in analog_channels:
-                an_ch_now.update({ch_name: val})
-            else:
-                raise ValueError(f"channel `{ch_name}` was not present in digital or analog channels")
+                if ch_name in digital_channels:
+                    dig_ch_now.update({ch_name: val})
+                elif ch_name in analog_channels:
+                    an_ch_now.update({ch_name: val})
+                else:
+                    raise ValueError(f"channel `{ch_name}` was not present in digital or analog channels")
+            except AttributeError:
+                pass
 
         if dig_ch_now != {}:
             # unpack dictionaries to lists
