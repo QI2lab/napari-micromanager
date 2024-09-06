@@ -13,14 +13,10 @@ from qtpy.QtGui import QColor, QIcon
 from superqt.utils import create_worker, ensure_main_thread
 from useq import MDASequence
 
-from ._illumination import IlluminationDialog
-from ._saving import save_sequence
 from ._util import blockSignals, event_indices, extend_array_for_index
-from .explore_sample import ExploreSample
 from .sim_odt_widget import SimOdtWidget
 from .peak_tracker_widget import PeakTrackerWidget
 from .dmd_widget import DmdWidget
-from .multid_widget import MultiDWidget, SequenceMeta
 from .prop_browser import PropBrowser
 
 if TYPE_CHECKING:
@@ -37,6 +33,10 @@ import threading
 from PIL import Image
 import json
 import re
+from numpy import fft
+from scipy.signal.windows import hann
+from scipy.ndimage import maximum_filter, minimum_filter
+# our code
 from mcsim.expt_ctrl import dlp6500, daq
 from mcsim.expt_ctrl.phantom_cam import phantom_cam
 from mcsim.analysis.sim_reconstruction import fit_modulation_frq
@@ -44,17 +44,11 @@ from mcsim.analysis.fft import ft2, ift2, translate_ft
 from mcsim.analysis.optimize import to_cpu
 from mcsim.analysis.field_prop import propagate_homogeneous
 from localize_psf import fit
-from numpy import fft
-from scipy.signal.windows import hann
-from scipy.ndimage import maximum_filter, minimum_filter
-# from skimage.restoration import unwrap_phase
 
-_cupy_available = True
 try:
     import cupy as cp
 except ImportError:
-    cp = np
-    _cupy_available = False
+    cp = None
 
 ICONS = Path(__file__).parent / "icons"
 CAM_ICON = QIcon(str(ICONS / "vcam.svg"))
@@ -91,7 +85,7 @@ class _MainUI:
     snap_live_tab: QtW.QWidget
     multid_tab: QtW.QWidget
     snap_channel_groupBox: QtW.QGroupBox
-    snap_channel_comboBox: QtW.QComboBox
+    # snap_channel_comboBox: QtW.QComboBox
     exp_spinBox: QtW.QDoubleSpinBox
 
     crop_Button: QtW.QPushButton
@@ -226,7 +220,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         sig.XYStagePositionChanged.connect(self._on_xy_stage_position_changed)
         sig.stagePositionChanged.connect(self._on_stage_position_changed)
         sig.exposureChanged.connect(self._on_exp_change)
-        sig.channelGroupChanged.connect(self._refresh_channel_list)
+        # sig.channelGroupChanged.connect(self._refresh_channel_list)
         sig.configSet.connect(self._on_config_set)
 
         self.configuration_selector_comboBox.addItems(["MM config",
@@ -259,7 +253,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.set_affine_ref_Button.clicked.connect(self._set_affine_ref)
         self.bit_comboBox.currentIndexChanged.connect(self._bit_changed)
         self.bin_comboBox.currentIndexChanged.connect(self._bin_changed)
-        self.snap_channel_comboBox.currentTextChanged.connect(self._channel_changed)
+        # self.snap_channel_comboBox.currentTextChanged.connect(self._channel_changed)
         self.set_camera_comboBox.currentTextChanged.connect(self._camera_changed)
         self.max_scale_doubleSpinBox.setValue(99.99)
         self.min_scale_doubleSpinBox.setValue(0.01)
@@ -303,7 +297,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         #  image processing
         self.image_processing_modes = ["normal", "fft", "hologram", "hologram volume"]
         self.image_proc_mode_comboBox.addItems(self.image_processing_modes)
-        self.snap_channel_comboBox.setCurrentText(self.image_processing_modes[0])
+        # self.snap_channel_comboBox.setCurrentText(self.image_processing_modes[0])
         self.guess_holo_frq_Button.clicked.connect(self.guess_holo_frq)
         self.fit_holo_frq_Button.clicked.connect(self.fit_holo_frq)
         self.fit_holo_curvature_Button.clicked.connect(self.fit_holo_curvature)
@@ -358,9 +352,10 @@ class MainWindow(QtW.QWidget, _MainUI):
             pass
 
     def _on_config_set(self, groupName: str, configName: str):
-        if groupName == self._mmc.getOrGuessChannelGroup():
-            with blockSignals(self.snap_channel_comboBox):
-                self.snap_channel_comboBox.setCurrentText(configName)
+        # if groupName == self._mmc.getOrGuessChannelGroup():
+        #     with blockSignals(self.snap_channel_comboBox):
+        #         self.snap_channel_comboBox.setCurrentText(configName)
+        pass
 
     def _set_enabled(self, enabled):
         self.camera_groupBox.setEnabled(enabled)
@@ -397,7 +392,7 @@ class MainWindow(QtW.QWidget, _MainUI):
             boxes = [
                 self.bin_comboBox,
                 self.bit_comboBox,
-                self.snap_channel_comboBox,
+                # self.snap_channel_comboBox,
             ]
             with blockSignals(boxes):
                 for box in boxes:
@@ -506,17 +501,17 @@ class MainWindow(QtW.QWidget, _MainUI):
                     self._mmc_cam.getProperty(cam_device, "PixelType")
                 )
 
-    def _refresh_channel_list(self, channel_group: str = None):
-        if channel_group is None:
-            channel_group = self._mmc.getOrGuessChannelGroup()
-        if channel_group:
-            channel_list = list(self._mmc.getAvailableConfigs(channel_group))
-            with blockSignals(self.snap_channel_comboBox):
-                self.snap_channel_comboBox.clear()
-                self.snap_channel_comboBox.addItems(channel_list)
-                self.snap_channel_comboBox.setCurrentText(
-                    self._mmc.getCurrentConfig(channel_group)
-                )
+    # def _refresh_channel_list(self, channel_group: str = None):
+    #     if channel_group is None:
+    #         channel_group = self._mmc.getOrGuessChannelGroup()
+    #     if channel_group:
+    #         channel_list = list(self._mmc.getAvailableConfigs(channel_group))
+    #         with blockSignals(self.snap_channel_comboBox):
+    #             self.snap_channel_comboBox.clear()
+    #             self.snap_channel_comboBox.addItems(channel_list)
+    #             self.snap_channel_comboBox.setCurrentText(
+    #                 self._mmc.getCurrentConfig(channel_group)
+    #             )
 
     def _refresh_camera_list(self):
         ncores = len(self._mmcores)
@@ -552,7 +547,7 @@ class MainWindow(QtW.QWidget, _MainUI):
 
     def _refresh_options(self):
         self._refresh_camera_options()
-        self._refresh_channel_list()
+        # self._refresh_channel_list()
         self._refresh_positions()
         self._refresh_camera_list()
         self._refresh_mode_options()
@@ -568,10 +563,10 @@ class MainWindow(QtW.QWidget, _MainUI):
             cd = self._mmc_cam.getCameraDevice()
             self._mmc_cam.setProperty(cd, "Binning", bins)
 
-    def _channel_changed(self, newChannel: str):
-        channel_group = self._mmc.getOrGuessChannelGroup()
-        if channel_group:
-            self._mmc.setConfig(channel_group, newChannel)
+    # def _channel_changed(self, newChannel: str):
+    #     channel_group = self._mmc.getOrGuessChannelGroup()
+    #     if channel_group:
+    #         self._mmc.setConfig(channel_group, newChannel)
 
     def _camera_changed(self, newCamera: str):
         # self._mmc.setCameraDevice(newCamera)
@@ -715,7 +710,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         if mode == "normal":
             pass
         elif mode == "fft" or mode == "hologram" or mode == "hologram volume":
-            if _cupy_available:
+            if cp is not None:
                 xp = cp
             else:
                 warnings.warn("CuPy was not available. Install CuPy for fast hologram viewing.")
@@ -1237,9 +1232,9 @@ class MainWindow(QtW.QWidget, _MainUI):
     def toggle_live(self, event=None):
         if self.streaming_timer is None:
 
-            ch_group = self._mmc.getOrGuessChannelGroup()
-            if ch_group != []:
-                self._mmc.setConfig(ch_group, self.snap_channel_comboBox.currentText())
+            # ch_group = self._mmc.getOrGuessChannelGroup()
+            # if ch_group != []:
+            #     self._mmc.setConfig(ch_group, self.snap_channel_comboBox.currentText())
 
             self.start_live()
             self.live_Button.setIcon(CAM_STOP_ICON)

@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 import mcsim.expt_ctrl.daq
 
 # dmd
-import mcsim.expt_ctrl.dlp6500
+from mcsim.expt_ctrl import dlp6500
 import time
 import datetime
 import zarr
@@ -86,7 +86,7 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
     # metadata associated with a given experiment
     SEQUENCE_META: dict[MDASequence, SequenceMeta] = {}
 
-    def __init__(self, mmcores: list[CMMCorePlus], daq: mcsim.expt_ctrl.daq.daq, dmd: mcsim.expt_ctrl.dlp6500.dlp6500,
+    def __init__(self, mmcores: list[CMMCorePlus], daq: mcsim.expt_ctrl.daq.daq, dmd: dlp6500.dlpc900_dmd,
                  viewer, parent=None):
 
         mmcore = mmcores[0]

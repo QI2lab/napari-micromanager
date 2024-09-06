@@ -23,12 +23,10 @@ import datetime
 import zarr
 import numcodecs
 import dask.array as da
-from dask_image.imread import imread
 from dask.diagnostics import ProgressBar
 import threading
-# custom code
-from localize_psf import affine
-# daq and dmd
+# our code
+from localize_psf.affine import params2xform
 from mcsim.expt_ctrl.daq import nidaq
 from mcsim.expt_ctrl.program_sim_odt import get_sim_odt_sequence
 from mcsim.expt_ctrl import dlp6500
@@ -131,6 +129,7 @@ class _MultiDUI:
     fan_checkBox: QtW.QCheckBox
     fan_wait_doubleSpinBox: QtW.QDoubleSpinBox
     cine2zarr_checkBox: QtW.QCheckBox
+    prewarmup_doubleSpinBox: QtW.QDoubleSpinBox
 
     return_checkBox: QtW.QCheckBox
 
@@ -161,7 +160,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
     def __init__(self,
                  mmcores: list[RemoteMMCore],
                  daq: nidaq,
-                 dmd: dlp6500,
+                 dmd: dlp6500.dlpc900_dmd,
                  viewer,
                  phcam: phc.phantom_cam,
                  parent=None,
@@ -194,6 +193,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         #
         self.cine2zarr_checkBox.setChecked(True)
         self.return_checkBox.setChecked(True)
+
+        self.prewarmup_doubleSpinBox.setValue(5.0)
 
         # channel widget
         self.add_ch_Button.clicked.connect(self.add_channel)
@@ -250,7 +251,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                  "odt_warmup_time_ms": self.odt_warmup_doubleSpinBox,
                  "shutter_delay_ms": self.shutter_delay_doubleSpinBox,
                  "sim_readout_time_ms": self.sim_readout_doubleSpinBox,
-                 "stage_delay_ms": self.stage_delay_doubleSpinBox
+                 "stage_delay_ms": self.stage_delay_doubleSpinBox,
                  }
 
         # set default values
@@ -554,7 +555,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         "odt_warmup_time_ms": self.odt_warmup_doubleSpinBox.value(),
                         "shutter_delay_time_ms": self.shutter_delay_doubleSpinBox.value(),
                         "sim_readout_time_ms": self.sim_readout_doubleSpinBox.value(),
-                        "stage_delay_ms": self.stage_delay_doubleSpinBox.value()
+                        "stage_delay_ms": self.stage_delay_doubleSpinBox.value(),
+                        "presequence_warmup_time_s": self.prewarmup_doubleSpinBox.value(),
                         }
 
         # ##############################
@@ -967,7 +969,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             # affine transformation from ODT ROI to SIM full image
             xform = np.array(self.configuration["camera_affine_transforms"]["xform"])
             # todo: check this is correct
-            xform_real_roi2full = affine.params2xform([1, 0, cam2_roi[2], 1, 0, cam2_roi[0]])
+            xform_real_roi2full = params2xform([1, 0, cam2_roi[2], 1, 0, cam2_roi[0]])
             xform_cam2_roi_to_cam1 = np.linalg.inv(xform).dot(xform_real_roi2full)
 
             img_data.attrs["affine_cam2_roi_to_cam1"] = xform_cam2_roi_to_cam1.tolist()
@@ -983,25 +985,13 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         g1.attrs["acquisition_modes"] = cam1_acq_modes
         g1.attrs["exposure_time_ms"] = gui_settings["exposure_tms_sim"]
         g1.attrs["camera_roi"] = cam1_roi
-        g1.attrs["na_detection"] = self.configuration["camera_settings_1"]["na_detection"]
 
-        g1_params = {"dx_um": "dxy",
-                     "dy_um": "dxy",
-                     "otf_model_parameters": "otf_calibration"}
-        for k, v in g1_params.items():
+        for k, v in self.configuration["camera_settings_1"].items():
             try:
-                g1.attrs[k] = self.configuration["camera_settings_1"][v]
+                g1.attrs[k] = v
             except (KeyError, TypeError) as e:
                 print(f"while writing cam1 settings: {e}")
                 g1.attrs[k] = None
-
-        # affine transformation information for specific channels we are using
-        try:
-            dmd_affine_transforms = self.configuration["camera_settings_1"]["dmd_affine_transforms"]
-            g1.attrs["affine_transformations"] = [dmd_affine_transforms[am["channel"]] for am in cam1_acq_modes]
-        except (KeyError, TypeError) as e:
-            print(f"while writing cam1 affines: {e}")
-            g1.attrs["affine_transformations"] = [[]] * len(cam1_acq_modes)
 
         # ###################################
         # create datasets for camera #1
@@ -1054,14 +1044,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         g2.attrs["exposure_time_ms"] = gui_settings["exposure_tms_odt"]
 
         cam2_settings_name = "camera_settings_phantom" if cam_is_phantom else "camera_settings_2"
-        g2_params = {"dx_um": "dxy",
-                     "dy_um": "dxy",
-                     "na_excitation": "na_excitation",
-                     "na_detection": "na_detection"}
-
-        for k, v in g2_params.items():
+        for k, v in self.configuration[cam2_settings_name].items():
             try:
-                g2.attrs[k] = self.configuration[cam2_settings_name][v]
+                g2.attrs[k] = v
             except (KeyError, TypeError) as e:
                 print(f"while writing cam2 parameters: {e}")
                 g2.attrs[k] = None
@@ -1100,7 +1085,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                    dtype="uint16",
                                    compressor=numcodecs.Zlib()
                                    )
-
             ds.attrs["dimensions"] = axis_list
             ds.attrs["channels"] = [am["channel"]]
             if am["channel"] == "odt":
@@ -1147,7 +1131,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         #                         compressor=numcodecs.Zlib())
         # g_daq.analog_input.attrs["dimensions"] = ["position", "time/z", "analog channel"]
 
+        # ######################################
         # total number of pictures for cameras per position
+        # ######################################
         n_cam1_pics = ntimes * nxy_positions * ntimes_fast * nparams * nz * int(np.sum([am["nimages"] for am in cam1_acq_modes]))
         n_cam2_pics = ntimes * nxy_positions * ntimes_fast * nparams * nz * int(np.sum([am["nimages"] for am in cam2_acq_modes]))
 
@@ -1333,9 +1319,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             if cam_is_phantom:
                 self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam_enable"])
 
-            # todo: make this settable somewhere
             # let lasers warmup
-            time.sleep(5)
+            time.sleep(gui_settings["presequence_warmup_time_s"])
 
             # program DAQ
             self.daq.set_sequence(digital_program,
