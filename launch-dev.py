@@ -20,12 +20,13 @@ main_window.load_cfg("MM config", str(root_dir / "sim_odt_nidaq_c1.cfg"))
 # main_window.load_cfg("Cam 2", str(root_dir / "sim_odt_nidaq_c2.cfg"))
 # main_window.load_cfg("Cam 2", str(root_dir / "blackfly_flir_cam.cfg"))
 main_window.load_cfg("DMD", str(root_dir / "dmd_config.zarr"))
-# main_window.load_cfg("DMD 2", str(root_dir / "dmd_config.zarr"))
+main_window.load_cfg("DMD 2", str(root_dir / "dmd2_config.zarr"))
 main_window.load_cfg("microscope", str(root_dir / "config.json"))
 
 # grab devices
 mmc1, mmc2 = main_window._mmcores
 dmd = main_window.dmd
+dmd2 = main_window.dmd2
 daq = main_window.daq
 phcam = main_window.phcam
 
