@@ -1523,16 +1523,6 @@
                  <bool>false</bool>
                 </property>
                 <layout class="QGridLayout" name="gridLayout_2">
-                 <item row="0" column="3" alignment="Qt::AlignRight">
-                  <widget class="QLabel" name="label_13">
-                   <property name="text">
-                    <string>bit</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="0" column="4">
-                  <widget class="QSpinBox" name="bit_index_spinBox"/>
-                 </item>
                  <item row="2" column="2">
                   <widget class="QPushButton" name="set_dmd_pattern_index_pushButton">
                    <property name="text">
@@ -1540,15 +1530,15 @@
                    </property>
                   </widget>
                  </item>
-                 <item row="0" column="2">
-                  <widget class="QSpinBox" name="pic_index_spinBox"/>
-                 </item>
-                 <item row="0" column="0">
-                  <widget class="QCheckBox" name="dmd_update_immediately_checkBox">
+                 <item row="3" column="0">
+                  <widget class="QLabel" name="dmd_firmware_pattern_label">
                    <property name="text">
-                    <string>update immediately</string>
+                    <string/>
                    </property>
                   </widget>
+                 </item>
+                 <item row="0" column="2">
+                  <widget class="QSpinBox" name="dmd_firmware_index_spinBox"/>
                  </item>
                  <item row="2" column="0">
                   <widget class="QCheckBox" name="dmd_snap_checkBox">
@@ -1560,21 +1550,21 @@
                  <item row="0" column="1" alignment="Qt::AlignRight">
                   <widget class="QLabel" name="label_11">
                    <property name="text">
-                    <string>picture</string>
+                    <string>pattern index</string>
                    </property>
                   </widget>
                  </item>
-                 <item row="2" column="4">
+                 <item row="0" column="0">
+                  <widget class="QCheckBox" name="dmd_update_immediately_checkBox">
+                   <property name="text">
+                    <string>update immediately</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="3" column="2">
                   <widget class="QPushButton" name="show_dmd_firmware_pattern_pushButton">
                    <property name="text">
                     <string>show</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="3" column="0">
-                  <widget class="QLabel" name="dmd_firmware_pattern_label">
-                   <property name="text">
-                    <string/>
                    </property>
                   </widget>
                  </item>
@@ -1652,36 +1642,6 @@
               <string>DMD select</string>
              </attribute>
              <layout class="QGridLayout" name="gridLayout_11">
-              <item row="1" column="1">
-               <spacer name="horizontalSpacer">
-                <property name="orientation">
-                 <enum>Qt::Horizontal</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
-                 <size>
-                  <width>40</width>
-                  <height>20</height>
-                 </size>
-                </property>
-               </spacer>
-              </item>
-              <item row="1" column="0">
-               <widget class="QComboBox" name="select_dmd_comboBox">
-                <property name="minimumSize">
-                 <size>
-                  <width>100</width>
-                  <height>0</height>
-                 </size>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="0">
-               <widget class="QLabel" name="label_31">
-                <property name="text">
-                 <string>select DMD</string>
-                </property>
-               </widget>
-              </item>
               <item row="0" column="1">
                <spacer name="verticalSpacer_2">
                 <property name="orientation">
@@ -1691,6 +1651,26 @@
                  <size>
                   <width>20</width>
                   <height>40</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="label_31">
+                <property name="text">
+                 <string>select DMD</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <spacer name="horizontalSpacer">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
                  </size>
                 </property>
                </spacer>
@@ -1707,6 +1687,16 @@
                  </size>
                 </property>
                </spacer>
+              </item>
+              <item row="1" column="0">
+               <widget class="QComboBox" name="select_dmd_comboBox">
+                <property name="minimumSize">
+                 <size>
+                  <width>100</width>
+                  <height>0</height>
+                 </size>
+                </property>
+               </widget>
               </item>
              </layout>
             </widget>
@@ -2071,8 +2061,7 @@
   <tabstop>set_channel_Button</tabstop>
   <tabstop>mode_comboBox</tabstop>
   <tabstop>pattern_time_SpinBox</tabstop>
-  <tabstop>pic_index_spinBox</tabstop>
-  <tabstop>bit_index_spinBox</tabstop>
+  <tabstop>dmd_firmware_index_spinBox</tabstop>
   <tabstop>dmd_pattern_lineEdit</tabstop>
   <tabstop>dmd_set_file_pattern_time_doubleSpinBox</tabstop>
   <tabstop>dmd_pattern_find_pushButton</tabstop>

@@ -772,7 +772,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 am["dmd_on_time"] = None
 
             # reset number of pictures if mode is average
-            am["npatterns"] = len(self.dmd.presets[am["channel"]][am["patterns"]]["picture_indices"])
+            am["npatterns"] = len(self.dmd.presets[am["channel"]][am["patterns"]])
 
             if am["pattern_mode"] == "average":
                 am["nimages"] = 1
@@ -1034,19 +1034,14 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             ds.attrs["dimensions"] = axis_list
             ds.attrs["channels"] = [am["channel"]]
 
-            # sim pattern information for specific channels we are using
-            sim_pattern_dat = dlp6500.get_preset_info(self.dmd.presets[am["channel"]][am["patterns"]],
-                                                      self.dmd.firmware_pattern_info)[0]
-
-            try:
-                ds.attrs["nangles"] = sim_pattern_dat["nangles"][0]
-                ds.attrs["nphases"] = sim_pattern_dat["nphases"][0]
-                ds.attrs["lattice_vects1"] = np.array(sim_pattern_dat["a1"]).tolist()
-                ds.attrs["lattice_vects2"] = np.array(sim_pattern_dat["a2"]).tolist()
-                ds.attrs["phases"] = np.array(sim_pattern_dat["phase"]).tolist()
-                ds.attrs["frqs"] = np.array(sim_pattern_dat["frq"]).tolist()
-            except KeyError as e:
-                print(f"while writing cam1 pattern data: {e}")
+            # save pattern metadata
+            dmd_pattern_data = dlp6500.get_preset_info(self.dmd.presets[am["channel"]][am["patterns"]],
+                                                       self.dmd.firmware_pattern_info)
+            for k, v in dmd_pattern_data.items():
+                try:
+                    ds.attrs[k] = np.array(v).tolist()
+                except KeyError as e:
+                    print(f"while writing cam1 pattern parameters: {e}")
 
             cam1_dsets.append(ds)
 
@@ -1112,32 +1107,12 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 ds.attrs["wavelength_um"] = 0.785  # todo: put in config file
                 ds.attrs["volume_time_ms"] = gui_settings["min_odt_frame_time_ms"] * am["npatterns"]  # todo: correct this
 
-                odt_firmware_data = self.dmd.presets[am["channel"]][am["patterns"]]
-                odt_pic_inds = odt_firmware_data["picture_indices"]
-                odt_bit_inds = odt_firmware_data["bit_indices"]
-                odt_firmware_inds = dlp6500.pic_bit_ind_2firmware_ind(odt_pic_inds, odt_bit_inds)
-                dmd_pattern_data = self.dmd.firmware_pattern_info
-
-                # set odt dataset metadata
+            # save pattern metadata
+            dmd_pattern_data = dlp6500.get_preset_info(self.dmd.presets[am["channel"]][am["patterns"]],
+                                                       self.dmd.firmware_pattern_info)
+            for k, v in dmd_pattern_data.items():
                 try:
-                    ds.attrs["offsets"] = [np.array(dmd_pattern_data[ii]["offsets"]).tolist() for ii in odt_firmware_inds]
-                    ds.attrs["drs"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["drs"]).tolist()
-                    ds.attrs["spot_frqs_mirrors"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["spot_frqs_mirrors"]).tolist()
-                    ds.attrs["carrier_frq"] = np.array(dmd_pattern_data[odt_firmware_inds[0]]["carrier frequency"]).tolist()
-                    ds.attrs["radius"] = dmd_pattern_data[odt_firmware_inds[0]]["radius"]
-                except KeyError as e:
-                    print(f"while writing cam2 pattern parameters: {e}")
-            else:
-                # sim pattern information for specific channels we are using
-                sim_pattern_dat = dlp6500.get_preset_info(self.dmd.presets[am["channel"]][am["patterns"]],
-                                                          self.dmd.firmware_pattern_info)[0]
-                try:
-                    ds.attrs["nangles"] = sim_pattern_dat["nangles"][0]
-                    ds.attrs["nphases"] = sim_pattern_dat["nphases"][0]
-                    ds.attrs["lattice_vects1"] = np.array(sim_pattern_dat["a1"]).tolist()
-                    ds.attrs["lattice_vects2"] = np.array(sim_pattern_dat["a2"]).tolist()
-                    ds.attrs["phases"] = np.array(sim_pattern_dat["phase"]).tolist()
-                    ds.attrs["frqs"] = np.array(sim_pattern_dat["frq"]).tolist()
+                    ds.attrs[k] = np.array(v).tolist()
                 except KeyError as e:
                     print(f"while writing cam2 pattern parameters: {e}")
 
@@ -1286,15 +1261,15 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             with self.print_lock:
                 tstart_program_dmd = time.perf_counter()
                 print("programming DMD ...", end="\r")
-            pic_inds, bit_inds = self.dmd.program_dmd_seq(dmd_modes,
-                                                          dmd_channels,
-                                                          nrepeats=1,
-                                                          noff_before=0,
-                                                          noff_after=noff_after,
-                                                          blank=blank,
-                                                          mode_pattern_indices=None,
-                                                          triggered=True,
-                                                          verbose=False)
+            firmware_inds = self.dmd.program_dmd_seq(dmd_modes,
+                                                     dmd_channels,
+                                                     nrepeats=1,
+                                                     noff_before=0,
+                                                     noff_after=noff_after,
+                                                     blank=blank,
+                                                     mode_pattern_indices=None,
+                                                     triggered=True,
+                                                     verbose=False)
             with self.print_lock:
                 print(f"programmed DMD in {time.perf_counter() - tstart_program_dmd:.2f}s")
 
@@ -1305,7 +1280,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             g_dmd.attrs["dmd_pitch_um"] = self.dmd.pitch
             g_dmd.attrs["firmware_info"] = self.dmd.get_firmware_type()
             ds = g_dmd.array("dmd_program",
-                             np.vstack((pic_inds, bit_inds)),
+                             firmware_inds,
                              dtype='int16',
                              compressor='none')
             ds.attrs["dimensions"] = ["pattern", "time"]
@@ -1316,8 +1291,9 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                  compressor=numcodecs.packbits.PackBits(),
                                  dtype=bool,
                                  chunks=(1, self.dmd.height, self.dmd.width))
-                ds.attrs["picture_indices"] = self.dmd.picture_indices.tolist()
-                ds.attrs["bit_indices"] = self.dmd.bit_indices.tolist()
+
+            # DMD #2
+            g_dmd2 = img_data.create_group("dmd2_data")
 
             # ##################################
             # trigger camera twice, required for Phantom camera

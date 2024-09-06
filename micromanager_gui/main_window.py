@@ -140,8 +140,7 @@ class _MainUI:
 
     # dmd firmware
     pattern_time_SpinBox: QtW.QDoubleSpinBox
-    pic_index_spinBox: QtW.QSpinBox
-    bit_index_spinBox: QtW.QSpinBox
+    dmd_firmware_index_spinBox: QtW.QSpinBox
     set_dmd_pattern_index_pushButton: QtW.QPushButton
     show_dmd_firmware_pattern_pushButton: QtW.QPushButton
     dmd_snap_checkBox: QtW.QCheckBox
@@ -266,8 +265,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.min_scale_doubleSpinBox.setValue(0.01)
 
         # DMD firmware
-        self.pic_index_spinBox.valueChanged.connect(self._on_dmd_firmware_pattern_updated)
-        self.bit_index_spinBox.valueChanged.connect(self._on_dmd_firmware_pattern_updated)
+        self.dmd_firmware_index_spinBox.valueChanged.connect(self._on_dmd_firmware_pattern_updated)
         self.set_dmd_pattern_index_pushButton.clicked.connect(self._set_dmd_firmware_pattern)
         self.show_dmd_firmware_pattern_pushButton.clicked.connect(self._show_dmd_firmware_pattern)
 
@@ -1302,24 +1300,21 @@ class MainWindow(QtW.QWidget, _MainUI):
     def _on_dmd_firmware_pattern_updated(self):
 
         if self.dmd_update_immediately_checkBox.isChecked():
-            self.pic_index_spinBox.valueChanged.connect(self._set_dmd_firmware_pattern)
-            self.bit_index_spinBox.valueChanged.connect(self._set_dmd_firmware_pattern)
+            self.dmd_firmware_index_spinBox.valueChanged.connect(self._set_dmd_firmware_pattern)
         else:
             try:
-                self.pic_index_spinBox.valueChanged.disconnect()
+                self.dmd_firmware_index_spinBox.valueChanged.disconnect()
             except TypeError:
                 # if already disconnected ...
                 pass
 
             try:
-                self.pic_index_spinBox.valueChanged.disconnect()
+                self.dmd_firmware_index_spinBox.valueChanged.disconnect()
             except TypeError:
                 pass
 
     def _set_dmd_firmware_pattern(self):
-        pic_ind = self.pic_index_spinBox.value()
-        bit_ind = self.bit_index_spinBox.value()
-        combined_index = dlp6500.pic_bit_ind_2firmware_ind(pic_ind, bit_ind)
+        combined_index = self.dmd_firmware_index_spinBox.value()
 
         if self.upload_thread is not None:
             self.upload_thread.join()
@@ -1336,8 +1331,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         try:
             type = dmd.firmware_pattern_info[combined_index]["type"]
             if type == "sim":
-                a1 = dmd.firmware_pattern_info[combined_index]["a1"]
-                a2 = dmd.firmware_pattern_info[combined_index]["a2"]
+                a1 = dmd.firmware_pattern_info[combined_index]["lattice_vect1"]
+                a2 = dmd.firmware_pattern_info[combined_index]["lattice_vect2"]
                 wl = dmd.firmware_pattern_info[combined_index]["wavelength"]
                 label = f"{type:s}, a1=({a1[0]:d}, {a1[1]:d}), a2=({a2[0]:d}, {a2[1]:d}), wl={wl:.0f}nm"
             elif type == "odt":
@@ -1350,7 +1345,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.dmd_firmware_pattern_label.setText(label)
 
         self.upload_thread = threading.Thread(target=dmd.set_pattern_sequence,
-                                              args=([pic_ind], [bit_ind]),
+                                              args=([combined_index]),
                                               kwargs={"exp_times": 105,
                                                       "dark_times": 0,
                                                       "triggered": False,
@@ -1367,9 +1362,7 @@ class MainWindow(QtW.QWidget, _MainUI):
             self.snap()
 
     def _show_dmd_firmware_pattern(self):
-        pic_ind = self.pic_index_spinBox.value()
-        bit_ind = self.bit_index_spinBox.value()
-        combined_ind = dlp6500.pic_bit_ind_2firmware_ind(pic_ind, bit_ind)
+        combined_ind = self.dmd_firmware_index_spinBox.value()
 
         if self.select_dmd_comboBox.currentText() == "0":
             dmd = self.dmd
@@ -1382,7 +1375,7 @@ class MainWindow(QtW.QWidget, _MainUI):
             try:
                 firmware_pattern = dmd.firmware_patterns[combined_ind]
 
-                layer_name = f"DMD firmware pic={pic_ind:d}, bit={bit_ind:d}, combined index={combined_ind:d}"
+                layer_name = f"DMD firmware index={combined_ind:d}"
 
                 layer_list = [l for l in self.viewer.layers if l.name == "layer_name"]
 

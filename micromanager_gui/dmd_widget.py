@@ -283,12 +283,12 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
                           end="\r")
 
                 # program the DMD
-                img_inds, bit_inds = self.dmd.upload_pattern_sequence(patterns[ip].astype(np.uint8),
-                                                                      exp_times=105,
-                                                                      dark_times=0,
-                                                                      triggered=False,
-                                                                      num_repeats=0,
-                                                                      compression_mode='erle')
+                self.dmd.upload_pattern_sequence(patterns[ip].astype(np.uint8),
+                                                 exp_times=105,
+                                                 dark_times=0,
+                                                 triggered=False,
+                                                 num_repeats=0,
+                                                 compression_mode='erle')
 
                 # take pictures
                 mmc2.snapImage()
