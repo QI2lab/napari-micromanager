@@ -1320,6 +1320,14 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_cam_enable"])
 
             # let lasers warmup
+            if "green" in [am["channel"] for am in acq_modes]:
+                self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["green_laser"])
+            if "red" in [am["channel"] for am in acq_modes]:
+                self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["red_laser"])
+            if "blue" in [am["channel"] for am in acq_modes]:
+                self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["blue_laser"])
+            if "odt" in [am["channel"] for am in acq_modes]:
+                self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_laser"])
             time.sleep(gui_settings["presequence_warmup_time_s"])
 
             # program DAQ
