@@ -151,6 +151,7 @@ class _MainUI:
 
     # dmd select
     select_dmd_comboBox: QtW.QComboBox
+    dmd_id_textBrowser: QtW.QTextBrowser
 
     # daq
     daq_channel_groupBox: QtW.QGroupBox
@@ -258,12 +259,10 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.max_scale_doubleSpinBox.setValue(99.99)
         self.min_scale_doubleSpinBox.setValue(0.01)
 
-        # DMD firmware
+        # DMD
         self.dmd_firmware_index_spinBox.valueChanged.connect(self._on_dmd_firmware_pattern_updated)
         self.set_dmd_pattern_index_pushButton.clicked.connect(self._set_dmd_firmware_pattern)
         self.show_dmd_firmware_pattern_pushButton.clicked.connect(self._show_dmd_firmware_pattern)
-
-        # DMD load from file
         self.dmd_set_file_pattern_time_doubleSpinBox.setValue(0.105)
         self.dmd_pattern_find_pushButton.clicked.connect(self._browse_dmd_pattern)
         self.dmd_pattern_fnames = None
@@ -271,6 +270,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.upload_dmd_pattern_pushButton.clicked.connect(self._upload_dmd_pattern)
         self.set_uploaded_dmd_pattern_pushButton.clicked.connect(self._set_uploaded_dmd_pattern)
         self.show_dmd_upload_pattern_pushButton.clicked.connect(self._show_uploaded_dmd_pattern)
+        self.select_dmd_comboBox.currentTextChanged.connect(self._dmd_changed)
 
         # DAQ
         self.add_ch_Button.clicked.connect(self.add_channel)
@@ -1474,6 +1474,16 @@ class MainWindow(QtW.QWidget, _MainUI):
                                       bit_depth=1,
                                       num_repeats=0,
                                       mode="on-the-fly")
+
+    def _dmd_changed(self):
+        if self.select_dmd_comboBox.currentText() == "0":
+            dmd = self.dmd
+        elif self.select_dmd_comboBox.currentText() == "1":
+            dmd = self.dmd2
+        else:
+            raise ValueError()
+
+        self.dmd_id_textBrowser.setText(dmd._hid_path)
 
     def _show_uploaded_dmd_pattern(self):
 

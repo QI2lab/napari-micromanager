@@ -1410,32 +1410,35 @@
              </sizepolicy>
             </property>
             <property name="currentIndex">
-             <number>1</number>
+             <number>3</number>
             </property>
             <widget class="QWidget" name="tab_6">
              <attribute name="title">
               <string>Illumination</string>
              </attribute>
              <layout class="QGridLayout" name="gridLayout_15">
-              <item row="7" column="2">
+              <item row="0" column="1">
+               <widget class="QLabel" name="label_16">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>channel</string>
+                </property>
+               </widget>
+              </item>
+              <item row="7" column="1" colspan="2">
                <widget class="QPushButton" name="set_channel_Button">
                 <property name="text">
                  <string>set</string>
                 </property>
                </widget>
               </item>
-              <item row="0" column="0">
-               <spacer name="horizontalSpacer_2">
-                <property name="orientation">
-                 <enum>Qt::Horizontal</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
-                 <size>
-                  <width>40</width>
-                  <height>20</height>
-                 </size>
-                </property>
-               </spacer>
+              <item row="2" column="2">
+               <widget class="QComboBox" name="mode_comboBox"/>
               </item>
               <item row="6" column="1">
                <widget class="QLabel" name="label_14">
@@ -1450,18 +1453,14 @@
                 </property>
                </widget>
               </item>
-              <item row="6" column="2">
-               <widget class="QDoubleSpinBox" name="pattern_time_SpinBox">
-                <property name="decimals">
-                 <number>3</number>
-                </property>
-                <property name="maximum">
-                 <double>10000.000000000000000</double>
-                </property>
-               </widget>
-              </item>
               <item row="0" column="2">
                <widget class="QComboBox" name="channel_comboBox">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
                 <property name="minimumSize">
                  <size>
                   <width>250</width>
@@ -1483,19 +1482,13 @@
                 </property>
                </widget>
               </item>
-              <item row="2" column="2">
-               <widget class="QComboBox" name="mode_comboBox"/>
-              </item>
-              <item row="0" column="1">
-               <widget class="QLabel" name="label_16">
-                <property name="minimumSize">
-                 <size>
-                  <width>0</width>
-                  <height>0</height>
-                 </size>
+              <item row="6" column="2">
+               <widget class="QDoubleSpinBox" name="pattern_time_SpinBox">
+                <property name="decimals">
+                 <number>3</number>
                 </property>
-                <property name="text">
-                 <string>channel</string>
+                <property name="maximum">
+                 <double>10000.000000000000000</double>
                 </property>
                </widget>
               </item>
@@ -1508,6 +1501,19 @@
                  <size>
                   <width>20</width>
                   <height>40</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item row="0" column="0">
+               <spacer name="horizontalSpacer_2">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
                  </size>
                 </property>
                </spacer>
@@ -1684,6 +1690,23 @@
               <string>DMD select</string>
              </attribute>
              <layout class="QGridLayout" name="gridLayout_11">
+              <item row="0" column="0">
+               <widget class="QLabel" name="label_31">
+                <property name="text">
+                 <string>select DMD</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QComboBox" name="select_dmd_comboBox">
+                <property name="minimumSize">
+                 <size>
+                  <width>100</width>
+                  <height>0</height>
+                 </size>
+                </property>
+               </widget>
+              </item>
               <item row="1" column="1">
                <spacer name="horizontalSpacer">
                 <property name="orientation">
@@ -1697,7 +1720,14 @@
                 </property>
                </spacer>
               </item>
-              <item row="2" column="1">
+              <item row="2" column="0">
+               <widget class="QLabel" name="label_12">
+                <property name="text">
+                 <string>HID:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="1">
                <spacer name="verticalSpacer">
                 <property name="orientation">
                  <enum>Qt::Vertical</enum>
@@ -1710,33 +1740,13 @@
                 </property>
                </spacer>
               </item>
-              <item row="1" column="0">
-               <widget class="QComboBox" name="select_dmd_comboBox">
-                <property name="minimumSize">
+              <item row="2" column="1">
+               <widget class="QTextBrowser" name="dmd_id_textBrowser">
+                <property name="maximumSize">
                  <size>
-                  <width>100</width>
-                  <height>0</height>
+                  <width>16777215</width>
+                  <height>50</height>
                  </size>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="1">
-               <spacer name="verticalSpacer_2">
-                <property name="orientation">
-                 <enum>Qt::Vertical</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
-                 <size>
-                  <width>20</width>
-                  <height>40</height>
-                 </size>
-                </property>
-               </spacer>
-              </item>
-              <item row="2" column="0">
-               <widget class="QLabel" name="label_31">
-                <property name="text">
-                 <string>select DMD</string>
                 </property>
                </widget>
               </item>
