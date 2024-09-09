@@ -1497,13 +1497,18 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         # set patterns
         dmd.start_stop_sequence('stop')
-        self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
-                                           ["dmd_enable", "dmd_advance"])
+
+        # prepare DAQ lines appropriately
+        if dmd is self.dmd:
+            self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
+                                               ["dmd_enable", "dmd_advance"])
+        else:
+            self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
+                                               ["dmd2_enable", "dmd2_advance"])
 
         # put in different thread so don't block GUI
         # still printing to the terminal and not bothering to acquire a lock
         kwargs.update({"clear_pattern_after_trigger": False})
-
         self.upload_thread = threading.Thread(target=dmd.upload_pattern_sequence,
                                               args=(patterns.astype(np.uint8),),
                                               kwargs=kwargs
