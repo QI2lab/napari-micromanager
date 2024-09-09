@@ -1237,6 +1237,86 @@
              <string>Image Processing</string>
             </property>
             <layout class="QGridLayout" name="gridLayout_16">
+             <item row="3" column="0">
+              <widget class="QLabel" name="label_4">
+               <property name="text">
+                <string>fy</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QDoubleSpinBox" name="fx_doubleSpinBox">
+               <property name="decimals">
+                <number>1</number>
+               </property>
+               <property name="minimum">
+                <double>0.000000000000000</double>
+               </property>
+               <property name="maximum">
+                <double>10000.000000000000000</double>
+               </property>
+               <property name="singleStep">
+                <double>1.000000000000000</double>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="0">
+              <widget class="QLabel" name="label_17">
+               <property name="text">
+                <string>Threshold</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <widget class="QDoubleSpinBox" name="fy_doubleSpinBox">
+               <property name="decimals">
+                <number>1</number>
+               </property>
+               <property name="minimum">
+                <double>0.000000000000000</double>
+               </property>
+               <property name="maximum">
+                <double>10000.000000000000000</double>
+               </property>
+               <property name="singleStep">
+                <double>1.000000000000000</double>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="2">
+              <widget class="QLabel" name="label_30">
+               <property name="text">
+                <string>no</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="6">
+              <widget class="QPushButton" name="guess_holo_frq_Button">
+               <property name="text">
+                <string>guess holo frq</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="3">
+              <widget class="QDoubleSpinBox" name="holo_dz_doubleSpinBox">
+               <property name="decimals">
+                <number>3</number>
+               </property>
+               <property name="maximum">
+                <double>100000.000000000000000</double>
+               </property>
+               <property name="singleStep">
+                <double>0.100000000000000</double>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="1">
+              <widget class="QDoubleSpinBox" name="threshold_SpinBox">
+               <property name="maximum">
+                <double>100000.000000000000000</double>
+               </property>
+              </widget>
+             </item>
              <item row="0" column="6">
               <widget class="QCheckBox" name="use_affine_xform_checkBox">
                <property name="text">
@@ -1244,10 +1324,10 @@
                </property>
               </widget>
              </item>
-             <item row="3" column="6">
-              <widget class="QPushButton" name="fit_holo_frq_Button">
-               <property name="text">
-                <string>fit holo frq</string>
+             <item row="2" column="3">
+              <widget class="QSpinBox" name="holo_nz_spinBox">
+               <property name="maximum">
+                <number>201</number>
                </property>
               </widget>
              </item>
@@ -1274,70 +1354,10 @@
                </property>
               </widget>
              </item>
-             <item row="2" column="6">
-              <widget class="QPushButton" name="guess_holo_frq_Button">
+             <item row="3" column="6">
+              <widget class="QPushButton" name="fit_holo_frq_Button">
                <property name="text">
-                <string>guess holo frq</string>
-               </property>
-              </widget>
-             </item>
-             <item row="3" column="0">
-              <widget class="QLabel" name="label_4">
-               <property name="text">
-                <string>fy</string>
-               </property>
-              </widget>
-             </item>
-             <item row="5" column="0">
-              <widget class="QLabel" name="label_17">
-               <property name="text">
-                <string>Threshold</string>
-               </property>
-              </widget>
-             </item>
-             <item row="5" column="6">
-              <widget class="QPushButton" name="fit_holo_curvature_Button">
-               <property name="text">
-                <string>Fit holo curvature</string>
-               </property>
-              </widget>
-             </item>
-             <item row="2" column="1">
-              <widget class="QDoubleSpinBox" name="fx_doubleSpinBox">
-               <property name="decimals">
-                <number>1</number>
-               </property>
-               <property name="minimum">
-                <double>0.000000000000000</double>
-               </property>
-               <property name="maximum">
-                <double>10000.000000000000000</double>
-               </property>
-               <property name="singleStep">
-                <double>1.000000000000000</double>
-               </property>
-              </widget>
-             </item>
-             <item row="3" column="1">
-              <widget class="QDoubleSpinBox" name="fy_doubleSpinBox">
-               <property name="decimals">
-                <number>1</number>
-               </property>
-               <property name="minimum">
-                <double>0.000000000000000</double>
-               </property>
-               <property name="maximum">
-                <double>10000.000000000000000</double>
-               </property>
-               <property name="singleStep">
-                <double>1.000000000000000</double>
-               </property>
-              </widget>
-             </item>
-             <item row="5" column="1">
-              <widget class="QDoubleSpinBox" name="threshold_SpinBox">
-               <property name="maximum">
-                <double>100000.000000000000000</double>
+                <string>fit holo frq</string>
                </property>
               </widget>
              </item>
@@ -1352,33 +1372,6 @@
               <widget class="QLabel" name="label_29">
                <property name="text">
                 <string>dz</string>
-               </property>
-              </widget>
-             </item>
-             <item row="3" column="3">
-              <widget class="QDoubleSpinBox" name="holo_dz_doubleSpinBox">
-               <property name="decimals">
-                <number>3</number>
-               </property>
-               <property name="maximum">
-                <double>100000.000000000000000</double>
-               </property>
-               <property name="singleStep">
-                <double>0.100000000000000</double>
-               </property>
-              </widget>
-             </item>
-             <item row="2" column="3">
-              <widget class="QSpinBox" name="holo_nz_spinBox">
-               <property name="maximum">
-                <number>201</number>
-               </property>
-              </widget>
-             </item>
-             <item row="5" column="2">
-              <widget class="QLabel" name="label_30">
-               <property name="text">
-                <string>no</string>
                </property>
               </widget>
              </item>
@@ -1398,6 +1391,13 @@
                </property>
               </widget>
              </item>
+             <item row="5" column="6">
+              <widget class="QPushButton" name="fit_holo_curvature_Button">
+               <property name="text">
+                <string>Fit holo curvature</string>
+               </property>
+              </widget>
+             </item>
             </layout>
            </widget>
           </item>
@@ -1410,36 +1410,13 @@
              </sizepolicy>
             </property>
             <property name="currentIndex">
-             <number>0</number>
+             <number>5</number>
             </property>
             <widget class="QWidget" name="tab_6">
              <attribute name="title">
               <string>Illumination</string>
              </attribute>
              <layout class="QGridLayout" name="gridLayout_15">
-              <item row="0" column="1">
-               <widget class="QLabel" name="label_16">
-                <property name="minimumSize">
-                 <size>
-                  <width>0</width>
-                  <height>0</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>channel</string>
-                </property>
-               </widget>
-              </item>
-              <item row="7" column="1" colspan="2">
-               <widget class="QPushButton" name="set_channel_Button">
-                <property name="text">
-                 <string>set</string>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="2">
-               <widget class="QComboBox" name="mode_comboBox"/>
-              </item>
               <item row="6" column="1">
                <widget class="QLabel" name="label_14">
                 <property name="minimumSize">
@@ -1450,22 +1427,6 @@
                 </property>
                 <property name="text">
                  <string>pattern time (ms)</string>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="2">
-               <widget class="QComboBox" name="channel_comboBox">
-                <property name="sizePolicy">
-                 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                  <horstretch>0</horstretch>
-                  <verstretch>0</verstretch>
-                 </sizepolicy>
-                </property>
-                <property name="minimumSize">
-                 <size>
-                  <width>250</width>
-                  <height>0</height>
-                 </size>
                 </property>
                </widget>
               </item>
@@ -1492,18 +1453,41 @@
                 </property>
                </widget>
               </item>
-              <item row="8" column="2">
-               <spacer name="verticalSpacer_5">
-                <property name="orientation">
-                 <enum>Qt::Vertical</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
+              <item row="0" column="1">
+               <widget class="QLabel" name="label_16">
+                <property name="minimumSize">
                  <size>
-                  <width>20</width>
-                  <height>40</height>
+                  <width>0</width>
+                  <height>0</height>
                  </size>
                 </property>
-               </spacer>
+                <property name="text">
+                 <string>channel</string>
+                </property>
+               </widget>
+              </item>
+              <item row="7" column="0" colspan="3">
+               <widget class="QPushButton" name="set_channel_Button">
+                <property name="text">
+                 <string>set</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QComboBox" name="channel_comboBox">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>250</width>
+                  <height>0</height>
+                 </size>
+                </property>
+               </widget>
               </item>
               <item row="0" column="0">
                <spacer name="horizontalSpacer_2">
@@ -1514,6 +1498,22 @@
                  <size>
                   <width>40</width>
                   <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item row="2" column="2">
+               <widget class="QComboBox" name="mode_comboBox"/>
+              </item>
+              <item row="8" column="2">
+               <spacer name="verticalSpacer_5">
+                <property name="orientation">
+                 <enum>Qt::Vertical</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>40</height>
                  </size>
                 </property>
                </spacer>
@@ -1832,7 +1832,7 @@
                  </size>
                 </property>
                 <attribute name="horizontalHeaderDefaultSectionSize">
-                 <number>94</number>
+                 <number>80</number>
                 </attribute>
                 <column>
                  <property name="text">
@@ -1857,6 +1857,11 @@
                 <column>
                  <property name="text">
                   <string>radius (pix)</string>
+                 </property>
+                </column>
+                <column>
+                 <property name="text">
+                  <string>phase (rad)</string>
                  </property>
                 </column>
                </widget>

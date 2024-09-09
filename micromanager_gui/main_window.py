@@ -1542,22 +1542,31 @@ class MainWindow(QtW.QWidget, _MainUI):
         fx_spinBox.setMinimum(-1)
         fx_spinBox.setMaximum(1)
         fx_spinBox.setDecimals(3)
+        fx_spinBox.setValue(-0.25)
 
         fy_spinBox = QtW.QDoubleSpinBox(self)
         fy_spinBox.setMinimum(-1)
         fy_spinBox.setMaximum(1)
         fy_spinBox.setDecimals(3)
+        fy_spinBox.setValue(0.25)
 
         radius_spinBox = QtW.QDoubleSpinBox(self)
         radius_spinBox.setMinimum(0)
         radius_spinBox.setMaximum(10000)
         radius_spinBox.setDecimals(2)
+        radius_spinBox.setValue(10.)
+
+        phase_spinBox = QtW.QDoubleSpinBox(self)
+        phase_spinBox.setMinimum(-10000)
+        phase_spinBox.setMaximum(10000)
+        phase_spinBox.setDecimals(3)
 
         self.odt_pattern_tableWidget.setCellWidget(idx, 0, cx_spinBox)
         self.odt_pattern_tableWidget.setCellWidget(idx, 1, cy_spinBox)
         self.odt_pattern_tableWidget.setCellWidget(idx, 2, fx_spinBox)
         self.odt_pattern_tableWidget.setCellWidget(idx, 3, fy_spinBox)
         self.odt_pattern_tableWidget.setCellWidget(idx, 4, radius_spinBox)
+        self.odt_pattern_tableWidget.setCellWidget(idx, 5, phase_spinBox)
 
     def set_odt_pattern(self):
 
@@ -1573,29 +1582,32 @@ class MainWindow(QtW.QWidget, _MainUI):
         fxs = []
         fys = []
         radii = []
+        phases = []
         for ii in range(self.odt_pattern_tableWidget.rowCount()):
             cxs.append(int(self.odt_pattern_tableWidget.cellWidget(ii, 0).value()))
             cys.append(int(self.odt_pattern_tableWidget.cellWidget(ii, 1).value()))
             fxs.append(self.odt_pattern_tableWidget.cellWidget(ii, 2).value())
             fys.append(self.odt_pattern_tableWidget.cellWidget(ii, 3).value())
             radii.append(int(self.odt_pattern_tableWidget.cellWidget(ii, 4).value()))
+            phases.append(self.odt_pattern_tableWidget.cellWidget(ii, 5).value())
 
         cxs = np.asarray(cxs)
         cys = np.asarray(cys)
         fxs = np.asarray(fxs)
         fys = np.asarray(fys)
         # todo: currently only support single radius value
-        spot_radius = radii[0]
 
         centers_relative = [np.stack((cxs - (dmd.width // 2), cys - (dmd.height // 2)), axis=1)]
         frqs = [np.stack((fxs, fys), axis=1)]
 
         patterns, data = get_odt_patterns(centers_relative,
                                           [dmd.height, dmd.width],
-                                          spot_radius,
+                                          [radii],
                                           1,
                                           frqs=frqs,
-                                          use_off_mirrors=True)
+                                          phase=[phases],
+                                          use_off_mirrors=True,
+                                          )
 
         self._upload_dmd_pattern(patterns)
 
