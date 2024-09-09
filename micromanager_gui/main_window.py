@@ -40,6 +40,8 @@ from scipy.ndimage import maximum_filter, minimum_filter
 from mcsim.expt_ctrl import dlp6500, daq
 from mcsim.expt_ctrl.phantom_cam import phantom_cam
 from mcsim.analysis.sim_reconstruction import fit_modulation_frq
+from mcsim.analysis.dmd_patterns import get_sim_pattern
+from mcsim.analysis.odt_patterns import get_odt_patterns
 from mcsim.analysis.fft import ft2, ift2, translate_ft
 from mcsim.analysis.optimize import to_cpu
 from mcsim.analysis.field_prop import propagate_homogeneous
@@ -141,13 +143,29 @@ class _MainUI:
     dmd_update_immediately_checkBox: QtW.QCheckBox
     dmd_firmware_pattern_label: QtW.QLabel
 
-    # dmd pattern
+    # load dmd pattern from file
     dmd_pattern_lineEdit: QtW.QLineEdit
     dmd_pattern_find_pushButton: QtW.QPushButton
     upload_dmd_pattern_pushButton: QtW.QPushButton
     show_dmd_upload_pattern_pushButton: QtW.QPushButton
-    set_uploaded_dmd_pattern_pushButton: QtW.QPushButton
     dmd_set_file_pattern_time_doubleSpinBox: QtW.QDoubleSpinBox
+
+    # set DMD SIM pattern
+    set_sim_pattern_pushButton: QtW.QPushButton
+    lattice_vector1_x_spinBox: QtW.QSpinBox
+    lattice_vector1_y_spinBox: QtW.QSpinBox
+    lattice_vector2_x_spinBox: QtW.QSpinBox
+    lattice_vector2_y_spinBox: QtW.QSpinBox
+    phase_shifts_spinBox: QtW.QSpinBox
+    phase_index_spinBox: QtW.QSpinBox
+
+    # set DMD ODT pattern
+    odt_pattern_tableWidget: QtW.QTableWidget
+    add_odt_pattern_pushButton: QtW.QPushButton
+    remove_odt_pattern_pushButton: QtW.QPushButton
+    clear_odt_pattern_pushButton: QtW.QPushButton
+    set_odt_pattern_pushButton: QtW.QPushButton
+
 
     # dmd select
     select_dmd_comboBox: QtW.QComboBox
@@ -267,15 +285,21 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.dmd_pattern_find_pushButton.clicked.connect(self._browse_dmd_pattern)
         self.dmd_pattern_fnames = None
         self.upload_thread = None
-        self.upload_dmd_pattern_pushButton.clicked.connect(self._upload_dmd_pattern)
-        self.set_uploaded_dmd_pattern_pushButton.clicked.connect(self._set_uploaded_dmd_pattern)
+        self.upload_dmd_pattern_pushButton.clicked.connect(self._upload_dmd_pattern_from_file)
         self.show_dmd_upload_pattern_pushButton.clicked.connect(self._show_uploaded_dmd_pattern)
         self.select_dmd_comboBox.currentTextChanged.connect(self._dmd_changed)
+        self.set_sim_pattern_pushButton.clicked.connect(self._show_dmd_sim_pattern)
+        self.phase_shifts_spinBox.setValue(3)
+
+        self.remove_odt_pattern_pushButton.clicked.connect(lambda: self.remove_channel(self.odt_pattern_tableWidget))
+        self.clear_odt_pattern_pushButton.clicked.connect(lambda: self.clear_channel(self.odt_pattern_tableWidget))
+        self.add_odt_pattern_pushButton.clicked.connect(self.add_odt_pattern)
+        self.set_odt_pattern_pushButton.clicked.connect(self.set_odt_pattern)
 
         # DAQ
-        self.add_ch_Button.clicked.connect(self.add_channel)
-        self.remove_ch_Button.clicked.connect(self.remove_channel)
-        self.clear_ch_Button.clicked.connect(self.clear_channel)
+        self.add_ch_Button.clicked.connect(self.add_daq_channel)
+        self.remove_ch_Button.clicked.connect(lambda: self.remove_channel(self.daq_channel_tableWidget))
+        self.clear_ch_Button.clicked.connect(lambda: self.clear_channel(self.daq_channel_tableWidget))
         self.daq_update_pushButton.clicked.connect(self._on_daq_setting_change)
         self.daq_update_immediately_checkBox.setChecked(True)
         self.daq_update_immediately_checkBox.clicked.connect(self._on_channel_changed)
@@ -501,18 +525,6 @@ class MainWindow(QtW.QWidget, _MainUI):
                     self._mmc_cam.getProperty(cam_device, "PixelType")
                 )
 
-    # def _refresh_channel_list(self, channel_group: str = None):
-    #     if channel_group is None:
-    #         channel_group = self._mmc.getOrGuessChannelGroup()
-    #     if channel_group:
-    #         channel_list = list(self._mmc.getAvailableConfigs(channel_group))
-    #         with blockSignals(self.snap_channel_comboBox):
-    #             self.snap_channel_comboBox.clear()
-    #             self.snap_channel_comboBox.addItems(channel_list)
-    #             self.snap_channel_comboBox.setCurrentText(
-    #                 self._mmc.getCurrentConfig(channel_group)
-    #             )
-
     def _refresh_camera_list(self):
         ncores = len(self._mmcores)
 
@@ -562,11 +574,6 @@ class MainWindow(QtW.QWidget, _MainUI):
             bins = self.bin_comboBox.currentText()
             cd = self._mmc_cam.getCameraDevice()
             self._mmc_cam.setProperty(cd, "Binning", bins)
-
-    # def _channel_changed(self, newChannel: str):
-    #     channel_group = self._mmc.getOrGuessChannelGroup()
-    #     if channel_group:
-    #         self._mmc.setConfig(channel_group, newChannel)
 
     def _camera_changed(self, newCamera: str):
         # self._mmc.setCameraDevice(newCamera)
@@ -1388,13 +1395,9 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.dmd_pattern_fnames = QtW.QFileDialog.getOpenFileNames(self, "", "select DMD patterns", "png(*.png)")[0]
         self.dmd_pattern_lineEdit.setText("; ".join(self.dmd_pattern_fnames))
 
-    def _upload_dmd_pattern(self):
+    def _upload_dmd_pattern_from_file(self):
         if self.dmd_pattern_fnames is None:
             return
-
-        # make sure previous uploaded finished before trying to start a new one
-        if self.upload_thread is not None:
-            self.upload_thread.join()
 
         # select DMD
         if self.select_dmd_comboBox.currentText() == "0":
@@ -1422,68 +1425,7 @@ class MainWindow(QtW.QWidget, _MainUI):
 
         # grab pattern time
         pattern_time_us = int(np.round(self.dmd_set_file_pattern_time_doubleSpinBox.value() * 1e3))
-
-        # set patterns
-        dmd.start_stop_sequence('stop')
-        self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
-                                           ["dmd_enable", "dmd_advance"])
-
-        # put in different thread so don't block GUI
-        # still printing to the terminal and not bothering to acquire a lock
-        self.upload_thread = threading.Thread(target=dmd.upload_pattern_sequence,
-                                              args=(patterns,),
-                                              kwargs={"exp_times": pattern_time_us,
-                                                      "dark_times": 0,
-                                                      "triggered": False,
-                                                      "clear_pattern_after_trigger": False,
-                                                      "bit_depth": 1,
-                                                      "num_repeats": 0,
-                                                      "compression_mode": "erle",
-                                                      }
-                                              )
-        self.upload_thread.start()
-
-    def _set_uploaded_dmd_pattern(self):
-        if self.dmd_pattern_fnames is None:
-            return
-
-        if self.upload_thread is not None:
-            self.upload_thread.join()
-
-        if self.select_dmd_comboBox.currentText() == "0":
-            dmd = self.dmd
-        elif self.select_dmd_comboBox.currentText() == "1":
-            dmd = self.dmd2
-        else:
-            raise ValueError()
-
-        # grab pattern time
-        pattern_time_us = int(np.round(self.dmd_set_file_pattern_time_doubleSpinBox.value() * 1e3))
-
-        dmd.start_stop_sequence('stop')
-        self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
-                                           ["dmd_enable", "dmd_advance"])
-
-        pic_inds, bit_inds = dlp6500.firmware_index_2pic_bit(list(range(len(self.dmd_pattern_fnames))))
-        dmd.set_pattern_sequence(pic_inds.tolist(),
-                                      bit_inds.tolist(),
-                                      exp_times=pattern_time_us,
-                                      dark_times=0,
-                                      triggered=False,
-                                      clear_pattern_after_trigger=False,
-                                      bit_depth=1,
-                                      num_repeats=0,
-                                      mode="on-the-fly")
-
-    def _dmd_changed(self):
-        if self.select_dmd_comboBox.currentText() == "0":
-            dmd = self.dmd
-        elif self.select_dmd_comboBox.currentText() == "1":
-            dmd = self.dmd2
-        else:
-            raise ValueError()
-
-        self.dmd_id_textBrowser.setText(dmd._hid_path)
+        self._upload_dmd_pattern(patterns, exp_times=pattern_time_us)
 
     def _show_uploaded_dmd_pattern(self):
 
@@ -1510,8 +1452,150 @@ class MainWindow(QtW.QWidget, _MainUI):
         else:
             layer_list[0].data = patterns
 
+    def _show_dmd_sim_pattern(self):
+
+        # select DMD
+        if self.select_dmd_comboBox.currentText() == "0":
+            dmd = self.dmd
+        elif self.select_dmd_comboBox.currentText() == "1":
+            dmd = self.dmd2
+        else:
+            raise ValueError()
+
+        # grab info
+        v1_x = int(self.lattice_vector1_x_spinBox.value())
+        v1_y = int(self.lattice_vector1_y_spinBox.value())
+        v2_x = int(self.lattice_vector2_x_spinBox.value())
+        v2_y = int(self.lattice_vector2_y_spinBox.value())
+        nphases = int(self.phase_shifts_spinBox.value())
+        phase_index = int(self.phase_index_spinBox.value())
+
+        if phase_index >= nphases:
+            warnings.warn(f"phase_index = {phase_index:d} is not compatible with nphases = {nphases:d}")
+            return
+
+        # generate pattern
+        patterns, _ = get_sim_pattern([dmd.width, dmd.height],
+                                      [v1_x, v1_y],
+                                      [v2_x, v2_y],
+                                      nphases,
+                                      phase_index)
+
+        self._upload_dmd_pattern(patterns,)
+
+    def _upload_dmd_pattern(self, patterns, **kwargs):
+        # make sure previous uploaded finished before trying to start a new one
+        if self.upload_thread is not None:
+            self.upload_thread.join()
+
+        if self.select_dmd_comboBox.currentText() == "0":
+            dmd = self.dmd
+        elif self.select_dmd_comboBox.currentText() == "1":
+            dmd = self.dmd2
+        else:
+            raise ValueError()
+
+        # set patterns
+        dmd.start_stop_sequence('stop')
+        self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
+                                           ["dmd_enable", "dmd_advance"])
+
+        # put in different thread so don't block GUI
+        # still printing to the terminal and not bothering to acquire a lock
+        kwargs.update({"clear_pattern_after_trigger": False})
+
+        self.upload_thread = threading.Thread(target=dmd.upload_pattern_sequence,
+                                              args=(patterns.astype(np.uint8),),
+                                              kwargs=kwargs
+                                              )
+        self.upload_thread.start()
+
+    def _dmd_changed(self):
+        if self.select_dmd_comboBox.currentText() == "0":
+            dmd = self.dmd
+        elif self.select_dmd_comboBox.currentText() == "1":
+            dmd = self.dmd2
+        else:
+            raise ValueError()
+
+        self.dmd_id_textBrowser.setText(dmd._hid_path)
+
+    def add_odt_pattern(self):
+        idx = self.odt_pattern_tableWidget.rowCount()
+        self.odt_pattern_tableWidget.insertRow(idx)
+
+        # create spin boxs
+        cx_spinBox = QtW.QSpinBox(self)
+        cx_spinBox.setMinimum(0)
+        cx_spinBox.setMaximum(10000)
+
+        cy_spinBox = QtW.QSpinBox(self)
+        cy_spinBox.setMinimum(0)
+        cy_spinBox.setMaximum(10000)
+
+        fx_spinBox = QtW.QDoubleSpinBox(self)
+        fx_spinBox.setMinimum(-1)
+        fx_spinBox.setMaximum(1)
+        fx_spinBox.setDecimals(3)
+
+        fy_spinBox = QtW.QDoubleSpinBox(self)
+        fy_spinBox.setMinimum(-1)
+        fy_spinBox.setMaximum(1)
+        fy_spinBox.setDecimals(3)
+
+        radius_spinBox = QtW.QDoubleSpinBox(self)
+        radius_spinBox.setMinimum(0)
+        radius_spinBox.setMaximum(10000)
+        radius_spinBox.setDecimals(2)
+
+        self.odt_pattern_tableWidget.setCellWidget(idx, 0, cx_spinBox)
+        self.odt_pattern_tableWidget.setCellWidget(idx, 1, cy_spinBox)
+        self.odt_pattern_tableWidget.setCellWidget(idx, 2, fx_spinBox)
+        self.odt_pattern_tableWidget.setCellWidget(idx, 3, fy_spinBox)
+        self.odt_pattern_tableWidget.setCellWidget(idx, 4, radius_spinBox)
+
+    def set_odt_pattern(self):
+
+        if self.select_dmd_comboBox.currentText() == "0":
+            dmd = self.dmd
+        elif self.select_dmd_comboBox.currentText() == "1":
+            dmd = self.dmd2
+        else:
+            raise ValueError()
+
+        cxs = []
+        cys = []
+        fxs = []
+        fys = []
+        radii = []
+        for ii in range(self.odt_pattern_tableWidget.rowCount()):
+            cxs.append(int(self.odt_pattern_tableWidget.cellWidget(ii, 0).value()))
+            cys.append(int(self.odt_pattern_tableWidget.cellWidget(ii, 1).value()))
+            fxs.append(self.odt_pattern_tableWidget.cellWidget(ii, 2).value())
+            fys.append(self.odt_pattern_tableWidget.cellWidget(ii, 3).value())
+            radii.append(int(self.odt_pattern_tableWidget.cellWidget(ii, 4).value()))
+
+        cxs = np.asarray(cxs)
+        cys = np.asarray(cys)
+        fxs = np.asarray(fxs)
+        fys = np.asarray(fys)
+        # todo: currently only support single radius value
+        spot_radius = radii[0]
+
+        centers_relative = [np.stack((cxs - (dmd.width // 2), cys - (dmd.height // 2)), axis=1)]
+        frqs = [np.stack((fxs, fys), axis=1)]
+
+        patterns, data = get_odt_patterns(centers_relative,
+                                          [dmd.height, dmd.width],
+                                          spot_radius,
+                                          1,
+                                          frqs=frqs,
+                                          use_off_mirrors=True)
+
+        self._upload_dmd_pattern(patterns)
+
     # add, remove, clear DAQ channel table
-    def add_channel(self):
+    def add_daq_channel(self):
         digital_channels = list(self.daq.digital_line_names.keys())
         analog_channels = list(self.daq.analog_line_names.keys())
 
@@ -1586,16 +1670,16 @@ class MainWindow(QtW.QWidget, _MainUI):
                 except TypeError:
                     pass
 
-    def remove_channel(self):
+    def remove_channel(self, widget):
         # remove selected position
-        rows = {r.row() for r in self.daq_channel_tableWidget.selectedIndexes()}
+        rows = {r.row() for r in widget.selectedIndexes()}
         for idx in sorted(rows, reverse=True):
-            self.daq_channel_tableWidget.removeRow(idx)
+            widget.removeRow(idx)
 
-    def clear_channel(self):
+    def clear_channel(self, widget):
         # clear all positions
-        self.daq_channel_tableWidget.clearContents()
-        self.daq_channel_tableWidget.setRowCount(0)
+        widget.clearContents()
+        widget.setRowCount(0)
 
     def _on_daq_setting_change(self, row_index=None):
         # grab analog/digital lines from channels
