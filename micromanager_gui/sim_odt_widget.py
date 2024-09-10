@@ -21,6 +21,8 @@ import numpy as np
 import time
 import datetime
 import zarr
+import tifffile
+from PIL import Image
 import numcodecs
 import dask.array as da
 from dask.diagnostics import ProgressBar
@@ -299,6 +301,32 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         self.n_images_label.setText(f"{round((range / step) + 1)}")
 
+    def load_patterns_from_folder(self, dir):
+        dir = Path(dir)
+
+        patterns_png = []
+        for p in dir.glob("*.png"):
+            patterns_png.append(np.asarray(Image.open(str(p))))
+        patterns_png = np.asarray(patterns_png)
+
+        patterns_tif = []
+        for p in dir.glob("*.tif"):
+            patterns_tif.append(tifffile.imread(str(p)))
+
+        if len(patterns_tif) > 0:
+            patterns_tif = np.vstack(patterns_tif)
+
+        if len(patterns_tif) > 0 and len(patterns_png) > 0:
+            raise ValueError("both tif and png files were present. Do not know what to do")
+        elif len(patterns_tif) > 0:
+            patterns = patterns_tif
+        elif len(patterns_png) > 0:
+            patterns = patterns_png
+        else:
+            raise ValueError("no *.png or *.tif images in directory")
+
+        return patterns
+
     # add, remove, clear channel table
     def add_channel(self):
         presets = self.daq.presets
@@ -345,7 +373,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
                 # populate pattern options and set to "default"
                 self.channel_tableWidget.cellWidget(ii, 1).clear()
-                self.channel_tableWidget.cellWidget(ii, 1).addItems(list(self.dmd.presets[ch].keys()))
+                self.channel_tableWidget.cellWidget(ii, 1).addItems(list(self.dmd.presets[ch].keys()) + ["from-file"])
                 self.channel_tableWidget.cellWidget(ii, 1).setCurrentText("default")
 
                 # populate pattern mode options and set to "default"
@@ -353,7 +381,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 self.channel_tableWidget.cellWidget(ii, 2).addItems(self.pattern_modes)
                 self.channel_tableWidget.cellWidget(ii, 2).setCurrentText("default")
 
-                # populate camer mode options camera modes patterns
+                # populate camera mode options camera modes patterns
                 self.channel_tableWidget.cellWidget(ii, 3).clear()
                 self.channel_tableWidget.cellWidget(ii, 3).addItems(self.camera_modes)
                 self.channel_tableWidget.cellWidget(ii, 3).setCurrentText("default")
@@ -566,7 +594,6 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             mmc1.stopSequenceAcquisition()
         if mmc2.isSequenceRunning():
             mmc2.stopSequenceAcquisition()
-
         self.daq.set_preset("off")
 
         # ##############################
@@ -760,22 +787,43 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                       "camera": self.channel_tableWidget.cellWidget(c, 3).currentText(),
                       "dmd_on_time": self.channel_tableWidget.cellWidget(c, 4).value() * 1e-3,  # convert to s
                       "npatterns": 0,
-                      "nimages": 0}
+                      "nimages": 0,
+                      "pattern_directory": None}
                      for c in range(self.channel_tableWidget.rowCount())]
 
         if acq_modes == []:
             print("no channels/modes selected")
             return
 
+        # optionally load images from file if pattern mode is the special key "from-file"
+        images_from_file = None
+        if np.any([am["patterns"] == "from-file" for am in acq_modes]):
+            if len(acq_modes) != 1:
+                raise NotImplementedError("from-file pattern mode is only implemented if the sequence contains "
+                                      "a single channel/pattern combination")
+            else:
+                dir = QtW.QFileDialog(self)
+                dir.setFileMode(QtW.QFileDialog.DirectoryOnly)
+                pattern_dir = QtW.QFileDialog.getExistingDirectory(dir)
+
+                try:
+                    images_from_file = self.load_patterns_from_folder(pattern_dir)
+                except ValueError as e:
+                    print(e)
+                    return
+
         # get npatterns and nimages information
         for am in acq_modes:
-            # if dmd_on_time = 0, interpret this as always on
-            if am["dmd_on_time"] == 0:
+            if am["dmd_on_time"] == 0:  # interpret this as always on
                 am["dmd_on_time"] = None
 
-            # reset number of pictures if mode is average
-            am["npatterns"] = len(self.dmd.presets[am["channel"]][am["patterns"]])
+            # set number of patterns
+            if images_from_file is None:
+                am["npatterns"] = len(self.dmd.presets[am["channel"]][am["patterns"]])
+            else:
+                am["npatterns"] = len(images_from_file)
 
+            # set number of images
             if am["pattern_mode"] == "average":
                 am["nimages"] = 1
             else:
@@ -799,11 +847,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         if not cam_is_phantom:
             cam2_name = mmc2.getCameraDevice()
-            # set camera properties
             mmc2.setProperty(cam2_name, "Exposure", gui_settings["exposure_tms_odt"])
-            # set external triggering
             mmc2.setProperty(cam2_name, "TriggerMode", "Edge Trigger")
-            # set circular buffer
             mmc2.setCircularBufferMemoryFootprint(gui_settings["odt_circ_buffer_mb"])
         else:
             mmc2 = self.phcam
@@ -843,24 +888,21 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # set external triggering
         mmc1.setProperty(cam1, "TRIGGER SOURCE", "EXTERNAL")
         mmc1.setProperty(cam1, "TriggerPolarity", "POSITIVE")
-        # line 1 trigger ready
-        mmc1.setProperty(cam1, "OUTPUT TRIGGER KIND[0]", "EXPOSURE")
-        mmc1.setProperty(cam1, "OUTPUT TRIGGER POLARITY[0]", "POSITIVE")
-        # line 2 at end of readout
-        mmc1.setProperty(cam1, "OUTPUT TRIGGER DELAY[1]", "0.0000")
-        mmc1.setProperty(cam1, "OUTPUT TRIGGER KIND[1]", "EXPOSURE")
-        mmc1.setProperty(cam1, "OUTPUT TRIGGER POLARITY[1]", "POSITIVE")
-        # line 3 at start of readout
-        mmc1.setProperty(cam1, "OUTPUT TRIGGER DELAY[2]", "0.0000")
-        mmc1.setProperty(cam1, "OUTPUT TRIGGER KIND[2]", "PROGRAMABLE")
-        mmc1.setProperty(cam1, "OUTPUT TRIGGER PERIOD[2]", "0.001")
-        mmc1.setProperty(cam1, "OUTPUT TRIGGER POLARITY[2]", "POSITIVE")
-        mmc1.setProperty(cam1, "OUTPUT TRIGGER SOURCE[2]", "VSYNC")
-
+        # # line 1 trigger ready
+        # mmc1.setProperty(cam1, "OUTPUT TRIGGER KIND[0]", "EXPOSURE")
+        # mmc1.setProperty(cam1, "OUTPUT TRIGGER POLARITY[0]", "POSITIVE")
+        # # line 2 at end of readout
+        # mmc1.setProperty(cam1, "OUTPUT TRIGGER DELAY[1]", "0.0000")
+        # mmc1.setProperty(cam1, "OUTPUT TRIGGER KIND[1]", "EXPOSURE")
+        # mmc1.setProperty(cam1, "OUTPUT TRIGGER POLARITY[1]", "POSITIVE")
+        # # line 3 at start of readout
+        # mmc1.setProperty(cam1, "OUTPUT TRIGGER DELAY[2]", "0.0000")
+        # mmc1.setProperty(cam1, "OUTPUT TRIGGER KIND[2]", "PROGRAMABLE")
+        # mmc1.setProperty(cam1, "OUTPUT TRIGGER PERIOD[2]", "0.001")
+        # mmc1.setProperty(cam1, "OUTPUT TRIGGER POLARITY[2]", "POSITIVE")
+        # mmc1.setProperty(cam1, "OUTPUT TRIGGER SOURCE[2]", "VSYNC")
         nx1_start, ny1_start, nx_cam1, ny_cam1 = mmc1.getROI()
         cam1_roi = [ny1_start, ny1_start + ny_cam1, nx1_start, nx1_start + nx_cam1]
-
-        # set circular buffer
         mmc1.setCircularBufferMemoryFootprint(gui_settings["sim_circ_buffer_mb"])
 
         # ##################################
@@ -877,6 +919,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             print(f"set odt warmup time={gui_settings['odt_warmup_time_ms']:.3f}ms")
 
         try:
+            # todo: modify to handle loading files
             digital_program, analog_program, daq_programming_info = \
                 get_sim_odt_sequence(self.daq.digital_line_names,
                                      self.daq.analog_line_names,
@@ -925,6 +968,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
 
         print(f"DAQ program time = {parse_time(pgm_time_s)[1]:s}")
         print(f"acquisition expected time = {parse_time(acquisition_time_s)[1]:s}")
+
         # ##################################
         # create zarr
         # ##################################
@@ -1025,13 +1069,14 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             ds.attrs["channels"] = [am["channel"]]
 
             # save pattern metadata
-            dmd_pattern_data = dlp6500.get_preset_info(self.dmd.presets[am["channel"]][am["patterns"]],
-                                                       self.dmd.firmware_pattern_info)
-            for k, v in dmd_pattern_data.items():
-                try:
-                    ds.attrs[k] = np.array(v).tolist()
-                except KeyError as e:
-                    print(f"while writing cam1 pattern parameters: {e}")
+            if images_from_file is None:
+                dmd_pattern_data = dlp6500.get_preset_info(self.dmd.presets[am["channel"]][am["patterns"]],
+                                                           self.dmd.firmware_pattern_info)
+                for k, v in dmd_pattern_data.items():
+                    try:
+                        ds.attrs[k] = np.array(v).tolist()
+                    except KeyError as e:
+                        print(f"while writing cam1 pattern parameters: {e}")
 
             cam1_dsets.append(ds)
 
@@ -1092,13 +1137,14 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 ds.attrs["volume_time_ms"] = gui_settings["min_odt_frame_time_ms"] * am["npatterns"]  # todo: correct this
 
             # save pattern metadata
-            dmd_pattern_data = dlp6500.get_preset_info(self.dmd.presets[am["channel"]][am["patterns"]],
-                                                       self.dmd.firmware_pattern_info)
-            for k, v in dmd_pattern_data.items():
-                try:
-                    ds.attrs[k] = np.array(v).tolist()
-                except KeyError as e:
-                    print(f"while writing cam2 pattern parameters: {e}")
+            if images_from_file is None:
+                dmd_pattern_data = dlp6500.get_preset_info(self.dmd.presets[am["channel"]][am["patterns"]],
+                                                           self.dmd.firmware_pattern_info)
+                for k, v in dmd_pattern_data.items():
+                    try:
+                        ds.attrs[k] = np.array(v).tolist()
+                    except KeyError as e:
+                        print(f"while writing cam2 pattern parameters: {e}")
 
             cam2_dsets.append(ds)
 
@@ -1225,39 +1271,44 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             # ##################################
             # program DMD
             # ##################################
-            # make sure DMD advance/enable trigger lines are low before we program the DMD
-            self.daq.set_digital_lines_by_name(np.array([0, 0, 0, 0], dtype=np.uint8),
+            self.daq.set_digital_lines_by_name(np.array([0, 0], dtype=np.uint8),
+                                               ["odt_cam_sync", "camera_trigger_monitor"])
+
+            self.daq.set_digital_lines_by_name(np.array([0, 1, 0, 1], dtype=np.uint8),
                                                ["dmd_enable",
                                                 "dmd_advance",
-                                                "odt_cam_sync",
-                                                "camera_trigger_monitor"])
-
-            # pre-warm the ODT laser/shutter if using ODT
-            if any_mode_odt:
-                self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
-                                                   ["odt_laser",
-                                                    "odt_shutter"])
+                                                "dmd2_enable",
+                                                "dmd2_advance"])
 
             # program DMD
-            blank = [False if am["channel"] == "odt" or am["pattern_mode"] == "average" else True for am in acq_modes]
-            noff_after = [1 if am["pattern_mode"] == "average" else 0 for am in acq_modes]
-            dmd_modes = [am["patterns"] if am["channel"] == "odt" else "default" for am in acq_modes]
-            dmd_channels = [am["channel"] for am in acq_modes]
-
             with self.print_lock:
                 tstart_program_dmd = time.perf_counter()
                 print("programming DMD ...", end="\r")
-            firmware_inds = self.dmd.program_dmd_seq(dmd_modes,
-                                                     dmd_channels,
-                                                     nrepeats=1,
-                                                     noff_before=0,
-                                                     noff_after=noff_after,
-                                                     blank=blank,
-                                                     mode_pattern_indices=None,
-                                                     triggered=True,
-                                                     verbose=False)
+
+            # program on-the-fly
+            if images_from_file is not None:
+                self.dmd.upload_pattern_sequence(images_from_file.astype(np.uint8),
+                                                 triggered=True,
+                                                 clear_pattern_after_trigger=False)
+                dmd_pattern_inds = len(images_from_file)
+            else:
+                # program firmware
+                dmd_pattern_inds = self.dmd.program_dmd_seq([am["patterns"] if am["channel"] == "odt" else "default" for am in acq_modes],
+                                                         [am["channel"] for am in acq_modes],
+                                                         nrepeats=1,
+                                                         noff_before=0,
+                                                         noff_after=[1 if am["pattern_mode"] == "average" else 0 for am in acq_modes],
+                                                         blank=[False if am["channel"] == "odt" or am["pattern_mode"] == "average" else True for am in acq_modes],
+                                                         mode_pattern_indices=None,
+                                                         triggered=True,
+                                                         verbose=False)
             with self.print_lock:
                 print(f"programmed DMD in {time.perf_counter() - tstart_program_dmd:.2f}s")
+
+            # ensure advance triggers off before start
+
+            self.daq.set_digital_lines_by_name(np.array([0, 0], dtype=np.uint8),
+                                               ["dmd_advance", "dmd2_advance"])
 
             # store DMD program information
             g_dmd = img_data.create_group("dmd_data")
@@ -1266,10 +1317,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             g_dmd.attrs["dmd_pitch_um"] = self.dmd.pitch
             g_dmd.attrs["firmware_info"] = self.dmd.get_firmware_type()
             ds = g_dmd.array("dmd_program",
-                             firmware_inds,
+                             dmd_pattern_inds,
                              dtype='int16',
                              compressor='none')
             ds.attrs["dimensions"] = ["pattern", "time"]
+            ds.attrs["type"] = "on-the-fly" if images_from_file is None else "firmware"
 
             if self.dmd.firmware_patterns is not None:
                 ds = g_dmd.array("firmware_patterns",
@@ -1278,8 +1330,22 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                  dtype=bool,
                                  chunks=(1, self.dmd.height, self.dmd.width))
 
+            if images_from_file is not None:
+                g_dmd.array("on_the_fly_patterns",
+                            images_from_file,
+                            compressor=numcodecs.packbits.PackBits(),
+                            dtype=bool,
+                            chunks=(1, self.dmd.height, self.dmd.width))
+
             # DMD #2
             g_dmd2 = img_data.create_group("dmd2_data")
+            try:
+                g_dmd2.attrs["dmd_nx"] = self.dmd2.width
+                g_dmd2.attrs["dmd_ny"] = self.dmd2.height
+                g_dmd2.attrs["dmd_pitch_um"] = self.dmd2.pitch
+                g_dmd2.attrs["firmware_info"] = self.dmd2.get_firmware_type()
+            except:
+                pass
 
             # ##################################
             # trigger camera twice, required for Phantom camera
@@ -1327,7 +1393,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             if "blue" in [am["channel"] for am in acq_modes]:
                 self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["blue_laser"])
             if "odt" in [am["channel"] for am in acq_modes]:
-                self.daq.set_digital_lines_by_name(np.array([1], dtype=np.uint8), ["odt_laser"])
+                self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8), ["odt_laser",
+                                                                                      "odt_shutter"])
             time.sleep(gui_settings["presequence_warmup_time_s"])
 
             # program DAQ
