@@ -149,6 +149,7 @@ class _MainUI:
     upload_dmd_pattern_pushButton: QtW.QPushButton
     show_dmd_upload_pattern_pushButton: QtW.QPushButton
     dmd_set_file_pattern_time_doubleSpinBox: QtW.QDoubleSpinBox
+    upload_triggered_checkBox: QtW.QCheckBox
 
     # set DMD SIM pattern
     set_sim_pattern_pushButton: QtW.QPushButton
@@ -158,6 +159,7 @@ class _MainUI:
     lattice_vector2_y_spinBox: QtW.QSpinBox
     phase_shifts_spinBox: QtW.QSpinBox
     phase_index_spinBox: QtW.QSpinBox
+    sim_triggered_checkBox: QtW.QCheckBox
 
     # set DMD ODT pattern
     odt_pattern_tableWidget: QtW.QTableWidget
@@ -165,6 +167,7 @@ class _MainUI:
     remove_odt_pattern_pushButton: QtW.QPushButton
     clear_odt_pattern_pushButton: QtW.QPushButton
     set_odt_pattern_pushButton: QtW.QPushButton
+    odt_triggered_checkBox: QtW.QCheckBox
 
 
     # dmd select
@@ -1416,16 +1419,16 @@ class MainWindow(QtW.QWidget, _MainUI):
             patterns.append(np.array(Image.open(str(f))).astype(np.uint8))
 
         patterns = np.stack(patterns, axis=0)
-
         ny = patterns.shape[1]
         nx = patterns.shape[2]
 
         if ny != dmd.height or nx != dmd.width:
             raise ValueError("pattern sizes did not match DMD size")
 
-        # grab pattern time
+        # grab other params
         pattern_time_us = int(np.round(self.dmd_set_file_pattern_time_doubleSpinBox.value() * 1e3))
-        self._upload_dmd_pattern(patterns, exp_times=pattern_time_us)
+        triggered = self.upload_triggered_checkBox.isChecked()
+        self._upload_dmd_pattern(patterns, exp_times=pattern_time_us, triggered=triggered)
 
     def _show_uploaded_dmd_pattern(self):
 
@@ -1469,6 +1472,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         v2_y = int(self.lattice_vector2_y_spinBox.value())
         nphases = int(self.phase_shifts_spinBox.value())
         phase_index = int(self.phase_index_spinBox.value())
+        triggered = self.sim_triggered_checkBox.isChecked()
 
         if phase_index >= nphases:
             warnings.warn(f"phase_index = {phase_index:d} is not compatible with nphases = {nphases:d}")
@@ -1481,7 +1485,7 @@ class MainWindow(QtW.QWidget, _MainUI):
                                       nphases,
                                       phase_index)
 
-        self._upload_dmd_pattern(patterns,)
+        self._upload_dmd_pattern(patterns, triggered=triggered)
 
     def _upload_dmd_pattern(self, patterns, **kwargs):
         # make sure previous uploaded finished before trying to start a new one
@@ -1499,6 +1503,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         dmd.start_stop_sequence('stop')
 
         # prepare DAQ lines appropriately
+        # if final command is "start", then whatever state the enable line is in at that time will be treated as "enable"
+        # if final command is "stop", then opposite state of enable line is treated as "enable"
         if dmd is self.dmd:
             self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
                                                ["dmd_enable", "dmd_advance"])
@@ -1509,7 +1515,14 @@ class MainWindow(QtW.QWidget, _MainUI):
         # put in different thread so don't block GUI
         # still printing to the terminal and not bothering to acquire a lock
         kwargs.update({"clear_pattern_after_trigger": False})
-        self.upload_thread = threading.Thread(target=dmd.upload_pattern_sequence,
+
+        def upload_patterns(patterns, **kwargs):
+            dmd.upload_pattern_sequence(patterns.astype(np.uint8),
+                                        **kwargs)
+            dmd.start_stop_sequence("start")
+
+
+        self.upload_thread = threading.Thread(target=upload_patterns,
                                               args=(patterns.astype(np.uint8),),
                                               kwargs=kwargs
                                               )
@@ -1590,6 +1603,7 @@ class MainWindow(QtW.QWidget, _MainUI):
             fys.append(self.odt_pattern_tableWidget.cellWidget(ii, 3).value())
             radii.append(int(self.odt_pattern_tableWidget.cellWidget(ii, 4).value()))
             phases.append(self.odt_pattern_tableWidget.cellWidget(ii, 5).value())
+        triggered = self.odt_triggered_checkBox.isChecked()
 
         cxs = np.asarray(cxs)
         cys = np.asarray(cys)
@@ -1609,7 +1623,7 @@ class MainWindow(QtW.QWidget, _MainUI):
                                           use_off_mirrors=True,
                                           )
 
-        self._upload_dmd_pattern(patterns)
+        self._upload_dmd_pattern(patterns, triggered=triggered)
 
     # add, remove, clear DAQ channel table
     def add_daq_channel(self):
