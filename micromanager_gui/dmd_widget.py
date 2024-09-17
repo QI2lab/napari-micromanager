@@ -14,11 +14,10 @@ from useq import MDASequence
 if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
 
-# daq
-import mcsim.expt_ctrl.daq
 
-# dmd
+import mcsim.expt_ctrl.daq
 from mcsim.expt_ctrl import dlp6500
+from numcodecs import packbits
 import time
 import datetime
 import zarr
@@ -50,12 +49,13 @@ class _MultiDUI:
     dir_lineEdit: QtW.QLineEdit
     browse_save_Button: QtW.QPushButton
 
+    # camera
+    camera_comboBox: QtW.QComboBox
+
     # patterns
     patterns_lineEdit: QtW.QLineEdit
     browse_patterns_button: QtW.QPushButton
-
-    # triggering
-    triggering_checkBox: QtW.QCheckBox
+    trigger_dmd_checkBox: QtW.QCheckBox
 
     # exposure time
     exposure_SpinBox: QtW.QDoubleSpinBox
@@ -99,6 +99,8 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
         super().__init__(parent)
         self.setup_ui()
 
+        self._refresh_camera_list()
+
         # self.pause_Button.released.connect(self._mmc.toggle_pause)
         # self.cancel_Button.released.connect(self._mmc.cancel)
 
@@ -109,6 +111,17 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
         self.browse_save_Button.clicked.connect(self.set_multi_d_acq_dir)
         self.browse_patterns_button.clicked.connect(self.load_dmd_patterns)
         self.run_Button.clicked.connect(self._on_run_clicked)
+
+    def _refresh_camera_list(self):
+        ncores = len(self._mmcores)
+
+        core_inds = list(range(ncores))
+        core_inds = [str(ind) for ind in core_inds]
+        core_inds += ["phantom"]
+
+        self.camera_comboBox.clear()
+        self.camera_comboBox.addItems(core_inds)
+        self.camera_comboBox.setCurrentText(core_inds[0])
 
     def _set_enabled(self, enabled: bool):
         self.save_groupBox.setEnabled(enabled)
@@ -173,22 +186,14 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
             raise Exception("no *.png or *.tif images in directory")
 
         npatterns, ny_patterns, nx_patterns = patterns.shape
-        print("loaded %d patterns" % npatterns)
+        print(f"loaded {npatterns:d} patterns")
 
         # ##############################
         # grab sequence information from GUI
         # ##############################
-
-        # hardware triggering
-        use_hardware_triggering = self.triggering_checkBox.isChecked()
-
-        if use_hardware_triggering:
-            raise NotImplementedError("use_hardware_triggering=true not implemented yet")
-
-        # exposure time
         exposure_tms = self.exposure_SpinBox.value()
+        trigger_dmd = self.trigger_dmd_checkBox.isChecked()
 
-        # time lapse
         do_time_lapse = self.time_groupBox.isChecked()
         if do_time_lapse:
             ntimes = self.timepoints_spinBox.value()
@@ -201,39 +206,26 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
         # grab cameras
         # ##############################
         # todo: make camera selectable
-        mmc1 = self._mmcores[0]
-        mmc2 = self._mmcores[1]
-
-        if len(self._mmc.getLoadedDevices()) < 2:
-            raise ValueError("Load a cfg file first.")
+        cam_index = int(self.camera_comboBox.currentText())
+        mmc = self._mmcores[cam_index]
 
         # ##############################
         # turn off live mode if on
         # ##############################
-        mmc1.stopSequenceAcquisition()
-        mmc2.stopSequenceAcquisition()
+        for core in self._mmcores:
+            core.stopSequenceAcquisition()
 
         # ##################################
-        # get odt camera and set up
+        # get camera and set up
         # ##################################
-        cam = mmc2.getCameraDevice()
-
-        # set camera properties
-        mmc2.setProperty(cam, "Exposure", exposure_tms)
-        # turn off despeckle correction
-        # todo: for some reason get errors when I have this
-        # mmc2.setProperty(cam, 'PP  1   ENABLED', 'No')
-        # mmc2.setProperty(cam, 'PP  2   ENABLED', 'No')
-        # mmc2.setProperty(cam, 'PP  3   ENABLED', 'No')
-        # mmc2.setProperty(cam, 'PP  4   ENABLED', 'No')
-        # mmc2.setProperty(cam, 'PP  5   ENABLED', 'No')
+        cam = mmc.getCameraDevice()
+        mmc.setExposure(cam, exposure_tms)
+        nx = mmc.getImageWidth()
+        ny = mmc.getImageHeight()
 
         # ##################################
         # setup zarr
         # ##################################
-        nx = mmc2.getImageWidth()
-        ny = mmc2.getImageHeight()
-
         if save_path is not None:
             img_data = zarr.open(save_path, mode="w")
             img_data.attrs["save_directory"] = str(save_path)
@@ -245,14 +237,24 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
         img_data.attrs["date_time"] = '%04d_%02d_%02d_%02d;%02d;%02d' % (now.year, now.month, now.day, now.hour, now.minute, now.second)
         img_data.attrs["pattern_directory"] = str(pattern_dir)
 
-        img_data.create_dataset("dmd_patterns", shape=(npatterns, ny_patterns, nx_patterns),
-                                chunks=(1, ny_patterns, nx_patterns), dtype="bool", compressor="none")
+        img_data.create_dataset("dmd_patterns",
+                                shape=(npatterns, ny_patterns, nx_patterns),
+                                chunks=(1, ny_patterns, nx_patterns),
+                                dtype=bool,
+                                compressor=packbits.PackBits())
         img_data.dmd_patterns.attrs["dimensions"] = ["pattern", "y", "x"]
         img_data.dmd_patterns[:] = patterns.astype(bool)
 
+        img_data.create_dataset("times",
+                                shape=(ntimes, npatterns),
+                                chunks=(1, 1),
+                                dtype=float)
+
         # dataset
-        img_data.create_dataset("img", shape=(ntimes, npatterns, ny, nx), chunks=(1, 1, ny, nx),
-                                dtype='uint16', compressor="none")
+        img_data.create_dataset("img",
+                                shape=(ntimes, npatterns, ny, nx),
+                                chunks=(1, 1, ny, nx),
+                                dtype='uint16')
         img_data.img.attrs["dimensions"] = ["time", "pattern", "y", "x"]
         img_data.img.attrs["exposure_time_ms"] = exposure_tms
 
@@ -267,6 +269,20 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
                                             "odt_shutter"])
         time.sleep(5)
 
+        if trigger_dmd:
+            self.daq.set_digital_lines_by_name(np.array([1, 1, 1, 1], dtype=np.uint8),
+                                               ["dmd_enable", "dmd_advance",
+                                                "dmd2_enable", "dmd2_advance"])
+
+            self.dmd.upload_pattern_sequence(patterns.astype(np.uint8),
+                                             clear_pattern_after_trigger=False,
+                                             triggered=True,
+                                             )
+            self.dmd.start_stop_sequence("start")
+
+            self.daq.set_digital_lines_by_name(np.array([0, 0], dtype=np.uint8),
+                                               ["dmd_advance", "dmd2_advance"])
+
         # load DMD patterns using software
         self.dmd.debug = False
         tstart = time.perf_counter()
@@ -277,39 +293,40 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
                 n_left = npatterns * ntimes - n_so_far
 
                 if n_so_far > 0:
-                    print("time %d/%d, pattern %d/%d, %0.2fs / %0.2fs" %
-                          (nt + 1, ntimes, ip + 1, npatterns, tnow - tstart,
-                           (tnow - tstart) / n_so_far * n_left),
+                    print(f"time {nt + 1:d}/{ntimes:d}, "
+                          f"pattern {ip + 1:d}/{npatterns:d}, "
+                          f"{tnow - tstart:.2f}s / {(tnow - tstart) / n_so_far * n_left:.2f}s",
                           end="\r")
 
                 # program the DMD
-                self.dmd.upload_pattern_sequence(patterns[ip].astype(np.uint8),
-                                                 exp_times=105,
-                                                 dark_times=0,
-                                                 triggered=False,
-                                                 num_repeats=0,
-                                                 compression_mode='erle')
+                if trigger_dmd:
+                    self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
+                                                       ["dmd_advance", "dmd2_advance"])
+                else:
+                    self.dmd.upload_pattern_sequence(patterns[ip].astype(np.uint8),
+                                                     triggered=False)
 
                 # take pictures
-                mmc2.snapImage()
-                img_data.img[nt, ip] = mmc2.getImage()
+                mmc.snapImage()
+                img_data.img[nt, ip] = mmc.getImage()
+                img_data.times[nt, ip] = tnow - tstart
+
+                if trigger_dmd:
+                    self.daq.set_digital_lines_by_name(np.array([0, 0], dtype=np.uint8),
+                                                       ["dmd_advance", "dmd2_advance"])
+
         self.dmd.debug = True
-        print("")
-        print("acquisition finished")
+        print("\nacquisition finished")
 
         # ##################################
         # set DAQ back to off state (for digital lines only)
         # ##################################
         self.daq.set_preset("off")
 
-        print("reset DAQ")
-
-
         # ##################################
         # optionally create viewer layer...
         # ##################################
         if self.show_dataset_checkBox.isChecked():
-
             # show odt
             if not np.any(np.array(img_data.img.shape) == 0):
                 if subdir == "" or subdir is None:
