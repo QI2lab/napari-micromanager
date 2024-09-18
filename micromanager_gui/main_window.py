@@ -284,7 +284,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.dmd_firmware_index_spinBox.valueChanged.connect(self._on_dmd_firmware_pattern_updated)
         self.set_dmd_pattern_index_pushButton.clicked.connect(self._set_dmd_firmware_pattern)
         self.show_dmd_firmware_pattern_pushButton.clicked.connect(self._show_dmd_firmware_pattern)
-        self.dmd_set_file_pattern_time_doubleSpinBox.setValue(0.105)
+        self.dmd_set_file_pattern_time_doubleSpinBox.setValue(self.dmd.min_time_us / 1e3)
         self.dmd_pattern_find_pushButton.clicked.connect(self._browse_dmd_pattern)
         self.dmd_pattern_fnames = None
         self.upload_thread = None
@@ -317,7 +317,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.channel_comboBox.currentTextChanged.connect(self._refresh_mode_options)
         self.set_channel_Button.clicked.connect(self.set_channel_and_mode)
         # self.set_channel_Button.clicked.connect(self._on_channel_changed)  # update daq display also
-        self.pattern_time_SpinBox.setValue(0.105)  # DMD pattern time
+        self.pattern_time_SpinBox.setValue(self.dmd.min_time_us / 1e3)  # DMD pattern time
 
         self.select_dmd_comboBox.addItems(["0", "1"])
 

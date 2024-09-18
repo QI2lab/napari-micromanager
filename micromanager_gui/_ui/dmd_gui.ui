@@ -418,9 +418,15 @@
       <number>0</number>
      </property>
      <item>
-      <widget class="QCheckBox" name="show_dataset_checkBox">
+      <widget class="QPushButton" name="show_pushButton">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>40</height>
+        </size>
+       </property>
        <property name="text">
-        <string>show in viewer</string>
+        <string>Show</string>
        </property>
       </widget>
      </item>
@@ -445,45 +451,6 @@
        </property>
       </widget>
      </item>
-     <item>
-      <widget class="QPushButton" name="pause_Button">
-       <property name="enabled">
-        <bool>true</bool>
-       </property>
-       <property name="minimumSize">
-        <size>
-         <width>90</width>
-         <height>40</height>
-        </size>
-       </property>
-       <property name="font">
-        <font>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>PAUSE</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="cancel_Button">
-       <property name="minimumSize">
-        <size>
-         <width>90</width>
-         <height>40</height>
-        </size>
-       </property>
-       <property name="font">
-        <font>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>CANCEL</string>
-       </property>
-      </widget>
-     </item>
     </layout>
    </item>
   </layout>
@@ -500,10 +467,7 @@
   <tabstop>timepoints_spinBox</tabstop>
   <tabstop>interval_spinBox</tabstop>
   <tabstop>time_comboBox</tabstop>
-  <tabstop>show_dataset_checkBox</tabstop>
   <tabstop>run_Button</tabstop>
-  <tabstop>pause_Button</tabstop>
-  <tabstop>cancel_Button</tabstop>
  </tabstops>
  <resources/>
  <connections/>

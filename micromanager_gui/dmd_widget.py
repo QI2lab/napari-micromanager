@@ -14,9 +14,7 @@ from useq import MDASequence
 if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
 
-
-import mcsim.expt_ctrl.daq
-from mcsim.expt_ctrl import dlp6500
+import threading
 from numcodecs import packbits
 import time
 import datetime
@@ -24,6 +22,9 @@ import zarr
 import numpy as np
 import tifffile
 from PIL import Image
+from warnings import warn
+import mcsim.expt_ctrl.daq
+from mcsim.expt_ctrl import dlp6500
 
 ICONS = Path(__file__).parent / "icons"
 OBJECTIVE_DEVICE = "Objective"
@@ -67,15 +68,11 @@ class _MultiDUI:
     time_comboBox: QtW.QComboBox
 
     # run sequence
-    show_dataset_checkBox: QtW.QCheckBox
     run_Button: QtW.QPushButton
-    pause_Button: QtW.QPushButton
-    cancel_Button: QtW.QPushButton
+    show_pushButton: QtW.QPushButton
 
     def setup_ui(self):
         uic.loadUi(self.UI_FILE, self)  # load QtDesigner .ui file
-        self.pause_Button.hide()
-        self.cancel_Button.hide()
         # button icon
         self.run_Button.setIcon(QIcon(str(ICONS / "play-button_1.svg")))
         self.run_Button.setIconSize(QSize(20, 0))
@@ -99,18 +96,20 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
         super().__init__(parent)
         self.setup_ui()
 
+        self.img_data = None
+        self.run_thread = None
+
         self._refresh_camera_list()
 
-        # self.pause_Button.released.connect(self._mmc.toggle_pause)
-        # self.cancel_Button.released.connect(self._mmc.cancel)
-
-        # default value for exposure times
+        # default values
         self.exposure_SpinBox.setValue(10.)
+        self.trigger_dmd_checkBox.setChecked(True)
 
         # connect buttons
         self.browse_save_Button.clicked.connect(self.set_multi_d_acq_dir)
         self.browse_patterns_button.clicked.connect(self.load_dmd_patterns)
         self.run_Button.clicked.connect(self._on_run_clicked)
+        self.show_pushButton.clicked.connect(self._show_dataset)
 
     def _refresh_camera_list(self):
         ncores = len(self._mmcores)
@@ -144,6 +143,9 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
 
     def _on_run_clicked(self):
 
+        if self.run_thread is not None:
+            self.run_thread.join()
+
         # ##############################
         # grab save information
         # ##############################
@@ -155,6 +157,11 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
         if self.save_groupBox.isChecked():
             subdir = self.fname_lineEdit.text()
             save_path = Path(self.dir_lineEdit.text()) / subdir / "sim_odt.zarr"
+
+            if save_path.exists():
+                warn(f"Path {str(save_path)} already exists. Choose a different path")
+                return
+
         else:
             save_path = None
             subdir = None
@@ -227,119 +234,119 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
         # setup zarr
         # ##################################
         if save_path is not None:
-            img_data = zarr.open(save_path, mode="w")
-            img_data.attrs["save_directory"] = str(save_path)
+            self.img_data = zarr.open(save_path, mode="w")
+            self.img_data.attrs["save_directory"] = str(save_path)
         else:
-            img_data = zarr.open(mode="w")
+            self.img_data = zarr.open(mode="w")
 
         # other metadata
         now = datetime.datetime.now()
-        img_data.attrs["date_time"] = '%04d_%02d_%02d_%02d;%02d;%02d' % (now.year, now.month, now.day, now.hour, now.minute, now.second)
-        img_data.attrs["pattern_directory"] = str(pattern_dir)
+        self.img_data.attrs["date_time"] = '%04d_%02d_%02d_%02d;%02d;%02d' % (
+        now.year, now.month, now.day, now.hour, now.minute, now.second)
+        self.img_data.attrs["pattern_directory"] = str(pattern_dir)
 
-        img_data.create_dataset("dmd_patterns",
+        self.img_data.create_dataset("dmd_patterns",
                                 shape=(npatterns, ny_patterns, nx_patterns),
                                 chunks=(1, ny_patterns, nx_patterns),
                                 dtype=bool,
                                 compressor=packbits.PackBits())
-        img_data.dmd_patterns.attrs["dimensions"] = ["pattern", "y", "x"]
-        img_data.dmd_patterns[:] = patterns.astype(bool)
+        self.img_data.dmd_patterns.attrs["dimensions"] = ["pattern", "y", "x"]
+        self.img_data.dmd_patterns[:] = patterns.astype(bool)
 
-        img_data.create_dataset("times",
+        self.img_data.create_dataset("times",
                                 shape=(ntimes, npatterns),
                                 chunks=(1, 1),
                                 dtype=float)
 
         # dataset
-        img_data.create_dataset("img",
+        self.img_data.create_dataset("img",
                                 shape=(ntimes, npatterns, ny, nx),
                                 chunks=(1, 1, ny, nx),
                                 dtype='uint16')
-        img_data.img.attrs["dimensions"] = ["time", "pattern", "y", "x"]
-        img_data.img.attrs["exposure_time_ms"] = exposure_tms
+        self.img_data.img.attrs["dimensions"] = ["time", "pattern", "y", "x"]
+        self.img_data.img.attrs["exposure_time_ms"] = exposure_tms
 
+        def run():
+            # ##################################
+            # acquisition
+            # ##################################
+            # warmup
+            self.daq.set_digital_lines_by_name(np.array([1, 1, 1], dtype=np.uint8),
+                                               ["dmd_enable",
+                                                "odt_laser",
+                                                "odt_shutter"])
+            time.sleep(5)
 
-        # ##################################
-        # acquisition
-        # ##################################
-        # warmup
-        self.daq.set_digital_lines_by_name(np.array([1, 1, 1], dtype=np.uint8),
-                                           ["dmd_enable",
-                                            "odt_laser",
-                                            "odt_shutter"])
-        time.sleep(5)
+            if trigger_dmd:
+                self.daq.set_digital_lines_by_name(np.array([1, 1, 1, 1], dtype=np.uint8),
+                                                   ["dmd_enable", "dmd_advance",
+                                                    "dmd2_enable", "dmd2_advance"])
 
-        if trigger_dmd:
-            self.daq.set_digital_lines_by_name(np.array([1, 1, 1, 1], dtype=np.uint8),
-                                               ["dmd_enable", "dmd_advance",
-                                                "dmd2_enable", "dmd2_advance"])
+                self.dmd.upload_pattern_sequence(patterns.astype(np.uint8),
+                                                 clear_pattern_after_trigger=False,
+                                                 triggered=True,
+                                                 )
+                self.dmd.start_stop_sequence("start")
 
-            self.dmd.upload_pattern_sequence(patterns.astype(np.uint8),
-                                             clear_pattern_after_trigger=False,
-                                             triggered=True,
-                                             )
-            self.dmd.start_stop_sequence("start")
+                self.daq.set_digital_lines_by_name(np.array([0, 0], dtype=np.uint8),
+                                                   ["dmd_advance", "dmd2_advance"])
 
-            self.daq.set_digital_lines_by_name(np.array([0, 0], dtype=np.uint8),
-                                               ["dmd_advance", "dmd2_advance"])
+            # load DMD patterns using software
+            self.dmd.debug = False
+            tstart = time.perf_counter()
+            for nt in range(ntimes):
+                for ip in range(npatterns):
+                    tnow = time.perf_counter()
+                    n_so_far = ip + nt * npatterns
+                    n_left = npatterns * ntimes - n_so_far
 
-        # load DMD patterns using software
-        self.dmd.debug = False
-        tstart = time.perf_counter()
-        for nt in range(ntimes):
-            for ip in range(npatterns):
-                tnow = time.perf_counter()
-                n_so_far = ip + nt * npatterns
-                n_left = npatterns * ntimes - n_so_far
+                    if n_so_far > 0:
+                        print(f"time {nt + 1:d}/{ntimes:d}, "
+                              f"pattern {ip + 1:d}/{npatterns:d}, "
+                              f"{tnow - tstart:.2f}s / {(tnow - tstart) / n_so_far * n_left:.2f}s",
+                              end="\r")
 
-                if n_so_far > 0:
-                    print(f"time {nt + 1:d}/{ntimes:d}, "
-                          f"pattern {ip + 1:d}/{npatterns:d}, "
-                          f"{tnow - tstart:.2f}s / {(tnow - tstart) / n_so_far * n_left:.2f}s",
-                          end="\r")
+                    # program the DMD
+                    if trigger_dmd:
+                        self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
+                                                           ["dmd_advance", "dmd2_advance"])
+                    else:
+                        self.dmd.upload_pattern_sequence(patterns[ip].astype(np.uint8),
+                                                         triggered=False)
 
-                # program the DMD
-                if trigger_dmd:
-                    self.daq.set_digital_lines_by_name(np.array([1, 1], dtype=np.uint8),
-                                                       ["dmd_advance", "dmd2_advance"])
-                else:
-                    self.dmd.upload_pattern_sequence(patterns[ip].astype(np.uint8),
-                                                     triggered=False)
+                    # take pictures
+                    mmc.snapImage()
+                    self.img_data.img[nt, ip] = mmc.getImage()
+                    self.img_data.times[nt, ip] = tnow - tstart
 
-                # take pictures
-                mmc.snapImage()
-                img_data.img[nt, ip] = mmc.getImage()
-                img_data.times[nt, ip] = tnow - tstart
+                    if trigger_dmd:
+                        self.daq.set_digital_lines_by_name(np.array([0, 0], dtype=np.uint8),
+                                                           ["dmd_advance", "dmd2_advance"])
 
-                if trigger_dmd:
-                    self.daq.set_digital_lines_by_name(np.array([0, 0], dtype=np.uint8),
-                                                       ["dmd_advance", "dmd2_advance"])
+            self.dmd.debug = True
+            print("\nacquisition finished")
 
-        self.dmd.debug = True
-        print("\nacquisition finished")
+            # ##################################
+            # set DAQ back to off state (for digital lines only)
+            # ##################################
+            self.daq.set_preset("off")
 
-        # ##################################
-        # set DAQ back to off state (for digital lines only)
-        # ##################################
-        self.daq.set_preset("off")
+        self.run_thread = threading.Thread(target=run)
+        self.run_thread.start()
 
-        # ##################################
-        # optionally create viewer layer...
-        # ##################################
-        if self.show_dataset_checkBox.isChecked():
-            # show odt
-            if not np.any(np.array(img_data.img.shape) == 0):
-                if subdir == "" or subdir is None:
-                    layer_name = "DMD acquisition preview"
-                else:
-                    layer_name = subdir + " DMD acquisition preview"
+    def _show_dataset(self):
+        if self.img_data is not None and not np.any(np.array(self.img_data.img.shape) == 0):
+            try:
+                layer_name = Path(self.img_data.store.path).parent.name
+            except:
+                layer_name = "DMD acquisition preview"
+            try:
+                preview_layer = self.viewer.layers[layer_name]
+                preview_layer.data = self.img_data.img
+            except KeyError:
+                preview_layer = self.viewer.add_image(self.img_data.img, name=layer_name)
+            self.viewer.dims.axis_labels = ["times", "patterns", "y", "x"]
 
-                try:
-                    preview_layer = self.viewer.layers[layer_name]
-                    preview_layer.data = img_data.img
-                except KeyError:
-                    preview_layer = self.viewer.add_image(img_data.img, name=layer_name)
-                self.viewer.dims.axis_labels = ["times", "patterns", "y", "x"]
         return
 
 
