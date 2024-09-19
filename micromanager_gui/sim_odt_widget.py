@@ -1305,8 +1305,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
             with self.print_lock:
                 print(f"programmed DMD in {time.perf_counter() - tstart_program_dmd:.2f}s")
 
-            # ensure advance triggers off before start
-
+            # ensure advance trigger is off before start
             self.daq.set_digital_lines_by_name(np.array([0, 0], dtype=np.uint8),
                                                ["dmd_advance", "dmd2_advance"])
 

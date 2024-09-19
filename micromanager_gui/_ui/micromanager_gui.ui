@@ -1247,7 +1247,7 @@
              <item row="2" column="1">
               <widget class="QDoubleSpinBox" name="fx_doubleSpinBox">
                <property name="decimals">
-                <number>1</number>
+                <number>3</number>
                </property>
                <property name="minimum">
                 <double>0.000000000000000</double>
@@ -1270,7 +1270,7 @@
              <item row="3" column="1">
               <widget class="QDoubleSpinBox" name="fy_doubleSpinBox">
                <property name="decimals">
-                <number>1</number>
+                <number>3</number>
                </property>
                <property name="minimum">
                 <double>0.000000000000000</double>

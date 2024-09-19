@@ -705,6 +705,27 @@ class MainWindow(QtW.QWidget, _MainUI):
                 # circular buffer empty
                 return
 
+        # todo: should make sure names in settings correspond to MM camera names, instead of this ad hoc mapping
+        cam_name = self._mmc_cam.getCameraDevice()
+        try:
+            if cam_name == "HamamatsuHam_DCAM":
+                wavelen = 0.785
+                dxy = self.cfg_data["camera_settings_1"]["dx_um"]
+                na = self.cfg_data["camera_settings_1"]["na_detection"]
+            elif cam_name == "29160":
+                wavelen = self.cfg_data["excitation_wavelengths"]["odt"]
+                dxy = self.cfg_data["camera_settings_phantom"]["dx_um"]
+                na = self.cfg_data["camera_settings_phantom"]["na_detection"]
+            else:
+                wavelen = 0.785
+                dxy = self.cfg_data["camera_settings_2"]["dx_um"]
+                na = self.cfg_data["camera_settings_2"]["na_detection"]
+        except ValueError:
+            dxy = 1
+            na = 1
+            waveln = 1
+
+        fmax = na / wavelen
         ny, nx = data.shape
 
         # get image processing mode
@@ -733,10 +754,6 @@ class MainWindow(QtW.QWidget, _MainUI):
             data_phase = to_cpu(xp.angle(ft))
 
             if mode == "hologram" or mode == "hologram volume":
-                wavelen = self.cfg_data["excitation_wavelengths"]["odt"]
-                dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
-                fmax = self.cfg_data["camera_settings_phantom"]["na_detection"] / wavelen
-
                 # get frequency coordinates
                 fx = xp.asarray(fft.fftshift(fft.fftfreq(nx, dxy)))
                 fy = xp.asarray(fft.fftshift(fft.fftfreq(ny, dxy)))
@@ -792,7 +809,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         if self.track_affine_checkBox.isChecked():
             xnow = self._mmc.getXPosition()
             ynow = self._mmc.getYPosition()
-            dxy_um = self.cfg_data["camera_settings_1"]["dxy"]
+            dxy_um = self.cfg_data["camera_settings_1"]["dx_um"]
             translation = [-(self.affine_ref[1] - ynow) / dxy_um,
                            -(self.affine_ref[0] - xnow) / dxy_um]
             layer_name += f"x={xnow:.0f}, y={ynow:.0f}"
@@ -916,7 +933,7 @@ class MainWindow(QtW.QWidget, _MainUI):
 
             ny, nx = img_ft.shape
 
-            dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
+            dxy = self.cfg_data["camera_settings_phantom"]["dx_um"]
             fmax_int = 2 * self.cfg_data["camera_settings_phantom"]["na_detection"] / self.cfg_data["excitation_wavelengths"]["odt"]
 
             fxs = fft.fftshift(fft.fftfreq(nx, dxy))
@@ -954,7 +971,7 @@ class MainWindow(QtW.QWidget, _MainUI):
 
             ny, nx = img_ft.shape
 
-            dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
+            dxy = self.cfg_data["camera_settings_phantom"]["dx_um"]
 
             fxs = fft.fftshift(fft.fftfreq(nx, dxy))
             dfx = fxs[1] - fxs[0]
@@ -997,7 +1014,7 @@ class MainWindow(QtW.QWidget, _MainUI):
             ny, nx = phase_unwrapped.shape
 
             # get frequency data
-            dxy = self.cfg_data["camera_settings_phantom"]["dxy"]
+            dxy = self.cfg_data["camera_settings_phantom"]["dx_um"]
             k = 2 * np.pi / self.cfg_data["excitation_wavelengths"]["odt"]
 
             # fit mask
