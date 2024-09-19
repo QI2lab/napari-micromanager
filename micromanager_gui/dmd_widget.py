@@ -67,6 +67,8 @@ class _MultiDUI:
     interval_spinBox: QtW.QSpinBox
     time_comboBox: QtW.QComboBox
 
+    notes_textEdit: QtW.QTextEdit
+
     # run sequence
     run_Button: QtW.QPushButton
     show_pushButton: QtW.QPushButton
@@ -232,6 +234,7 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
 
         # ##################################
         # setup zarr
+        # todo: ideally want same structure as used in sim_odt_widget.py
         # ##################################
         if save_path is not None:
             self.img_data = zarr.open(save_path, mode="w")
@@ -241,6 +244,7 @@ class DmdWidget(QtW.QWidget, _MultiDUI):
 
         # other metadata
         now = datetime.datetime.now()
+        self.img_data.attrs["notes"] = self.notes_textEdit.toPlainText()
         self.img_data.attrs["date_time"] = '%04d_%02d_%02d_%02d;%02d;%02d' % (
         now.year, now.month, now.day, now.hour, now.minute, now.second)
         self.img_data.attrs["pattern_directory"] = str(pattern_dir)

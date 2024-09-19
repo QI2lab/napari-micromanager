@@ -881,26 +881,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
         # get SIM camera and set properties
         # ##################################
         cam1 = mmc1.getCameraDevice()
-
-        #set camera properties
         mmc1.setProperty(cam1, "ScanMode", "2")
         mmc1.setProperty(cam1, "Exposure", gui_settings["exposure_tms_sim"])
-        # set external triggering
         mmc1.setProperty(cam1, "TRIGGER SOURCE", "EXTERNAL")
         mmc1.setProperty(cam1, "TriggerPolarity", "POSITIVE")
-        # # line 1 trigger ready
-        # mmc1.setProperty(cam1, "OUTPUT TRIGGER KIND[0]", "EXPOSURE")
-        # mmc1.setProperty(cam1, "OUTPUT TRIGGER POLARITY[0]", "POSITIVE")
-        # # line 2 at end of readout
-        # mmc1.setProperty(cam1, "OUTPUT TRIGGER DELAY[1]", "0.0000")
-        # mmc1.setProperty(cam1, "OUTPUT TRIGGER KIND[1]", "EXPOSURE")
-        # mmc1.setProperty(cam1, "OUTPUT TRIGGER POLARITY[1]", "POSITIVE")
-        # # line 3 at start of readout
-        # mmc1.setProperty(cam1, "OUTPUT TRIGGER DELAY[2]", "0.0000")
-        # mmc1.setProperty(cam1, "OUTPUT TRIGGER KIND[2]", "PROGRAMABLE")
-        # mmc1.setProperty(cam1, "OUTPUT TRIGGER PERIOD[2]", "0.001")
-        # mmc1.setProperty(cam1, "OUTPUT TRIGGER POLARITY[2]", "POSITIVE")
-        # mmc1.setProperty(cam1, "OUTPUT TRIGGER SOURCE[2]", "VSYNC")
+
         nx1_start, ny1_start, nx_cam1, ny_cam1 = mmc1.getROI()
         cam1_roi = [ny1_start, ny1_start + ny_cam1, nx1_start, nx1_start + nx_cam1]
         mmc1.setCircularBufferMemoryFootprint(gui_settings["sim_circ_buffer_mb"])

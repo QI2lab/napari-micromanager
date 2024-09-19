@@ -551,7 +551,7 @@
              </size>
             </property>
             <property name="text">
-             <string>pre-warmup(s)</string>
+             <string>pre-warmup (s)</string>
             </property>
            </widget>
           </item>
@@ -827,7 +827,10 @@ p, li { white-space: pre-wrap; }
               <number>5</number>
              </property>
              <attribute name="horizontalHeaderDefaultSectionSize">
-              <number>90</number>
+              <number>110</number>
+             </attribute>
+             <attribute name="horizontalHeaderShowSortIndicator" stdset="0">
+              <bool>false</bool>
              </attribute>
              <attribute name="verticalHeaderVisible">
               <bool>false</bool>
