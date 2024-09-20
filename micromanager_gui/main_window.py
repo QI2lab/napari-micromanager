@@ -607,13 +607,12 @@ class MainWindow(QtW.QWidget, _MainUI):
     def stage_x_left(self):
         try:
             self._mmc.setRelativeXYPosition(-float(self.xy_step_size_SpinBox.value()), 0.0)
+            # todo: for some reason with the MadCity stage doesn't update without this code even though the
+            #  on_xy_stage_changed signal should be connected...
+            x, y = self._mmc.getXPosition(), self._mmc.getYPosition()
+            self._on_xy_stage_position_changed(self._mmc.getXYStageDevice(), x, y)
         except RuntimeError as e:
             print(e)
-
-        # todo: for some reason with the MadCity stage doesn't update without this code even though the
-        #  on_xy_stage_changed signal should be connected...
-        x, y = self._mmc.getXPosition(), self._mmc.getYPosition()
-        self._on_xy_stage_position_changed(self._mmc.getXYStageDevice(), x, y)
 
         if self.snap_on_click_xy_checkBox.isChecked():
             self.snap()
@@ -621,11 +620,11 @@ class MainWindow(QtW.QWidget, _MainUI):
     def stage_x_right(self):
         try:
             self._mmc.setRelativeXYPosition(float(self.xy_step_size_SpinBox.value()), 0.0)
+            x, y = self._mmc.getXPosition(), self._mmc.getYPosition()
+            self._on_xy_stage_position_changed(self._mmc.getXYStageDevice(), x, y)
         except RuntimeError as e:
             print(e)
 
-        x, y = self._mmc.getXPosition(), self._mmc.getYPosition()
-        self._on_xy_stage_position_changed(self._mmc.getXYStageDevice(), x, y)
 
         if self.snap_on_click_xy_checkBox.isChecked():
             self.snap()
@@ -633,11 +632,10 @@ class MainWindow(QtW.QWidget, _MainUI):
     def stage_y_up(self):
         try:
             self._mmc.setRelativeXYPosition(0.0, float(self.xy_step_size_SpinBox.value()),)
+            x, y = self._mmc.getXPosition(), self._mmc.getYPosition()
+            self._on_xy_stage_position_changed(self._mmc.getXYStageDevice(), x, y)
         except RuntimeError as e:
             print(e)
-
-        x, y = self._mmc.getXPosition(), self._mmc.getYPosition()
-        self._on_xy_stage_position_changed(self._mmc.getXYStageDevice(), x, y)
 
         if self.snap_on_click_xy_checkBox.isChecked():
             self.snap()
@@ -645,11 +643,10 @@ class MainWindow(QtW.QWidget, _MainUI):
     def stage_y_down(self):
         try:
             self._mmc.setRelativeXYPosition(0.0, -float(self.xy_step_size_SpinBox.value()),)
+            x, y = self._mmc.getXPosition(), self._mmc.getYPosition()
+            self._on_xy_stage_position_changed(self._mmc.getXYStageDevice(), x, y)
         except RuntimeError as e:
             print(e)
-
-        x, y = self._mmc.getXPosition(), self._mmc.getYPosition()
-        self._on_xy_stage_position_changed(self._mmc.getXYStageDevice(), x, y)
 
         if self.snap_on_click_xy_checkBox.isChecked():
             self.snap()

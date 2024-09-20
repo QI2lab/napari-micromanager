@@ -706,9 +706,13 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                      float(self.stage_tableWidget.item(r, 1).text())
                                      ])
         else:
-            xy_positions.append([float(mmc1.getXPosition()),
-                                 float(mmc1.getYPosition())
-                                 ])
+            try:
+                xy_positions.append([float(mmc1.getXPosition()),
+                                     float(mmc1.getYPosition())
+                                     ])
+            except RuntimeError as e:
+                print(e)
+                xy_positions.append([0., 0.])
 
         nxy_positions = len(xy_positions)
 
@@ -1271,6 +1275,7 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                 print("programming DMD ...", end="\r")
 
             # program on-the-fly
+            self.dmd.debug = False
             if images_from_file is not None:
                 self.dmd.upload_pattern_sequence(images_from_file.astype(np.uint8),
                                                  triggered=True,
@@ -1289,6 +1294,8 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                                                          verbose=False)
             with self.print_lock:
                 print(f"programmed DMD in {time.perf_counter() - tstart_program_dmd:.2f}s")
+            self.dmd.debug = True
+
 
             # ensure advance trigger is off before start
             self.daq.set_digital_lines_by_name(np.array([0, 0], dtype=np.uint8),
@@ -1438,8 +1445,11 @@ class SimOdtWidget(QtW.QWidget, _MultiDUI):
                         # todo: or be measuring in separate thread?
                         if tt == 0:
                             # todo: does this actually store?
-                            img_data.attrs["xy_position_um_real"][pp] = [float(self._mmc.getXPosition()),
-                                                                         float(self._mmc.getYPosition())]
+                            try:
+                                img_data.attrs["xy_position_um_real"][pp] = [float(self._mmc.getXPosition()),
+                                                                             float(self._mmc.getYPosition())]
+                            except RuntimeError as e:
+                                print(e)
 
                     # wait until current position portion of sequence finishes
                     t_remaining_pos = position_time_s - (time.perf_counter() - tstart_pos)
