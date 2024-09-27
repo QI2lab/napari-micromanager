@@ -824,7 +824,7 @@ p, li { white-space: pre-wrap; }
               <enum>Qt::SolidLine</enum>
              </property>
              <property name="columnCount">
-              <number>5</number>
+              <number>6</number>
              </property>
              <attribute name="horizontalHeaderDefaultSectionSize">
               <number>110</number>
@@ -853,6 +853,11 @@ p, li { white-space: pre-wrap; }
              <column>
               <property name="text">
                <string>Camera</string>
+              </property>
+             </column>
+             <column>
+              <property name="text">
+               <string>DMD</string>
               </property>
              </column>
              <column>

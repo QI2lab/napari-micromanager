@@ -348,6 +348,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.sim_odt_acq = SimOdtWidget(self._mmcores,
                                         self.daq,
                                         self.dmd,
+                                        self.dmd2,
                                         self.viewer,
                                         self.phcam,
                                         configuration=self.cfg_data)
@@ -1267,7 +1268,6 @@ class MainWindow(QtW.QWidget, _MainUI):
             self.live_Button.setIcon(CAM_ICON)
 
     def calibrate_camera(self):
-        # if self._mmc_cam == self.phcam:
         try:
             self.phcam.set_black_reference()
         except Exception as e:
