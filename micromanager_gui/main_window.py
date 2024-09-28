@@ -124,7 +124,6 @@ class _MainUI:
     scale_continuous_checkBox: QtW.QCheckBox
     autoscale_Button: QtW.QPushButton
 
-    px_size_doubleSpinBox: QtW.QDoubleSpinBox
     properties_Button: QtW.QPushButton
     snap_on_click_xy_checkBox: QtW.QCheckBox
     snap_on_click_z_checkBox: QtW.QCheckBox
@@ -230,7 +229,7 @@ class MainWindow(QtW.QWidget, _MainUI):
         # placeholders: since these are passed through to the other widgets, they can be updated but not reassigned
         self.phcam = phantom_cam()
         self.dmd = dlp6500.dlp6500win(initialize=False)
-        self.dmd2 = dlp6500.dlp6500win(initialize=False) # todo: pass through to other things...
+        self.dmd2 = dlp6500.dlp6500win(initialize=False)
         self.daq = daq.nidaq(initialize=False)
         self.cfg_data = {}
         self.cam_affine_xform_napari_cam2_to_cam1 = None
@@ -262,8 +261,8 @@ class MainWindow(QtW.QWidget, _MainUI):
         self.right_Button.clicked.connect(self.stage_x_right)
         self.y_up_Button.clicked.connect(self.stage_y_up)
         self.y_down_Button.clicked.connect(self.stage_y_down)
-        self.up_Button.clicked.connect(self.stage_z_up)
-        self.down_Button.clicked.connect(self.stage_z_down)
+        # self.up_Button.clicked.connect(self.stage_z_up) # disable since I control everything with the DAQ
+        # self.down_Button.clicked.connect(self.stage_z_down)
         self.autoscale_Button.clicked.connect(self.autoscale_active_layer)
 
         # camera actions
@@ -352,14 +351,14 @@ class MainWindow(QtW.QWidget, _MainUI):
                                         self.viewer,
                                         self.phcam,
                                         configuration=self.cfg_data)
-        self.tabWidget.addTab(self.sim_odt_acq, "SIM/ODT Acquisition")
+        self.tabWidget.addTab(self.sim_odt_acq, "SIM/ODT Hardware Acquisition")
 
         # DMD widget
         self.dmd_widget = DmdWidget(self._mmcores,
                                     self.daq,
                                     self.dmd,
                                     self.viewer)
-        self.tabWidget.addTab(self.dmd_widget, "DMD")
+        self.tabWidget.addTab(self.dmd_widget, "Simple Software Acquisition")
 
         # peak tracker
         self.peak_tracker_widget = PeakTrackerWidget(self._mmcores,
@@ -485,6 +484,7 @@ class MainWindow(QtW.QWidget, _MainUI):
                 self.sim_odt_acq.set_cfg()
 
                 # load affine transformation
+                # todo: rewrite all affine transformations to use yx order
                 swap_xy = np.array([[0, 1, 0], [1, 0, 0], [0, 0, 1]])
                 cam_affine_xform_cam1_to_cam2 = np.array(self.cfg_data["camera_affine_transforms"]["xform"])
                 cam_affine_xform_napari_cam1_to_cam2 = swap_xy.dot(cam_affine_xform_cam1_to_cam2.dot(swap_xy))
